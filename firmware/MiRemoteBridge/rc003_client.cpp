@@ -959,6 +959,18 @@ bool begin() {
   rc003_tracker_reset(&s_tracker);
   memset(s_nearby, 0, sizeof(s_nearby));
 
+  // Seed the battery cache with the last level the remote actually reported.
+  // Without this, the first battery read after a reboot would post a
+  // "changed" event for a value the host already knows, and until the remote
+  // was re-discovered the status line would claim "unknown" despite NVS
+  // holding a real number.
+  const int persisted = settings::batteryLevel();
+  if (persisted >= 0 && persisted <= 100) {
+    s_remoteBattery = (uint8_t)persisted;
+    s_remoteBatteryValid = true;
+    BR_LOGI(kTag, "battery cache seeded from NVS: %d%%", persisted);
+  }
+
   BLEDevice::getScan()->setAdvertisedDeviceCallbacks(&s_scanCallbacks, false, true);
 
   // 8192 bytes: this task does String formatting, std::map iteration and

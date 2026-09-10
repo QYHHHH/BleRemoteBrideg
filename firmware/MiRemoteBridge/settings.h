@@ -41,6 +41,12 @@ void setLatencyLog(bool on);
 uint8_t logLevel();
 void setLogLevel(uint8_t level);
 
+// Last charge the remote reported, persisted across reboots so the host reads a
+// real number right after a cold boot instead of a placeholder. Returns -1
+// until the remote has reported at least once; 0 is a real (flat) reading.
+int batteryLevel();
+void setBatteryLevel(uint8_t percent);
+
 // Wipe every key this module owns. Used by `factory`.
 void clearAll();
 

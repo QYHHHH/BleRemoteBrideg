@@ -208,9 +208,12 @@ bool begin() {
   hid_gatt::setReportMap(kHidReportMap, HID_REPORT_MAP_LEN);
   hid_gatt::setManufacturer("MiRemoteBridge");
   hid_gatt::setPnpId(0x02 /* USB-IF */, 0x02E5 /* Espressif */, 0x0001, 0x0110);
-  // Placeholder only. The real value arrives once the RC003 has reported its
-  // own charge (BR_EV_RC_BATTERY); until then the host sees this.
-  hid_gatt::setBatteryLevel(BRIDGE_BATTERY_LEVEL);
+  // Battery: prefer the last level the remote actually reported (persisted in
+  // NVS), so a host connecting right after a cold boot reads a real number
+  // rather than a placeholder. BRIDGE_BATTERY_LEVEL only applies before the
+  // remote has ever reported anything.
+  const int persisted = settings::batteryLevel();
+  hid_gatt::setBatteryLevel(persisted >= 0 ? (uint8_t)persisted : (uint8_t)BRIDGE_BATTERY_LEVEL);
 
   // Registers the HID, Device Information and Battery services. Must happen
   // before the server is started, because starting it pushes the GATT database

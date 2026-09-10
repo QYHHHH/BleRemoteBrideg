@@ -30,6 +30,8 @@ const char *kKeyLevel = "log_lvl";
 const char *kKeyMapBack = "map_back";
 const char *kKeyMapPower = "map_pow";
 const char *kKeyMapVoice = "map_voice";
+const char *kKeyBattery = "rc_batt";
+const char *kKeyBatteryValid = "rc_batt_v";
 
 bool s_ready = false;
 
@@ -107,6 +109,23 @@ void setLatencyLog(bool on) {
 uint8_t logLevel() { return s_ready ? s_prefs.getUChar(kKeyLevel, BR_LOG_INFO) : (uint8_t)BR_LOG_INFO; }
 void setLogLevel(uint8_t level) {
   if (s_ready) s_prefs.putUChar(kKeyLevel, level);
+}
+
+// Last charge the remote reported, kept across reboots so the host never reads
+// a fabricated placeholder after a cold boot. Windows reads the battery the
+// moment it connects, which on a cold boot is before the remote has been
+// re-discovered - without this it would see 100% every time until the next
+// battery notification.
+int batteryLevel() {
+  if (!s_ready || !s_prefs.getBool(kKeyBatteryValid, false)) return -1;
+  return (int)s_prefs.getUChar(kKeyBattery, 0);
+}
+
+void setBatteryLevel(uint8_t percent) {
+  if (!s_ready) return;
+  if (percent > 100) percent = 100;
+  s_prefs.putUChar(kKeyBattery, percent);
+  s_prefs.putBool(kKeyBatteryValid, true);
 }
 
 void clearAll() {

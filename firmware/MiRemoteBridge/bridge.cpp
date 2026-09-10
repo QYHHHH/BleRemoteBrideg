@@ -180,8 +180,10 @@ void handleEvent(const bridge_event_t &ev) {
 
     case BR_EV_RC_BATTERY:
       // The remote reports its own charge; re-publish it so the host shows the
-      // remote's battery rather than a number this bridge made up.
+      // remote's battery rather than a number this bridge made up. Persisted so
+      // a host connecting after a reboot reads the last real value immediately.
       BR_LOGI(kTag, "RC003 battery %u%%", (unsigned)ev.code);
+      settings::setBatteryLevel(ev.code);
       hid_server::setBatteryLevel(ev.code);
       break;
 
