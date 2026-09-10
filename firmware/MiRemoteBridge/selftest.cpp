@@ -215,10 +215,11 @@ void suiteQueue() {
 }
 
 void suiteDescriptorConstants() {
-  ok(HID_INPUT_REPORT_LEN == 10, "input report must be 10 bytes (8 keyboard + 2 consumer)");
-  ok(HID_INPUT_OFFSET_CONSUMER == 8, "the consumer field must follow the 8 keyboard bytes");
-  ok(HID_INPUT_OFFSET_KEYS + HID_INPUT_KEY_COUNT == HID_INPUT_OFFSET_CONSUMER,
-     "keyboard keys must exactly fill the space before the consumer field");
+  ok(HID_KB_REPORT_LEN == 8, "keyboard report must be 8 bytes");
+  ok(HID_CONSUMER_REPORT_LEN == 2, "consumer report must be 2 bytes");
+  ok(HID_KB_OFFSET_KEYS + HID_KB_KEY_COUNT == HID_KB_REPORT_LEN,
+     "the 6 key slots must exactly fill the rest of the keyboard report");
+  ok(HID_REPORT_ID_KEYBOARD != HID_REPORT_ID_CONSUMER, "the two reports must use different report IDs");
   ok(kHidReportMap[0] == 0x05 && kHidReportMap[1] == 0x01, "report map must start with Usage Page (Generic Desktop)");
   ok(kHidReportMap[HID_REPORT_MAP_LEN - 1] == 0xC0, "report map must end with End Collection");
   ok(HID_REPORT_MAP_LEN > 80 && HID_REPORT_MAP_LEN < 200, "report map size is implausible");

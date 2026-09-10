@@ -535,63 +535,59 @@ def check_descriptor() -> None:
     inputs = result["inputs"]
     outputs = result["outputs"]
 
-    # There must be exactly ONE input report, carrying 8 keyboard bytes plus the
-    # 16-bit consumer field. Two report IDs would mean two Report
-    # characteristics sharing UUID 0x2A4D, which the Arduino-ESP32 3.3.11 BLE
-    # wrapper cannot register - the second one is dropped from the service map,
-    # never gets its service pointer assigned, and notify() on it panics the
-    # chip. That was reproduced on hardware, so this assertion is a regression
-    # guard, not a style preference.
+    # TWO input reports, one per top-level collection, each on its own report ID.
+    #
+    # This is the shape HOGP prescribes and the shape every working Bluetooth
+    # keyboard uses. Getting here took two failed attempts, both reproduced on
+    # hardware, so these assertions guard real regressions:
+    #
+    #  * two collections sharing ONE report ID is legal HID but Windows 11
+    #    refuses it - the HID-over-GATT device fails to start with Code 10 and
+    #    problem status 0xC0110002 (HIDP_STATUS_INVALID_REPORT_TYPE);
+    #  * one collection per report ID needs two characteristics carrying
+    #    0x2A4D, which is why the service is built on NimBLE directly rather
+    #    than with BLEHIDDevice (see hid_gatt.h).
     check(
-        len(result["inputs"]) == 1,
-        f"exactly 1 input report expected (risk of the two-characteristic crash), "
-        f"descriptor declares {sorted(result['inputs'])}",
+        sorted(result["inputs"]) == [1, 2],
+        f"expected input report IDs 1 and 2 (keyboard, consumer), descriptor declares {sorted(result['inputs'])}",
     )
     check(
-        inputs.get(1) == 80,
-        f"input report 1 must be 80 bits (10 bytes: 8 keyboard + 2 consumer), descriptor says {inputs.get(1)}",
+        inputs.get(1) == 64,
+        f"report ID 1 (keyboard) must be 64 bits = 8 bytes, descriptor says {inputs.get(1)}",
     )
-    # No output report may be declared. Every report a descriptor mentions needs a
-    # Report characteristic of that report TYPE, and BLEHIDDevice only ever creates
-    # an input one. With the standard keyboard LED output copied in, Windows 11
-    # failed to start the HID-over-GATT device: CM_PROB_FAILED_START (Code 10) with
-    # problem status 0xC0110002 = HIDP_STATUS_INVALID_REPORT_TYPE. It was reproduced
-    # on hardware, so this is a regression guard.
+    check(
+        inputs.get(2) == 16,
+        f"report ID 2 (consumer) must be 16 bits = 2 bytes, descriptor says {inputs.get(2)}",
+    )
+    # Every report a descriptor mentions needs a Report characteristic of that
+    # report TYPE. This firmware declares no output report and creates no output
+    # characteristic, so declaring one here would be a mismatch.
     check(
         not outputs,
-        f"no output report may be declared (HIDP_STATUS_INVALID_REPORT_TYPE); "
-        f"descriptor declares outputs={sorted(outputs)}",
+        f"no output report may be declared; descriptor declares outputs={sorted(outputs)}",
     )
     check(
-        2 not in inputs,
-        "report ID 2 must not be declared: it would need a second 0x2A4D characteristic",
-    )
-    # The number of top-level collections is currently under test rather than
-    # fixed. Two collections sharing report ID 1 is what Windows 11 refuses with
-    # HIDP_STATUS_INVALID_REPORT_TYPE, so the diagnostic profile in
-    # hid_report_map.h declares ONE and folds the consumer usages into it.
-    # Accept either, but never zero - see docs/TESTING.md section 4.6.
-    check(
-        result["collections"] in (1, 2),
-        f"expected 1 or 2 top-level application collections, got {result['collections']}",
+        result["collections"] == 2,
+        f"expected 2 top-level application collections (keyboard + consumer), got {result['collections']}",
     )
     check(result["max_depth"] == 1, f"application collections must not be nested, depth is {result['max_depth']}")
 
-    # Cross-check against the lengths the firmware actually sends.
+    # Cross-check against the lengths the firmware actually sends, so the
+    # descriptor and the report builder cannot drift apart.
     hid_header = (ROOT / "firmware" / "MiRemoteBridge" / "hid_report_map.h").read_text(encoding="utf-8")
-    report_len = int(re.search(r"#define HID_INPUT_REPORT_LEN\s+(\d+)", hid_header).group(1))
-    keys_off = int(re.search(r"#define HID_INPUT_OFFSET_KEYS\s+(\d+)", hid_header).group(1))
-    keys_cnt = int(re.search(r"#define HID_INPUT_KEY_COUNT\s+(\d+)", hid_header).group(1))
-    cons_off = int(re.search(r"#define HID_INPUT_OFFSET_CONSUMER\s+(\d+)", hid_header).group(1))
+    kb_len = int(re.search(r"#define HID_KB_REPORT_LEN\s+(\d+)", hid_header).group(1))
+    kb_off = int(re.search(r"#define HID_KB_OFFSET_KEYS\s+(\d+)", hid_header).group(1))
+    kb_cnt = int(re.search(r"#define HID_KB_KEY_COUNT\s+(\d+)", hid_header).group(1))
+    cons_len = int(re.search(r"#define HID_CONSUMER_REPORT_LEN\s+(\d+)", hid_header).group(1))
+    kb_id = int(re.search(r"#define HID_REPORT_ID_KEYBOARD\s+(\d+)", hid_header).group(1))
+    cons_id = int(re.search(r"#define HID_REPORT_ID_CONSUMER\s+(\d+)", hid_header).group(1))
 
-    check(report_len * 8 == inputs.get(1), f"HID_INPUT_REPORT_LEN={report_len} disagrees with the descriptor")
+    check(kb_id == 1 and cons_id == 2, f"report IDs must be 1 and 2, header says {kb_id} and {cons_id}")
+    check(kb_len * 8 == inputs.get(1), f"HID_KB_REPORT_LEN={kb_len} disagrees with report ID 1")
+    check(cons_len * 8 == inputs.get(2), f"HID_CONSUMER_REPORT_LEN={cons_len} disagrees with report ID 2")
     check(
-        keys_off + keys_cnt == cons_off == 8,
-        f"field layout mismatch: keys end at {keys_off + keys_cnt}, consumer starts at {cons_off}",
-    )
-    check(
-        cons_off + 2 == report_len,
-        f"consumer field must be the last two bytes (offset {cons_off}, report {report_len} bytes)",
+        kb_off + kb_cnt == kb_len,
+        f"the 6 key slots must fill the keyboard report: offset {kb_off} + count {kb_cnt} != {kb_len}",
     )
 
 
