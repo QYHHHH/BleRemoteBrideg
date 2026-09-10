@@ -257,9 +257,12 @@ void execute(char *line) {
       rc003_client::requestForget();
       Serial.println("RC003 bond + saved address will be dropped");
     } else if (!strcasecmp(argv[1], "win")) {
-      const int removed = hid_server::forgetBondForConnectedHost();
+      const int removed = hid_server::forgetHostBonds();
       hid_server::forceReAdvertise();
       Serial.printf("host bond records removed: %d, advertising restarted\n", removed);
+      if (removed > 0) {
+        Serial.println("Now delete the device in Windows (Settings > Bluetooth) and pair again.");
+      }
     } else {
       Serial.println("usage: forget rc|win");
     }

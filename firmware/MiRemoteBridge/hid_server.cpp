@@ -43,6 +43,7 @@
 #include "hid_gatt.h"
 #include "hid_report_map.h"
 #include "log.h"
+#include "settings.h"
 
 namespace {
 
@@ -334,21 +335,42 @@ void ensureAdvertising() {
   BR_LOGI(kTag, "advertising re-armed");
 }
 
-int forgetBondForConnectedHost() {
-  if (!s_server || s_server->getConnectedCount() == 0) {
-    BR_LOGW(kTagHost, "no connected host, nothing to forget");
+int forgetHostBonds() {
+  const String remote = settings::rc003Address();
+
+  // Preferred path: a host is connected, so the peer to drop is unambiguous.
+  if (s_server && s_server->getConnectedCount() > 0) {
+    ble_gap_conn_desc desc;
+    if (ble_gap_conn_find(s_server->getConnId(), &desc) == 0) {
+      const int removed = ble_bonds::removePeer(BLEAddress(desc.peer_id_addr));
+      BR_LOGI(kTagHost, "connected host bond removed: %d record(s)", removed);
+      return removed;
+    }
+    BR_LOGW(kTagHost, "ble_gap_conn_find failed, sweeping every host bond instead");
+  }
+
+  // No host connected. Sweep every bond that is not the remote's. This case
+  // matters: a host that needs forgetting has usually already failed to connect
+  // (driver wedged, or its own pairing was deleted and the two sides now
+  // disagree about the link key), so waiting for a connection would deadlock.
+  BLEAddress peers[16];
+  const int n = ble_bonds::list(peers, 16);
+  if (n < 0) {
+    BR_LOGE(kTagHost, "bond list failed");
     return 0;
   }
 
-  // Read the descriptor of the single connection we care about.
-  ble_gap_conn_desc desc;
-  const int rc = ble_gap_conn_find(s_server->getConnId(), &desc);
-  if (rc != 0) {
-    BR_LOGE(kTagHost, "ble_gap_conn_find failed: %d", rc);
-    return 0;
+  int removed = 0;
+  for (int i = 0; i < n; i++) {
+    if (remote.length() > 0 && peers[i].toString().equalsIgnoreCase(remote)) continue;
+    const int r = ble_bonds::removePeer(peers[i]);
+    if (r > 0) {
+      BR_LOGI(kTagHost, "removed host bond %s", peers[i].toString().c_str());
+      removed += r;
+    }
   }
-
-  return ble_bonds::removePeer(BLEAddress(desc.peer_id_addr));
+  if (removed == 0) BR_LOGW(kTagHost, "no host bond to forget");
+  return removed;
 }
 
 const char *deviceName() { return s_deviceName.c_str(); }

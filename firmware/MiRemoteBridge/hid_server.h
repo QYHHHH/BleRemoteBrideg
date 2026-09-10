@@ -42,9 +42,14 @@ void forceReAdvertise();
 // Advertise again if we are not currently advertising and nobody is connected.
 void ensureAdvertising();
 
-// Delete the bond for the currently connected host so the next connection has
-// to go through pairing again. Returns the number of bond records removed.
-int forgetBondForConnectedHost();
+// Delete the host bond so the next connection has to go through pairing again.
+//
+// When a host is connected its own record is removed. When none is connected
+// every bond except the RC003's is removed -- the peripheral role only ever
+// bonds with hosts, and "nothing is connected" is exactly the situation a host
+// needing to be forgotten is usually in (it is wedged, or its own pairing was
+// already deleted). Returns the number of bond records removed.
+int forgetHostBonds();
 
 const char *deviceName();
 
