@@ -12,7 +12,7 @@
 | L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11095, failed: 0` |
 | L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `137 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
 | L4 上游（RC003 → C3） | 扫描、直连、配对加密、服务发现、订阅通知、逐键解析 | **通过** | 13/13 键识别，0 未知码；延迟 min 190 / median 215 / max 361 µs（§5.1、§5.2）|
-| L4 下游（C3 → Windows） | Windows 识别为蓝牙键盘 + 媒体控制设备 | **首次失败 → 已修，待复验** | 蓝牙配对成功，但 HID 驱动 Code 10（`HIDP_STATUS_INVALID_REPORT_TYPE`）；根因与修复见 §4.5 |
+| L4 下游（C3 → Windows） | Windows 识别为蓝牙键盘 | **通过**（键盘键）；媒体键待恢复 | 根因是"两个顶层集合共用一条 Report 特征"；改单集合后 Windows `Status=OK`、绑定 `kbdhid`，详见 §4.6 |
 | L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **未验证** | §5.3 |
 
 已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`；
@@ -342,18 +342,44 @@ else                      { m_characteristicMap.setByUUID(...); }
 
 （注意：限制只在 Arduino 封装层的那个 map 上。NimBLE 本身的 `ble_gatt_svc_def` 完全允许两条同 UUID 特征。）
 
-#### 正在做的诊断（单变量）
+#### 诊断结果：确认就是两个顶层集合（2026-09-10 18:38）
 
 把描述符改成**只有一个顶层集合**（Consumer 用法并进 Keyboard 集合），
 **报告仍是 10 字节、仍用 Report ID 1**，因此**固件代码一行未改**，
-唯一的变量就是"顶层集合的数量"。
+唯一的变量就是"顶层集合的数量"。结果**一次通过**：
 
-| 结果 | 含义 | 下一步 |
-| --- | --- | --- |
-| Windows 能启动 | 两个 TLC 共用一个报告 ID 就是原因 | 必须用 `ble_gatt_svc_def` 自建 HID 服务，才能给出两条 Report 特征（报告 ID 1 键盘 / 2 媒体键） |
-| Windows 仍失败 | 与集合数量无关 | 回到别处找（服务结构 / Report Reference / 描述符内容） |
+```
+[335902][WIN] host connected (mtu 256)
+[338841][WIN] host READ 00002a4e (Protocol Mode) -> 1 bytes
+[338962][WIN] host READ 00002a4b (Report Map)   -> 65 bytes   <- 真的重读了
+[339081][WIN] host READ 00002a4a (HID Info)     -> 4 bytes
+[341241][WIN] report 1 notifications ENABLED
+（此后没有任何断开）
+```
 
-**这一版是诊断版，不是交付版**：单集合会让 Windows 绑定键盘驱动，**媒体键预期失效**。
+Windows 侧：
+
+| 项 | 结果 |
+| --- | --- |
+| `符合蓝牙低能耗 GATT 的 HID 设备` | **`Status=OK` / `CM_PROB_NONE`**（此前是 `CM_PROB_FAILED_START`）|
+| `HID Keyboard Device` | 创建成功，`HID\{00001812-...}\9&24B6531B&0&0000` |
+| 内核 PnP 410 | `keyboard.inf` / 服务 `kbdhid`；`hidbthle.inf` / 服务 `mshidumdf` |
+| 断开次数 | **0**（两 TLC 版本是 3 秒后断开）|
+
+**结论：Windows 的 BLE HID 栈不接受"两个顶层集合共用一条 Report 特征"。**
+合法 HID 不等于 Windows 接受；`HIDP_STATUS_INVALID_REPORT_TYPE` 就是它在这条路径上的报错方式。
+
+#### 代价与下一步
+
+单集合会让 Windows 绑定 `kbdhid`，因此 **13 键里的媒体类 3 键（音量±、返回）和语音键在本版失效**，
+方向键 / 确定 / 主页 / 菜单 / 电视 / 电源 正常。
+
+要让媒体键回来，必须给出**两条 `0x2A4D` 特征**（报告 ID 1 = 键盘，报告 ID 2 = Consumer）。
+Arduino 封装层做不到（见上），所以下一步是**绕过 `BLEHIDDevice`，用 NimBLE 的 `ble_gatt_svc_def`
+自建 HID 服务**——NimBLE 本身完全允许两条同 UUID 特征，限制只在封装层那个 map 上。
+
+> 教训：**一个"更简洁"的设计（共用报告 ID）如果偏离了所有可用实现的做法，
+> 就要先去查有没有人这么干成过，而不是先假定它合法就够了。**
 
 #### 同时加上的观测点（方法上必须）
 
