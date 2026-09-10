@@ -10,6 +10,9 @@
 .arduino/
 build/
 
+# Local assistant/workspace notes (not project source)
+.workbuddy/
+
 # Editor and OS files
 .vscode/
 .idea/
