@@ -1,0 +1,18 @@
+# User-provided installers and generated binaries
+*.exe
+*.zip
+*.bin
+*.elf
+*.map
+
+# Project-local Arduino toolchain and caches
+.tools/
+.arduino/
+build/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
