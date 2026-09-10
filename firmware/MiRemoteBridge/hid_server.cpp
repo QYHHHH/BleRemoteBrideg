@@ -174,8 +174,35 @@ class InputReportCallbacks : public BLECharacteristicCallbacks {
 #endif
 };
 
+// Windows reads the Report Map to enumerate the device and writes Protocol Mode
+// to choose report vs boot protocol. None of that shows up in the normal log,
+// and "did the host actually re-read the descriptor?" is the first question
+// whenever a descriptor change appears to have had no effect: a wrong change and
+// a cached copy look exactly the same from this side.
+class HidServiceCallbacks : public BLECharacteristicCallbacks {
+ public:
+#if defined(CONFIG_NIMBLE_ENABLED)
+  void onRead(BLECharacteristic *pCharacteristic, ble_gap_conn_desc *desc) override {
+    (void)desc;
+    if (!pCharacteristic) return;
+    const String v = pCharacteristic->getValue();
+    BR_LOGI(kTagHost, "host READ %s -> %u bytes", pCharacteristic->getUUID().toString().c_str(),
+            (unsigned)v.length());
+  }
+
+  void onWrite(BLECharacteristic *pCharacteristic, ble_gap_conn_desc *desc) override {
+    (void)desc;
+    if (!pCharacteristic) return;
+    const String v = pCharacteristic->getValue();
+    BR_LOGI(kTagHost, "host WRITE %s <- %u bytes (first=0x%02X)", pCharacteristic->getUUID().toString().c_str(),
+            (unsigned)v.length(), v.length() == 0 ? 0u : (unsigned)(uint8_t)v[0]);
+  }
+#endif
+};
+
 BridgeServerCallbacks s_serverCallbacks;
 InputReportCallbacks s_inputReportCallbacks;
+HidServiceCallbacks s_hidServiceCallbacks;
 
 }  // namespace
 
@@ -207,6 +234,20 @@ bool begin() {
     return false;
   }
   s_inputReport->setCallbacks(&s_inputReportCallbacks);
+
+  // Attach read/write logging to the HID service's enumerable characteristics so
+  // the log shows what the host actually fetched while enumerating. The BLE
+  // wrapper exposes no getter for the report map, but the service can hand the
+  // characteristic back by UUID.
+  if (BLEService *hidSvc = s_hid->hidService()) {
+    const uint16_t logged[] = {0x2A4A /* HID Information */, 0x2A4B /* Report Map */,
+                               0x2A4C /* HID Control Point */, 0x2A4E /* Protocol Mode */};
+    for (uint16_t u : logged) {
+      if (BLECharacteristic *c = hidSvc->getCharacteristic(BLEUUID(u))) {
+        c->setCallbacks(&s_hidServiceCallbacks);
+      }
+    }
+  }
 
   // NOTE: BLEHIDDevice::manufacturer(String) only writes the value - the
   // characteristic itself is created by the no-argument overload. Calling the

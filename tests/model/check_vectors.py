@@ -566,9 +566,14 @@ def check_descriptor() -> None:
         2 not in inputs,
         "report ID 2 must not be declared: it would need a second 0x2A4D characteristic",
     )
+    # The number of top-level collections is currently under test rather than
+    # fixed. Two collections sharing report ID 1 is what Windows 11 refuses with
+    # HIDP_STATUS_INVALID_REPORT_TYPE, so the diagnostic profile in
+    # hid_report_map.h declares ONE and folds the consumer usages into it.
+    # Accept either, but never zero - see docs/TESTING.md section 4.6.
     check(
-        result["collections"] == 2,
-        f"expected 2 top-level application collections (keyboard + consumer), got {result['collections']}",
+        result["collections"] in (1, 2),
+        f"expected 1 or 2 top-level application collections, got {result['collections']}",
     )
     check(result["max_depth"] == 1, f"application collections must not be nested, depth is {result['max_depth']}")
 

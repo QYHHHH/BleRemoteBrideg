@@ -84,10 +84,31 @@ extern "C" {
 #define HID_INPUT_KEY_COUNT 6
 #define HID_INPUT_OFFSET_CONSUMER 8  // 2 bytes, little endian
 
+// ---- TEMPORARY DIAGNOSTIC PROFILE: ONE top-level collection ----------------
+//
+// Windows 11 refuses to start the HID-over-GATT device with problem status
+// 0xC0110002 (HIDP_STATUS_INVALID_REPORT_TYPE) while this descriptor declares
+// TWO top-level collections sharing report ID 1. Two collections on one report
+// ID is legal HID, but it is the one thing here that a normal BLE keyboard
+// never does - the usual layout is "report ID 1 = keyboard, report ID 2 = media
+// keys", which needs two Report characteristics and is impossible with this
+// library version (see below).
+//
+// So this build declares ONE application collection and folds the consumer
+// usages into it. The report layout is unchanged - still 10 bytes, still report
+// ID 1 - so no firmware code had to change and the only variable is the number
+// of top-level collections.
+//
+// Media keys are expected NOT to work in this build: a single Keyboard
+// collection makes Windows bind its keyboard driver, which ignores consumer
+// usages. This is a diagnostic, not a deliverable. If it makes Windows start
+// the device, the two-collection layout is the culprit and the HID service has
+// to be built with a real second Report characteristic; if Windows still
+// refuses, the collections were never the problem and the search continues
+// elsewhere.
+//
+// See docs/TESTING.md section 4.6 for the evidence and the outcome.
 static const uint8_t kHidReportMap[] = {
-    // =================================================================
-    // Collection 1: keyboard
-    // =================================================================
     0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
     0x09, 0x06,        // Usage (Keyboard)
     0xA1, 0x01,        // Collection (Application)
@@ -114,16 +135,9 @@ static const uint8_t kHidReportMap[] = {
     0x75, 0x08,        //   Report Size (8)
     0x95, 0x06,        //   Report Count (6)
     0x81, 0x00,        //   Input (Data,Array,Abs)        -> 6 key codes
-    0xC0,              // End Collection
 
-    // =================================================================
-    // Collection 2: Consumer Control, sharing report ID 1
-    // =================================================================
-    0x05, 0x0C,        // Usage Page (Consumer)
-    0x09, 0x01,        // Usage (Consumer Control)
-    0xA1, 0x01,        // Collection (Application)
-    0x85, HID_REPORT_ID_INPUT,  //   Report ID (1)
-
+    // Consumer Control usages, inside the same collection.
+    0x05, 0x0C,        //   Usage Page (Consumer)
     0x15, 0x00,        //   Logical Minimum (0)
     0x26, 0xFF, 0x03,  //   Logical Maximum (1023)
     0x19, 0x00,        //   Usage Minimum (0)
