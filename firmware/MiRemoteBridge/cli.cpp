@@ -76,7 +76,7 @@ void printHelp() {
   Serial.println("  status                       full state dump");
   Serial.println("  scan                         list devices seen by the last scan");
   Serial.println("  scan now                     start a fresh scan");
-  Serial.println("  connect <mac> [public|random] connect to a specific device");
+  Serial.println("  connect <index|mac> [public|random]  connect; index comes from `scan`");
   Serial.println("  reconnect                    drop the RC003 link and reconnect");
   Serial.println("  forget rc                    delete the RC003 bond + saved address");
   Serial.println("  forget win                   delete the host bond and re-advertise");
@@ -111,8 +111,11 @@ void printScan() {
     uint8_t type = 0;
     int rssi = 0;
     if (!rc003_client::nearbyAt(i, &addr, &type, &name, &rssi)) continue;
-    Serial.printf("  %-17s  %-4s  %4d dBm  %s\n", addr.c_str(), type == BLE_ADDR_RANDOM ? "rand" : "pub", rssi,
-                  name.length() ? name.c_str() : "(no name)");
+    Serial.printf("  [%2u] %-17s  %-4s  %4d dBm  %s\n", (unsigned)i, addr.c_str(),
+                  type == BLE_ADDR_RANDOM ? "rand" : "pub", rssi, name.length() ? name.c_str() : "(no name)");
+  }
+  if (n) {
+    Serial.println("  pick one:  connect <index>     (or connect <mac> [public|random])");
   }
 }
 
@@ -194,14 +197,47 @@ void execute(char *line) {
 
   if (!strcasecmp(cmd, "connect")) {
     if (argc < 2) {
-      Serial.println("usage: connect <mac> [public|random]");
+      Serial.println("usage: connect <index|mac> [public|random]");
+      Serial.println("       run `scan` first to get the index");
       return;
     }
-    const uint8_t type = (argc >= 3) ? parseAddrType(argv[2]) : BLE_ADDR_PUBLIC;
-    if (rc003_client::requestConnect(String(argv[1]), type, String(""))) {
-      Serial.printf("connect requested: %s (type %u)\n", argv[1], (unsigned)type);
+
+    // `connect <index>` is the intended way in: read the list, type the number.
+    // It carries the address type across too, so a random-address peer does not
+    // have to be spelt out.
+    String target(argv[1]);
+    uint8_t type = (argc >= 3) ? parseAddrType(argv[2]) : BLE_ADDR_PUBLIC;
+    String name;
+    bool fromList = false;
+
+    const char *raw = target.c_str();
+    const bool allDigits = target.length() > 0 && target.length() <= 3 && raw[strspn(raw, "0123456789")] == '\0';
+    if (allDigits) {
+      const size_t index = (size_t)atoi(raw);
+      if (!rc003_client::nearbyAt(index, &target, &type, &name, nullptr)) {
+        Serial.printf("no scan entry [%u] - run `scan` first\n", (unsigned)index);
+        return;
+      }
+      fromList = true;
+    }
+
+    if (target.length() != 17) {
+      Serial.printf("\"%s\" is not a BLE address\n", argv[1]);
+      return;
+    }
+
+    // A peer that is not advertising costs the library's full connect timeout to
+    // give up on. Say so before the operator sits through the silence.
+    if (!fromList && !rc003_client::isNearby(target)) {
+      Serial.println("warning: this address was not seen in the last scan.");
+      Serial.println("         if it is not advertising, the attempt blocks for ~30 s");
+      Serial.println("         and then falls back to scanning.");
+    }
+
+    if (rc003_client::requestConnect(target, type, name)) {
+      Serial.printf("connect requested: %s (type %u)\n", target.c_str(), (unsigned)type);
     } else {
-      Serial.println("bad address");
+      Serial.println("could not queue the connect request");
     }
     return;
   }

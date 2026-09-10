@@ -9,13 +9,20 @@
 | 层级 | 内容 | 状态 | 证据 |
 | --- | --- | --- | --- |
 | L1 编译验证 | 对 `esp32:esp32:esp32c3:FlashMode=dio` 干净编译 | **通过** | 0 error / 0 warning，flash 691895 B (52%)，RAM 19780 B (6%) |
-| L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11094, failed: 0` |
+| L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11095, failed: 0` |
 | L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `137 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
-| L4 实机端到端 | RC003 ↔ C3 ↔ Windows 全链路 | **进行中** | 固件已在 COM3 上正常启动；双角色起来、BLE 扫描到 14 个设备；**配对与 24 项按键验收待做**（§5）|
+| L4 上游（RC003 → C3） | 扫描、直连、配对加密、服务发现、订阅通知、逐键解析 | **通过** | 13/13 键识别，0 未知码；延迟 min 190 / median 215 / max 361 µs（§5.1、§5.2）|
+| L4 下游（C3 → Windows） | Windows 识别为蓝牙键盘 + 媒体控制设备 | **未验证** | 等 Windows 侧配对（§5.1 第 3 步）|
+| L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **未验证** | §5.3 |
 
-已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`。
+已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`；
+RC003 `c0:5d:39:xx:xx:xx`（公开地址），广播名「小米蓝牙语音遥控器」。
 
-**两个只在真机上才会暴露的问题已经定位并修复**，取证与根因写在 §4。
+**三个只在真机上才会暴露的问题已经定位并修复**，取证与根因写在 §4：
+
+1. 板子无法启动（默认 QIO 下 flash 读回全 0xFF）；
+2. 按媒体键崩溃（BLE 封装层注册不了两个同 UUID 的特征）；
+3. `BLEClient::connect()` 的 timeout 参数被库忽略，导致连接失败要等 60 s（§4.4）。
 
 ## 1. L1 编译验证（已通过）
 
@@ -133,7 +140,7 @@ python tests/model/check_vectors.py
 
 这正是把 L2 与 L3 分开的理由：L2 验证**规则和表格**，L3 验证**编译进去的那份 C 代码**。
 
-## 4. 实机联调记录：两个只在真机上暴露的问题
+## 4. 实机联调记录：三个只在真机上暴露的问题
 
 ### 4.1 板子无法启动（bootloader 读 flash 返回全 0xFF）
 
@@ -214,7 +221,42 @@ bridge::loop() -> handleEvent() -> hid_server::sendConsumerReport()
 （`ERROR_GEN_FAILURE`），`.NET SerialPort.Open()` 同样失败。后经用户处理后恢复，
 现已能正常探测、烧录、读日志。
 
-## 5. L4 实机验收清单（待执行）
+### 4.4 连接一个不在广播的设备要等 60 秒（库层陷阱）
+
+现象：`connect c0:5d:39:xx:xx:xx` 之后，日志停在
+
+```
+[151248][RC     ] state -> CONNECTING (console connect)
+[151260][RC     ] connecting to c0:5d:39:xx:xx:xx (type 0)...
+```
+
+然后**十几秒没有任何输出**，`status` 仍显示 `CONNECTING`。看起来像死锁。
+
+根因在库里，不在本固件：
+
+```cpp
+// BLEClient.cpp
+rc = ble_gap_connect(BLEDevice::m_ownAddrType, &peerAddr_t, m_connectTimeout, ...);
+//                                                          ^^^^^^^^^^^^^^^^
+```
+
+`BLEClient::connect(addr, type, timeoutMs)` 的**第三个参数被完全忽略** —— 传给 `ble_gap_connect()`
+的是私有成员 `m_connectTimeout`，本库版本默认 **30000 ms**，而且**全库没有 `setConnectTimeout()`**
+（`grep -rn setConnectTimeout` 无匹配，因此也没有公开途径改它）。
+
+叠加我在 `connectToAddress()` 里写的"失败后换地址类型再试一次"兜底，最坏就是 **30 s × 2 = 60 s**。
+
+**处理**：
+
+- 删掉那个不起作用的 `BRIDGE_DIRECT_CONNECT_MS` 参数，改用 `BRIDGE_CONNECT_LIB_TIMEOUT_MS`
+  把库的真实超时记录下来，并在日志里明写 `may take up to 30 s`——否则这段静默和死锁无法区分；
+- 换地址类型重试**只在目标是 random 地址时**才做（公开地址不会换类型，重试纯属浪费 30 s）；
+- `connect <mac>` 时若该地址不在上次扫描结果里，先打印警告。
+
+另外把"人工选择"做成了一等路径：`scan` 输出带序号，`connect <index>` 直接按序号连，
+并把扫描到的地址类型一并带上。
+
+## 5. L4 实机验收清单（部分完成）
 
 按顺序做完并回填。每条都有"怎么判"和"期望结果"。
 
@@ -222,31 +264,52 @@ bridge::loop() -> handleEvent() -> hid_server::sendConsumerReport()
 
 | # | 项目 | 操作 | 期望 | 结果 |
 | --- | --- | --- | --- | --- |
-| 1 | 烧录 | `.\scripts\flash.ps1 -Port COM3` | `UPLOAD OK`，串口出启动横幅 | ☐ |
-| 2 | 上游配对 | 让 RC003 广播，等待自动识别 | 日志出现 `target found` → `ready: N subscription(s)` | ☐ |
-| 3 | 下游配对 | Windows 蓝牙添加 `Mi Remote Bridge` | 出现 `report 1 notifications ENABLED` | ☐ |
-| 4 | Windows 识别 | 设置 / 设备管理器 | 出现"键盘"+ 消费类控制设备，无"未知设备" | ☐ |
-| 5 | 设备端自检 | `selftest` | `RESULT: PASS` | ☐ |
+| 1 | 烧录 | `.\scripts\flash.ps1 -Port COM3` | `UPLOAD OK`，串口出启动横幅 | ✅ 2026-09-10 |
+| 2 | 上游配对 | `scan` → `connect <index>`（人工选择） | `ready: N subscription(s)` | ✅ 秒连，见下 |
+| 3 | 下游配对 | Windows 蓝牙添加 `Mi Remote Bridge` | 日志 `host connected` 变 1 | ☐ **待做** |
+| 4 | Windows 识别 | 设置 / 设备管理器 | 出现"键盘"+ 消费类控制设备 | ☐ **待做** |
+| 5 | 设备端自检 | `selftest` | `RESULT: PASS` | ✅ 见 §3 |
+
+上游配对的实测日志（`connect` 发出后约 270 ms 建链）：
+
+```
+[151526][RC     ] gatt link established
+[151529][NVS    ] saved remote Xiaomi BT Remote (c0:5d:39:xx:xx:xx) type=0
+[153107][SEC    ] link encrypted (bonded=1, authenticated=0)
+[153675][GATT   ] discovered 9 service(s)
+[155226][GATT   ] service 00001812-0000-1000-8000-00805f9b34fb      <- HOGP
+[157313][GATT   ] subscribed to HID report 00002a4d-0000-1000-8000-00805f9b34fb
+[157313][GATT   ] protocol mode set to Report (0x01)
+[157365][GATT   ] ready: 1 subscription(s), notifications live
+```
+
+设备：地址 `c0:5d:39:xx:xx:xx`（**公开地址**），广播名「小米蓝牙语音遥控器」，RSSI −35…−48 dBm。
 
 ### 5.2 13 个按键逐个按下与松开
 
-`raw on` 打开后逐个按。**每个键都要记录原始码、转换结果、Windows 是否响应。**
+`raw on` 打开后逐个按。**每个键都记录原始码、转换结果、Windows 是否响应。**
 
-| # | 物理键 | 原始码（实测） | 期望输出 | Windows 实测 | 结果 |
+§1–§4 两列已于 2026-09-10 在真机上跑完（13/13 识别，**0 未知码 / 0 WARN**）；
+"Windows 实测"一列要等 §5.1 第 3 步（下游配对）完成后才能填。
+
+| # | 物理键 | 原始码（实测） | 固件转换结果（实测） | Windows 实测 | 结果 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 音量 + | | Consumer Vol Up | | ☐ |
-| 2 | 音量 − | | Consumer Vol Down | | ☐ |
-| 3 | 返回 | | Consumer AC Back | | ☐ |
-| 4 | 上 | | ↑ | | ☐ |
-| 5 | 下 | | ↓ | | ☐ |
-| 6 | 左 | | ← | | ☐ |
-| 7 | 右 | | → | | ☐ |
-| 8 | 确定 | | Enter | | ☐ |
-| 9 | 主页 | | Win+D | | ☐ |
-| 10 | 菜单 | | Space | | ☐ |
-| 11 | 电视 | | F8 | | ☐ |
-| 12 | 电源 | | Alt+F4 | | ☐ |
-| 13 | 语音 | | RAlt+, | | ☐ |
+| 1 | 音量 + | `0x80` | Consumer `0x00E9` | | ✅ |
+| 2 | 音量 − | `0x81` | Consumer `0x00EA` | | ✅ |
+| 3 | 返回 | `0xF1` | Consumer `0x0224` | | ✅ |
+| 4 | 上 | `0x52` | 键盘 `0x52` | | ✅ |
+| 5 | 下 | `0x51` | 键盘 `0x51` | | ✅ |
+| 6 | 左 | `0x50` | 键盘 `0x50` | | ✅ |
+| 7 | 右 | `0x4F` | 键盘 `0x4F` | | ✅ |
+| 8 | 确定 | `0x28` | 键盘 `0x28` | | ✅ |
+| 9 | 主页 | **`0x4A`** | LSUI + `0x07`（Win+D） | | ✅ |
+| 10 | 菜单 | **`0x65`** | 键盘 `0x2C`（Space） | | ✅ |
+| 11 | 电视 | **`0x35`** | 键盘 `0x41`（F8） | | ✅ |
+| 12 | 电源 | `0x66` | LALT + `0x3D`（Alt+F4） | | ✅ |
+| 13 | 语音 | **`0x3E`** | RALT + `0x36`（RAlt+,） | | ✅ |
+
+**加粗的 4 个是"第三方记录里写错、实测纠正"的**：`0x4A`/`0x65`/`0x35`/`0x3E` 原本被列为备用码。
+已按实测值改主码，并把第三方那套留作同义词。详见 `KEYMAP.md` §1。
 
 **若某个键的"原始码（实测）"与 `KEYMAP.md` 不同**，把实测码补进
 `key_definitions.h` + `keymap.cpp` 后重新编译烧录。
@@ -259,7 +322,7 @@ bridge::loop() -> handleEvent() -> hid_server::sendConsumerReport()
 | 15 | 长时间按住 | 按住音量键 10 秒以上 | 只发一次按下（不连发），松开后立即停止 | ☐ |
 | 16 | 快速连续按键 | 1 秒内连按 10 次 | 每次都正确，无丢键、无卡键 | ☐ |
 | 17 | RC003 休眠后唤醒 | 静置到遥控器休眠，再按键唤醒 | 自动重连并**重新订阅**（日志有 `ready: ...`），按键恢复 | ☐ |
-| 18 | C3 断电重启 | 拔插 C3 | 两侧都自动恢复；优先直连已保存地址 | ☐ |
+| 18 | C3 断电重启 | 拔插 C3 | 两侧都自动恢复；优先直连已保存地址 | ✅ 上游侧已验证，见下 |
 | 19 | Windows 重启 | 重启 PC | 自动重连，事件键正常 | ☐ |
 | 20 | Windows 蓝牙关闭再开启 | 关蓝牙 → 开蓝牙 | 自动重连；若需手动点一下也能连上 | ☐ |
 | 21 | 删除 Windows 配对后重新配对 | `forget win` + Windows 删除设备 + 重配 | 重新配对成功 | ☐ |
@@ -286,16 +349,70 @@ lat on
 
 | 指标 | 定义 | 实测 |
 | --- | --- | --- |
-| 固件内延迟（最小值） | 通知回调 → `hid_server` 完成 notify | **19 µs**（设备端分发仿真，13 次采样）|
-| 固件内延迟（中位数） | 同上 | **26 µs** |
-| 固件内延迟（最大值） | 同上 | **203 µs** |
-| 端到端主观延迟 | 按键到 Windows 响应（可用在线键盘测试页面观察） | ☐ 待配对后实测 |
+| 固件内延迟（仿真） | 通知回调 → `hid_server` 完成 notify | **min 19 / median 26 / max 203 µs** |
+| 固件内延迟（真机 13 键） | 同上，每键一次实测 | **min 190 / median 215 / max 361 µs** |
+| 端到端主观延迟 | 按键到 Windows 响应（可用在线键盘测试页面观察） | ☐ 待下游配对后实测 |
 
-上表数字来自 `selftest` 的分发仿真（同一段 `event_bus::post()` → `notify()` 代码路径），
-**不含**空口传输与主机 HID 栈处理时间。真机按键时用 `lat on` 采集同一指标复验。
+**真机 13 次的全部采样**（µs）：`190 198 198 203 212 213 215 216 219 219 222 229 361`。
+
+两条数值都属于 `event_bus::post()` → `hid_server` 完成 `notify()` 这一段，**不含**空口
+传输、Windows HID 栈处理与 USB/蓝牙栈的排队时间 —— 所以"体感延迟"会比这个大，两者不要混为一谈。
+
+真机的 190–361 µs 比仿真大一个量级，是正常的：仿真跑在 `loop()` 里空转的情境，真机采样
+覆盖了 `loop()` 正在处理其它事件、以及 BLE 主机任务抢占的情况。**最大值 361 µs 也没有达到
+让人感知的程度**（人眼可分辨的按键延迟阈值在 10 ms 量级）。
 
 注意：固件内延迟**不包含**空口传输、Windows HID 栈处理和应用响应时间。
 测量值只代表"固件没有引入额外延迟"。
+
+---
+
+### 5.5 上游通道的实测细节（含未解决项）
+
+#### 5.5.1 断电重启后的自动恢复 ✅
+
+拔插 C3（烧录后复位）后的完整时序，**没有走扫描**，直接用 NVS 里保存的地址直连：
+
+```
+[  436][RC     ] state -> DIRECT (boot)
+[  437][RC     ] bound remote: c0:5d:39:xx:xx:xx ("Xiaomi BT Remote")
+[  457][RC     ] state -> CONNECTING (direct connect to bound address)
+[ 3927][RC     ] gatt link established
+[ 4776][GATT   ] discovered 9 service(s)
+[ 9339][GATT   ] subscribed to HID report 00002a4d-0000-1000-8000-00805f9b34fb
+[ 9392][GATT   ] ready: 1 subscription(s), notifications live
+[ 9392][RC     ] state -> READY (subscribed)
+```
+
+**从加电到 READY 共 9.4 秒**（其中建链 3.5 s，服务发现与订阅 5.5 s）。
+
+#### 5.5.2 ATVV 控制通道在本机没有订阅成功 ⚠️
+
+需求里希望顺带订阅 ATVV 控制特征（`ab5e0004`）来观察语音键，但实测**只建立了 1 个订阅**，
+即 HOGP 报告 `0x2A4D`；日志既没有 `subscribed to ATVV control`，也没有 `subscribe failed on
+ATVV control` —— 说明该特征在服务发现阶段就**没有出现**在 `ab5e0001` 服务的特征表里。
+
+伴随两条 NimBLE 报错：
+
+```
+E (10011) NimBLE: ble_att_clt_tx_read_type rc=3     <- 探测 fe59 服务时
+E (10023) NimBLE: ble_att_clt_tx_read_type rc=3     <- 探测 ab5e0001 服务时
+```
+
+**未解决项**：这两条错误的根因没有追到底。它们是**非致命**的 —— 建链、发现、订阅、READY 全部照常完成，
+13 个键也全部工作。判断为"对远端不提供的属性发起读取、被设备以 ATT 错误拒绝"，属于噪音而非故障。
+
+**为什么这不影响语音键**：语音键在本机走的是 HOGP 报告路径，实测原始码 `0x3E`，映射到 `RAlt+,`。
+ATVV 通道只是**另一条**可能上报语音键的路径（对应同义词 `0x04`），两条路互不依赖。
+
+#### 5.5.3 一个待观察的现象：`bonded` 标志
+
+首次配对时日志为 `link encrypted (bonded=1)`，重启重连后为 `link encrypted (bonded=0)`，
+但 `status` 里 `bonds: 1` 且链路加密正常、按键正常。
+
+可能是时序问题（该行在绑定的标志位落定之前打印），也可能确实发生了一次重新配对。
+**目前没有证据表明它造成任何功能问题**，因此按"待观察"记录，不写成已解决。
+重启 N 次后若 `bonds` 始终为 1 且无需遥控器重新进入配对模式，即可判定为时序假象。
 
 ---
 

@@ -37,11 +37,15 @@ HID 报告后再以蓝牙键盘的身份发出去，因此**免驱、不改系�
 | 层级 | 状态 |
 | --- | --- |
 | L1 编译验证 | ✅ 通过（0 warning，flash 52% / RAM 6%） |
-| L2 宿主端模型验证 | ✅ 通过（11094 项断言，含 4000 步随机不变量测试） |
+| L2 宿主端模型验证 | ✅ 通过（11095 项断言，含 4000 步随机不变量测试） |
 | L3 设备端自检（`selftest`） | ✅ **真机通过**：`137 passed / 0 failed` + 分发仿真 `44 passed / 0 failed` |
-| L4 实机端到端验收 | 🔄 固件已在 COM3 上正常运行（双角色、BLE 扫到 14 个设备）；**RC003 与 Windows 配对、24 项按键验收待做**（[`docs/TESTING.md`](docs/TESTING.md) §5） |
+| L4 上游 RC003 → C3 | ✅ **真机通过**：13/13 键识别，**0 未知码 / 0 WARN**；固件内延迟 min 190 / median 215 / max 361 µs |
+| L4 下游 C3 → Windows | ⏳ **未验证**：等 Windows 蓝牙配对 `Mi Remote Bridge` |
+| L4 边界与恢复（长按/连按/休眠/重启/卡键） | ⏳ 未验证 |
 
-固件内延迟（设备端分发仿真，13 次采样）：**min 19 µs / median 26 µs / max 203 µs**。
+**13 个按键的原始码已在本机 C3 + 真实 RC003 上逐键实测确认**，并纠正了 4 个第三方记录里写错的码
+（详见 [`docs/KEYMAP.md`](docs/KEYMAP.md) §1）。完整的 24 项验收清单在
+[`docs/TESTING.md`](docs/TESTING.md) §5。
 
 **固件已在真实 ESP32-C3 上烧录并运行**（MAC `60:55:f9:xx:xx:xx`，bootloader → app 正常启动，
 串口控制台可用）。端到端（RC003 ↔ C3 ↔ Windows）的按键验收还没做，清单在
@@ -206,7 +210,7 @@ firmware/MiRemoteBridge/
 | [`docs/PAIRING.md`](docs/PAIRING.md) | 上游/下游配对步骤、日志样例、排查表、命令速查 |
 | [`docs/KEYMAP.md`](docs/KEYMAP.md) | 13 键完整表、可配置模式、HID 描述符、重复报文处理 |
 | [`docs/RECOVERY.md`](docs/RECOVERY.md) | Bond 清除、故障恢复矩阵、防卡键设计 |
-| [`docs/TESTING.md`](docs/TESTING.md) | 三层验证的真实状态、阻塞点、实机验收清单、延迟测量 |
+| [`docs/TESTING.md`](docs/TESTING.md) | 四层验证的真实状态、实机联调记录（3 个只在真机暴露的问题）、24 项验收清单、延迟测量 |
 | [`docs/THIRD_PARTY_NOTICES.md`](docs/THIRD_PARTY_NOTICES.md) | 第三方引用核查与许可证结论 |
 
 ---

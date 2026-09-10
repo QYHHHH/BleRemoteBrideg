@@ -50,10 +50,25 @@
 #define RC003_ATVV_CHAR_CTL_UUID "ab5e0004-5a21-4f05-bc7d-af01f617b664"
 
 // Name fragments used for identification while *unbound* only.
-#define RC003_NAME_HINT_1       "MI RC"
-#define RC003_NAME_HINT_2       "Xiaomi"
-#define RC003_NAME_HINT_3       "Remote"
-#define RC003_NAME_HINT_4      "MI Remote"
+//
+// The remote advertises a LOCALISED name. An RC003 in pairing mode reported
+// "小米蓝牙语音遥控器" ("Xiaomi Bluetooth Voice Remote") on the bench, which no
+// ASCII fragment matches - that is why the Chinese forms are listed too.
+//
+// The Chinese entries are written as explicit UTF-8 byte escapes instead of
+// literal characters so the match cannot depend on the compiler's
+// source-charset setting.
+//
+// Deliberately absent: a bare "小米" / "Xiaomi". This bridge lives in a flat with
+// several Xiaomi appliances - a Mijia scale and an air quality monitor both
+// appeared in the first scan - so matching the brand alone would eventually
+// latch onto the wrong device. Only product words ("remote", "voice") count.
+#define RC003_NAME_HINT_1   "MI RC"
+#define RC003_NAME_HINT_2   "MI Remote"
+#define RC003_NAME_HINT_3   "Remote"
+#define RC003_NAME_HINT_4   "RC003"
+#define RC003_NAME_HINT_5   "\xe9\x81\xa5\xe6\x8e\xa7"  // 遥控 - "remote"
+#define RC003_NAME_HINT_6   "\xe8\xaf\xad\xe9\x9f\xb3"  // 语音 - "voice"
 
 // ---------------------------------------------------------------------------
 // Scan / reconnect timing
@@ -66,8 +81,16 @@
 #define BRIDGE_SCAN_BURST_MS      20000   // scan continuously for this long
 #define BRIDGE_SCAN_IDLE_MS       3000    // then pause this long before retrying
 
-#define BRIDGE_CONNECT_TIMEOUT_S  5
-#define BRIDGE_DIRECT_CONNECT_MS  8000    // timeout for a direct address connect
+// There is no connect-timeout knob to set on this library version.
+//
+// BLEClient::connect(addr, type, timeoutMs) silently ignores its third argument:
+// the NimBLE backend passes the private m_connectTimeout to ble_gap_connect()
+// instead, it defaults to 30 s, and no setter for it exists anywhere in the BLE
+// library (checked by grep). A connect attempt to a peer that is not advertising
+// therefore blocks for the full 30 s. That is normal behaviour, not a hang, and
+// the log has to say so - otherwise the silence is indistinguishable from a
+// deadlock, which is exactly how it read on the bench.
+#define BRIDGE_CONNECT_LIB_TIMEOUT_MS  30000
 
 // ---------------------------------------------------------------------------
 // Runtime behaviour toggles

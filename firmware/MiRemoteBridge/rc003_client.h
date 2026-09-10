@@ -42,6 +42,11 @@ uint32_t notifyCount();
 size_t nearbyCount();
 bool nearbyAt(size_t index, String *address, uint8_t *addrType, String *name, int *rssi);
 
+// Was this address among the results of the last scan? Used to warn before a
+// direct connect: a peer that is not advertising costs the library's full
+// connect timeout (30 s) to give up on.
+bool isNearby(const String &address);
+
 // Statistics for the selftest/status output.
 uint32_t scanStarts();
 uint32_t connectAttempts();

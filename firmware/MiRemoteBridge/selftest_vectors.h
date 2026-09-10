@@ -61,40 +61,42 @@ typedef struct {
 
 static const uint8_t kParseBytes_0[] = {0, 0, 40, 0, 0, 0, 0, 0};
 static const uint8_t kParseBytes_1[] = {0, 0, 0, 0, 0, 0, 0, 0};
-static const uint8_t kParseBytes_2[] = {0, 0, 192, 0, 0, 0, 0, 0};
-static const uint8_t kParseBytes_3[] = {128};
-static const uint8_t kParseBytes_4[] = {0};
-static const uint8_t kParseBytes_5[] = {102};
-static const uint8_t kParseBytes_6[] = {0, 128};
-static const uint8_t kParseBytes_7[] = {82, 0};
-static const uint8_t kParseBytes_8[] = {0, 0, 241};
-static const uint8_t kParseBytes_9[] = {0, 0, 0};
-static const uint8_t kParseBytes_10[] = {0, 0, 0, 79, 0};
-static const uint8_t kParseBytes_11[] = {0, 64, 0};
-static const uint8_t kParseBytes_12[] = {2, 0, 0, 0, 0, 0, 0, 0};
-static const uint8_t kParseBytes_13[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
-static const uint8_t kParseBytes_14[] = {0};
-static const uint8_t kParseBytes_15[] = {79};
+static const uint8_t kParseBytes_2[] = {0, 0, 53, 0, 0, 0, 0, 0};
+static const uint8_t kParseBytes_3[] = {0, 0, 192, 0, 0, 0, 0, 0};
+static const uint8_t kParseBytes_4[] = {128};
+static const uint8_t kParseBytes_5[] = {0};
+static const uint8_t kParseBytes_6[] = {102};
+static const uint8_t kParseBytes_7[] = {0, 128};
+static const uint8_t kParseBytes_8[] = {82, 0};
+static const uint8_t kParseBytes_9[] = {0, 0, 241};
+static const uint8_t kParseBytes_10[] = {0, 0, 0};
+static const uint8_t kParseBytes_11[] = {0, 0, 0, 79, 0};
+static const uint8_t kParseBytes_12[] = {0, 64, 0};
+static const uint8_t kParseBytes_13[] = {2, 0, 0, 0, 0, 0, 0, 0};
+static const uint8_t kParseBytes_14[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
+static const uint8_t kParseBytes_15[] = {0};
+static const uint8_t kParseBytes_16[] = {79};
 
 static const st_parse_vec_t kParseVectors[] = {
   { "8-byte report, OK key in slot 0", kParseBytes_0, 8, 1, { { 40, true }, { 0, false } } },
   { "8-byte report, all slots zero means release", kParseBytes_1, 8, 1, { { 0, false }, { 0, false } } },
-  { "8-byte report, TV key (0xC0)", kParseBytes_2, 8, 1, { { 192, true }, { 0, false } } },
-  { "1-byte report, Volume Up", kParseBytes_3, 1, 1, { { 128, true }, { 0, false } } },
-  { "1-byte report, zero means release", kParseBytes_4, 1, 1, { { 0, false }, { 0, false } } },
-  { "1-byte report, Power (0x66)", kParseBytes_5, 1, 1, { { 102, true }, { 0, false } } },
-  { "2-byte report, key in byte 1", kParseBytes_6, 2, 1, { { 128, true }, { 0, false } } },
-  { "2-byte report, key in byte 0 fallback", kParseBytes_7, 2, 1, { { 82, true }, { 0, false } } },
-  { "3-byte report, Back key at index 2", kParseBytes_8, 3, 1, { { 241, true }, { 0, false } } },
-  { "3-byte report, all zero is release", kParseBytes_9, 3, 1, { { 0, false }, { 0, false } } },
-  { "5-byte report, key in slot 1 of the slot region", kParseBytes_10, 5, 1, { { 79, true }, { 0, false } } },
-  { "modifier-only report is not mistaken for a key", kParseBytes_11, 3, 1, { { 0, false }, { 0, false } } },
-  { "modifier-only report, modifier in byte 0", kParseBytes_12, 8, 1, { { 0, false }, { 0, false } } },
-  { "audio-sized payload is not a key report", kParseBytes_13, 20, 0, { { 0, false } } },
-  { "empty payload", kParseBytes_14, 0, 0, { { 0, false } } },
-  { "D-pad Right (0x4F) single byte", kParseBytes_15, 1, 1, { { 79, true }, { 0, false } } },
+  { "8-byte report, TV key (0x35, measured)", kParseBytes_2, 8, 1, { { 53, true }, { 0, false } } },
+  { "8-byte report, TV synonym (0xC0)", kParseBytes_3, 8, 1, { { 192, true }, { 0, false } } },
+  { "1-byte report, Volume Up", kParseBytes_4, 1, 1, { { 128, true }, { 0, false } } },
+  { "1-byte report, zero means release", kParseBytes_5, 1, 1, { { 0, false }, { 0, false } } },
+  { "1-byte report, Power (0x66)", kParseBytes_6, 1, 1, { { 102, true }, { 0, false } } },
+  { "2-byte report, key in byte 1", kParseBytes_7, 2, 1, { { 128, true }, { 0, false } } },
+  { "2-byte report, key in byte 0 fallback", kParseBytes_8, 2, 1, { { 82, true }, { 0, false } } },
+  { "3-byte report, Back key at index 2", kParseBytes_9, 3, 1, { { 241, true }, { 0, false } } },
+  { "3-byte report, all zero is release", kParseBytes_10, 3, 1, { { 0, false }, { 0, false } } },
+  { "5-byte report, key in slot 1 of the slot region", kParseBytes_11, 5, 1, { { 79, true }, { 0, false } } },
+  { "modifier-only report is not mistaken for a key", kParseBytes_12, 3, 1, { { 0, false }, { 0, false } } },
+  { "modifier-only report, modifier in byte 0", kParseBytes_13, 8, 1, { { 0, false }, { 0, false } } },
+  { "audio-sized payload is not a key report", kParseBytes_14, 20, 0, { { 0, false } } },
+  { "empty payload", kParseBytes_15, 0, 0, { { 0, false } } },
+  { "D-pad Right (0x4F) single byte", kParseBytes_16, 1, 1, { { 79, true }, { 0, false } } },
 };
-static const size_t kParseVectorCount = 16;
+static const size_t kParseVectorCount = 17;
 
 static const uint8_t kAtvvBytes_0[] = {4, 3, 0, 0};
 static const uint8_t kAtvvBytes_1[] = {0};
@@ -146,16 +148,16 @@ static const st_keymap_vec_t kKeymapVectors[] = {
   { 80, "LEFT", { 1, 0, 80, 0 } },
   { 79, "RIGHT", { 1, 0, 79, 0 } },
   { 40, "OK", { 1, 0, 40, 0 } },
-  { 36, "HOME", { 1, 8, 7, 0 } },
-  { 93, "MENU", { 1, 0, 44, 0 } },
-  { 192, "TV", { 1, 0, 65, 0 } },
+  { 36, "HOME_ALT", { 1, 8, 7, 0 } },
+  { 93, "MENU_ALT", { 1, 0, 44, 0 } },
+  { 192, "TV_ALT", { 1, 0, 65, 0 } },
   { 241, "BACK", { 2, 0, 0, 548 } },
   { 102, "POWER", { 1, 4, 61, 0 } },
-  { 4, "VOICE", { 1, 64, 54, 0 } },
-  { 62, "VOICE_ALT", { 1, 64, 54, 0 } },
-  { 74, "HOME_ALT", { 1, 8, 7, 0 } },
-  { 101, "MENU_ALT", { 1, 0, 44, 0 } },
-  { 53, "TV_ALT", { 1, 0, 65, 0 } },
+  { 4, "VOICE_ALT", { 1, 64, 54, 0 } },
+  { 62, "VOICE", { 1, 64, 54, 0 } },
+  { 74, "HOME", { 1, 8, 7, 0 } },
+  { 101, "MENU", { 1, 0, 44, 0 } },
+  { 53, "TV", { 1, 0, 65, 0 } },
   { 255, "POWER_ALT", { 1, 4, 61, 0 } },
   { 233, "UNKNOWN_0xE9", { 0, 0, 0, 0 } },
   { 1, "UNKNOWN_0x01", { 0, 0, 0, 0 } },

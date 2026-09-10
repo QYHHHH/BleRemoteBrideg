@@ -42,6 +42,7 @@
 
 #include <host/ble_gap.h>
 
+#include <ctype.h>
 #include <string.h>
 
 #include "ble_bonds.h"
@@ -124,7 +125,7 @@ portMUX_TYPE s_pendMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool s_pendValid = false;
 char s_pendAddr[kAddrStrLen] = {0};
 uint8_t s_pendAddrType = BLE_ADDR_PUBLIC;
-char s_pendName[32] = {0};
+char s_pendName[48] = {0};
 int s_pendRssi = 0;
 
 // ---------------------------------------------------------------------------
@@ -136,7 +137,9 @@ struct NearbyEntry {
   bool used;
   char addr[kAddrStrLen];
   uint8_t addrType;
-  char name[24];
+  // Sized for a localised name: "小米蓝牙语音遥控器" is 27 UTF-8 bytes, and a
+  // shorter buffer cut it mid-character, printing a broken glyph tail in `scan`.
+  char name[48];
   int rssi;
   uint32_t lastSeenMs;
 };
@@ -155,13 +158,38 @@ void setState(St next, const char *why) {
   BR_LOGI(kTag, "state -> %s (%s)", rc003_client::stateName(), why ? why : "");
 }
 
-bool nameHintsRemote(const String &name) {
-  if (name.length() == 0) return false;
-  if (name.indexOf(RC003_NAME_HINT_1) >= 0) return true;
-  if (name.indexOf(RC003_NAME_HINT_2) >= 0) return true;
-  if (name.indexOf(RC003_NAME_HINT_3) >= 0) return true;
-  if (name.indexOf(RC003_NAME_HINT_4) >= 0) return true;
+// Case-insensitive substring search. String::indexOf() is case sensitive, and
+// advertised names arrive in whatever case the vendor chose ("MI RC" vs "Mi
+// Rc"). Bytes >= 0x80 - the Chinese name hints - are compared verbatim because
+// tolower() leaves them alone in the C locale, so a UTF-8 fragment still has to
+// match exactly.
+bool containsIgnoreCase(const String &haystack, const char *needle) {
+  const size_t needleLen = strlen(needle);
+  if (needleLen == 0) return false;
+  const size_t hayLen = haystack.length();
+  if (hayLen < needleLen) return false;
+  const char *hay = haystack.c_str();
+  for (size_t i = 0; i + needleLen <= hayLen; i++) {
+    size_t j = 0;
+    while (j < needleLen && tolower((unsigned char)hay[i + j]) == tolower((unsigned char)needle[j])) j++;
+    if (j == needleLen) return true;
+  }
   return false;
+}
+
+// Returns the hint that identified the name, or nullptr. Returning the hint
+// rather than a bool lets the log name the evidence, which is the first thing
+// needed when a future remote turns out to be named differently again.
+const char *matchRemoteNameHint(const String &name) {
+  if (name.length() == 0) return nullptr;
+  static const char *const kHints[] = {
+      RC003_NAME_HINT_1, RC003_NAME_HINT_2, RC003_NAME_HINT_3,
+      RC003_NAME_HINT_4, RC003_NAME_HINT_5, RC003_NAME_HINT_6,
+  };
+  for (const char *hint : kHints) {
+    if (containsIgnoreCase(name, hint)) return hint;
+  }
+  return nullptr;
 }
 
 void copyFixed(char *dst, size_t dstLen, const char *src) {
@@ -319,6 +347,7 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
     if (alreadyPending) return;
 
     bool match = false;
+    const char *why = nullptr;
 
     if (settings::hasRc003()) {
       // Bound: strict matching. The identity address is stable when the remote
@@ -326,27 +355,31 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
       // the stored name is the only thing left to match on.
       if (settings::rc003Address().equalsIgnoreCase(addr)) {
         match = true;
+        why = "saved address";
       } else {
         const String boundName = settings::rc003Name();
         if (boundName.length() > 0 && name.length() > 0 && boundName.equalsIgnoreCase(name)) {
           BR_LOGI(kTagScan, "bound remote re-advertised with a new address (%s)", addr.c_str());
           match = true;
+          why = "saved name";
         }
       }
     } else {
       // Unbound: only accept an obvious remote. A bare 0x1812 HID service is
       // deliberately NOT enough - that would latch onto a neighbour's keyboard.
-      if (nameHintsRemote(name)) {
+      if (const char *hint = matchRemoteNameHint(name)) {
         match = true;
+        why = hint;
       } else if (dev.haveServiceUUID() && dev.isAdvertisingService(BLEUUID(RC003_ATVV_SVC_UUID))) {
         match = true;
+        why = "ATVV service uuid";
       }
     }
 
     if (!match) return;
 
-    BR_LOGI(kTagScan, "target found: \"%s\" %s rssi=%d type=%u", name.c_str(), addr.c_str(), rssi,
-            (unsigned)addrType);
+    BR_LOGI(kTagScan, "target found: \"%s\" %s rssi=%d type=%u (via %s)", name.c_str(), addr.c_str(), rssi,
+            (unsigned)addrType, why ? why : "?");
 
     portENTER_CRITICAL(&s_pendMux);
     copyFixed(s_pendAddr, sizeof(s_pendAddr), addr.c_str());
@@ -534,17 +567,23 @@ bool connectToAddress(const String &addrText, uint8_t addrType) {
 
   s_connectAttempts++;
 
-  BR_LOGI(kTag, "connecting to %s (type %u)...", addrText.c_str(), (unsigned)addrType);
-  bool ok = s_client->connect(BLEAddress(addrText, addrType), addrType, BRIDGE_DIRECT_CONNECT_MS);
+  // The timeout argument of BLEClient::connect() is ignored by this library
+  // version (see BRIDGE_CONNECT_LIB_TIMEOUT_MS), so the attempt below runs on
+  // the library's own 30 s clock. Say so up front: on the bench the resulting
+  // silence was mistaken for a deadlock.
+  BR_LOGI(kTag, "connecting to %s (type %u), may take up to %u s", addrText.c_str(), (unsigned)addrType,
+          (unsigned)(BRIDGE_CONNECT_LIB_TIMEOUT_MS / 1000));
+  bool ok = s_client->connect(BLEAddress(addrText, addrType), addrType);
 
-  if (!ok) {
-    // The remote may be advertising with the opposite address type from the one
-    // we stored, which is what happens after its bond is lost and it re-randomises.
-    const uint8_t alt = (addrType == BLE_ADDR_PUBLIC) ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC;
-    BR_LOGW(kTag, "first attempt failed, retrying as type %u", (unsigned)alt);
-    if (s_client->connect(BLEAddress(addrText, alt), alt, BRIDGE_DIRECT_CONNECT_MS)) {
+  // Retry with the opposite address type only for a random address. A device
+  // with a public address never switches type, and since every attempt costs the
+  // library's full timeout, an unconditional retry would just double the wait
+  // before the caller gets its answer.
+  if (!ok && addrType == BLE_ADDR_RANDOM) {
+    BR_LOGW(kTag, "random-address attempt failed, retrying as public");
+    if (s_client->connect(BLEAddress(addrText, BLE_ADDR_PUBLIC), BLE_ADDR_PUBLIC)) {
       ok = true;
-      addrType = alt;
+      addrType = BLE_ADDR_PUBLIC;
     }
   }
 
@@ -932,6 +971,19 @@ int lastReportAgeMs() {
 }
 
 uint32_t notifyCount() { return s_notifyCount; }
+
+bool isNearby(const String &address) {
+  bool found = false;
+  portENTER_CRITICAL(&s_nearbyMux);
+  for (size_t i = 0; i < kNearbyMax; i++) {
+    if (s_nearby[i].used && address.equalsIgnoreCase(s_nearby[i].addr)) {
+      found = true;
+      break;
+    }
+  }
+  portEXIT_CRITICAL(&s_nearbyMux);
+  return found;
+}
 
 size_t nearbyCount() {
   size_t n = 0;

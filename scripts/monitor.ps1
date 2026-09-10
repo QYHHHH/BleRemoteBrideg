@@ -40,6 +40,11 @@ try {
         $sp.ReadTimeout = 500
         $sp.DtrEnable = $false
         $sp.RtsEnable = $false
+        # SerialPort defaults to ASCII, which turns every non-ASCII byte of an
+        # advertised BLE name (Xiaomi advertises its localised name) into '?', so
+        # a captured log could not be told apart from a device that really has no
+        # name. Decode as UTF-8 instead.
+        $sp.Encoding = [System.Text.Encoding]::UTF8
         $sp.Open()
         $deadline = (Get-Date).AddSeconds($Seconds)
         $buffer = ""

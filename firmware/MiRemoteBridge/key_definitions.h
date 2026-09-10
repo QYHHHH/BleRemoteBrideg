@@ -25,28 +25,43 @@
 // ===========================================================================
 // 1. RC003 physical keys (13 total), as seen in the HID report key slot
 // ===========================================================================
-#define MI_KEY_VOL_UP        0x80   // Volume +
-#define MI_KEY_VOL_DOWN      0x81   // Volume -
-#define MI_KEY_BACK          0xF1   // Back / return
-#define MI_KEY_POWER         0x66   // Power
-#define MI_KEY_HOME          0x24   // Home
-#define MI_KEY_MENU          0x5D   // Menu
-#define MI_KEY_TV            0xC0   // TV
-#define MI_KEY_UP            0x52   // D-pad up
-#define MI_KEY_DOWN          0x51   // D-pad down
-#define MI_KEY_LEFT          0x50   // D-pad left
-#define MI_KEY_RIGHT         0x4F   // D-pad right
-#define MI_KEY_OK            0x28   // OK / confirm
-#define MI_KEY_VOICE         0x04   // Voice (ATVV control channel)
+// The HID input report is 8 bytes and carries the key in BYTE 2:
+//
+//     00 00 <code> 00 00 00 00 00   - a key is down
+//     00 00 00 00 00 00 00 00       - *no* key is down (release)
+//
+// So 0x00 is a release sentinel, never a key code: releasing a button sends an
+// all-zero report rather than a report with that code cleared. The parser relies
+// on this; see rc003_report.cpp.
+//
+// [measured] values were read back from a real RC003 on 2026-09-10 by pressing
+// each physical key in turn with `raw on` enabled. [reported] values come from
+// third-party captures of the same remote and were NOT observed on the unit at
+// hand - they are kept as synonyms, because a dead button is a worse failure
+// than an extra table row. This distinction matters: on the tested unit the four
+// keys below marked [measured] were exactly the codes that third-party notes
+// listed as the "alternative" ones.
+#define MI_KEY_VOL_UP        0x80   // Volume +                        [measured]
+#define MI_KEY_VOL_DOWN      0x81   // Volume -                        [measured]
+#define MI_KEY_BACK          0xF1   // Back / return                   [measured]
+#define MI_KEY_POWER         0x66   // Power                           [measured]
+#define MI_KEY_HOME          0x4A   // Home                            [measured]
+#define MI_KEY_MENU          0x65   // Menu                            [measured]
+#define MI_KEY_TV            0x35   // TV                              [measured]
+#define MI_KEY_UP            0x52   // D-pad up                        [measured]
+#define MI_KEY_DOWN          0x51   // D-pad down                      [measured]
+#define MI_KEY_LEFT          0x50   // D-pad left                      [measured]
+#define MI_KEY_RIGHT         0x4F   // D-pad right                     [measured]
+#define MI_KEY_OK            0x28   // OK / confirm                    [measured]
+#define MI_KEY_VOICE         0x3E   // Voice, in the HOGP report       [measured]
 
-// Alternate codes observed on some RC003 units / firmware revisions. They are
-// accepted as synonyms of the key listed in the comment. Keeping them costs a
-// few table entries and avoids a silently dead button.
-#define MI_KEY_POWER_ALT     0xFF
-#define MI_KEY_HOME_ALT      0x4A
-#define MI_KEY_MENU_ALT      0x65
-#define MI_KEY_TV_ALT        0x35
-#define MI_KEY_VOICE_ALT     0x3E   // Voice as seen in the HOGP report path
+// Synonyms, accepted as the same key as above.
+#define MI_KEY_POWER_ALT     0xFF   //                                 [reported]
+#define MI_KEY_HOME_ALT      0x24   //                                 [reported]
+#define MI_KEY_MENU_ALT      0x5D   //                                 [reported]
+#define MI_KEY_TV_ALT        0xC0   //                                 [reported]
+#define MI_KEY_VOICE_ALT     0x04   // voice as seen on the ATVV control
+                                    // channel; not yet observed on hardware
 
 #define MI_KEY_COUNT 13
 

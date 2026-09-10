@@ -40,28 +40,31 @@ REPORT_MAP_H = ROOT / "firmware" / "MiRemoteBridge" / "hid_report_map.h"
 # ---------------------------------------------------------------------------
 # Constants mirrored from key_definitions.h
 # ---------------------------------------------------------------------------
+# Mirrors key_definitions.h. The unqualified codes are the ones measured on a
+# real RC003 (2026-09-10, `raw on`, every physical key pressed in turn); the
+# *_ALT codes come from third-party captures and were not observed here.
 MI_KEYS = {
     0x80: "VOL_UP",
     0x81: "VOL_DOWN",
     0xF1: "BACK",
     0x66: "POWER",
-    0x24: "HOME",
-    0x5D: "MENU",
-    0xC0: "TV",
+    0x4A: "HOME",
+    0x65: "MENU",
+    0x35: "TV",
     0x52: "UP",
     0x51: "DOWN",
     0x50: "LEFT",
     0x4F: "RIGHT",
     0x28: "OK",
-    0x04: "VOICE",
+    0x3E: "VOICE",
     0xFF: "POWER_ALT",
-    0x4A: "HOME_ALT",
-    0x65: "MENU_ALT",
-    0x35: "TV_ALT",
-    0x3E: "VOICE_ALT",
+    0x24: "HOME_ALT",
+    0x5D: "MENU_ALT",
+    0xC0: "TV_ALT",
+    0x04: "VOICE_ALT",
 }
 
-ALIASES = {0xFF: 0x66, 0x4A: 0x24, 0x65: 0x5D, 0x35: 0xC0}
+ALIASES = {0xFF: 0x66, 0x24: 0x4A, 0x5D: 0x65, 0xC0: 0x35}
 
 KIND_NONE, KIND_KEYBOARD, KIND_CONSUMER = 0, 1, 2
 
@@ -182,9 +185,9 @@ DEFAULT_TABLE: dict[int, dict] = {
     0x50: {"kind": KIND_KEYBOARD, "keycode": 0x50},
     0x4F: {"kind": KIND_KEYBOARD, "keycode": 0x4F},
     0x28: {"kind": KIND_KEYBOARD, "keycode": 0x28},
-    0x24: {"kind": KIND_KEYBOARD, "modifier": 0x08, "keycode": 0x07},
-    0x5D: {"kind": KIND_KEYBOARD, "keycode": 0x2C},
-    0xC0: {"kind": KIND_KEYBOARD, "keycode": 0x41},
+    0x4A: {"kind": KIND_KEYBOARD, "modifier": 0x08, "keycode": 0x07},  # Home -> Win+D
+    0x65: {"kind": KIND_KEYBOARD, "keycode": 0x2C},                    # Menu -> Space
+    0x35: {"kind": KIND_KEYBOARD, "keycode": 0x41},                    # TV   -> F8
 }
 
 BACK_MODES = {
