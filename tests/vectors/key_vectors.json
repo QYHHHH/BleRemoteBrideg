@@ -1,0 +1,118 @@
+{
+  "meta": {
+    "description": "Shared test vectors for MiRemoteBridge. Single source of truth: the on-device `selftest` command consumes the C header generated from this file, and tests/model/check_vectors.py validates it on the host. Keeping one copy means the device and the host can never disagree about what the expected behaviour is.",
+    "generated_c_header": "firmware/MiRemoteBridge/selftest_vectors.h",
+    "generator": "tests/tools/gen_vectors.py"
+  },
+
+  "parse": [
+    { "name": "8-byte report, OK key in slot 0", "bytes": [0, 0, 40, 0, 0, 0, 0, 0], "expect": [{ "code": 40, "pressed": true }] },
+    { "name": "8-byte report, all slots zero means release", "bytes": [0, 0, 0, 0, 0, 0, 0, 0], "expect": [{ "code": 0, "pressed": false }] },
+    { "name": "8-byte report, TV key (0xC0)", "bytes": [0, 0, 192, 0, 0, 0, 0, 0], "expect": [{ "code": 192, "pressed": true }] },
+    { "name": "1-byte report, Volume Up", "bytes": [128], "expect": [{ "code": 128, "pressed": true }] },
+    { "name": "1-byte report, zero means release", "bytes": [0], "expect": [{ "code": 0, "pressed": false }] },
+    { "name": "1-byte report, Power (0x66)", "bytes": [102], "expect": [{ "code": 102, "pressed": true }] },
+    { "name": "2-byte report, key in byte 1", "bytes": [0, 128], "expect": [{ "code": 128, "pressed": true }] },
+    { "name": "2-byte report, key in byte 0 fallback", "bytes": [82, 0], "expect": [{ "code": 82, "pressed": true }] },
+    { "name": "3-byte report, Back key at index 2", "bytes": [0, 0, 241], "expect": [{ "code": 241, "pressed": true }] },
+    { "name": "3-byte report, all zero is release", "bytes": [0, 0, 0], "expect": [{ "code": 0, "pressed": false }] },
+    { "name": "5-byte report, key in slot 1 of the slot region", "bytes": [0, 0, 0, 79, 0], "expect": [{ "code": 79, "pressed": true }] },
+    { "name": "modifier-only report is not mistaken for a key", "bytes": [0, 64, 0], "expect": [{ "code": 0, "pressed": false }] },
+    { "name": "modifier-only report, modifier in byte 0", "bytes": [2, 0, 0, 0, 0, 0, 0, 0], "expect": [{ "code": 0, "pressed": false }] },
+    { "name": "audio-sized payload is not a key report", "bytes": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], "expect": [] },
+    { "name": "empty payload", "bytes": [], "expect": [] },
+    { "name": "D-pad Right (0x4F) single byte", "bytes": [79], "expect": [{ "code": 79, "pressed": true }] }
+  ],
+
+  "atvv": [
+    { "name": "AUDIO_START with HTT reason 0x03 is the voice button down", "bytes": [4, 3, 0, 0], "expect": [{ "code": 4, "pressed": true }] },
+    { "name": "AUDIO_STOP is the voice button up", "bytes": [0], "expect": [{ "code": 4, "pressed": false }] },
+    { "name": "MIC_CLOSED is the voice button up", "bytes": [8], "expect": [{ "code": 4, "pressed": false }] },
+    { "name": "CAPS response is not a key event", "bytes": [11, 0, 1, 0, 0, 0, 120], "expect": [] }
+  ],
+
+  "tracker": [
+    {
+      "name": "single press",
+      "input": [{ "code": 128, "pressed": true }],
+      "expect": [{ "code": 128, "pressed": true }]
+    },
+    {
+      "name": "duplicate press while held is swallowed",
+      "input": [{ "code": 128, "pressed": true }, { "code": 128, "pressed": true }],
+      "expect": [{ "code": 128, "pressed": true }]
+    },
+    {
+      "name": "press then release",
+      "input": [{ "code": 128, "pressed": true }, { "code": 0, "pressed": false }],
+      "expect": [{ "code": 128, "pressed": true }, { "code": 128, "pressed": false }]
+    },
+    {
+      "name": "duplicate release is swallowed",
+      "input": [{ "code": 128, "pressed": true }, { "code": 0, "pressed": false }, { "code": 0, "pressed": false }],
+      "expect": [{ "code": 128, "pressed": true }, { "code": 128, "pressed": false }]
+    },
+    {
+      "name": "release with nothing held emits nothing",
+      "input": [{ "code": 0, "pressed": false }],
+      "expect": []
+    },
+    {
+      "name": "new key without a release auto-releases the old one",
+      "input": [{ "code": 82, "pressed": true }, { "code": 79, "pressed": true }],
+      "expect": [{ "code": 82, "pressed": true }, { "code": 82, "pressed": false }, { "code": 79, "pressed": true }]
+    },
+    {
+      "name": "release after an auto-release pair",
+      "input": [{ "code": 82, "pressed": true }, { "code": 79, "pressed": true }, { "code": 0, "pressed": false }],
+      "expect": [{ "code": 82, "pressed": true }, { "code": 82, "pressed": false }, { "code": 79, "pressed": true }, { "code": 79, "pressed": false }]
+    },
+    {
+      "name": "zero press event is ignored",
+      "input": [{ "code": 0, "pressed": true }],
+      "expect": []
+    }
+  ],
+
+  "keymap": [
+    { "code": 128, "name": "VOL_UP", "kind": "consumer", "consumer": 233 },
+    { "code": 129, "name": "VOL_DOWN", "kind": "consumer", "consumer": 234 },
+    { "code": 82, "name": "UP", "kind": "keyboard", "modifier": 0, "keycode": 82 },
+    { "code": 81, "name": "DOWN", "kind": "keyboard", "modifier": 0, "keycode": 81 },
+    { "code": 80, "name": "LEFT", "kind": "keyboard", "modifier": 0, "keycode": 80 },
+    { "code": 79, "name": "RIGHT", "kind": "keyboard", "modifier": 0, "keycode": 79 },
+    { "code": 40, "name": "OK", "kind": "keyboard", "modifier": 0, "keycode": 40 },
+    { "code": 36, "name": "HOME", "kind": "keyboard", "modifier": 8, "keycode": 7 },
+    { "code": 93, "name": "MENU", "kind": "keyboard", "modifier": 0, "keycode": 44 },
+    { "code": 192, "name": "TV", "kind": "keyboard", "modifier": 0, "keycode": 65 },
+    { "code": 241, "name": "BACK", "kind": "consumer", "consumer": 548 },
+    { "code": 102, "name": "POWER", "kind": "keyboard", "modifier": 4, "keycode": 61 },
+    { "code": 4, "name": "VOICE", "kind": "keyboard", "modifier": 64, "keycode": 54 },
+    { "code": 62, "name": "VOICE_ALT", "kind": "keyboard", "modifier": 64, "keycode": 54 },
+    { "code": 74, "name": "HOME_ALT", "kind": "keyboard", "modifier": 8, "keycode": 7 },
+    { "code": 101, "name": "MENU_ALT", "kind": "keyboard", "modifier": 0, "keycode": 44 },
+    { "code": 53, "name": "TV_ALT", "kind": "keyboard", "modifier": 0, "keycode": 65 },
+    { "code": 255, "name": "POWER_ALT", "kind": "keyboard", "modifier": 4, "keycode": 61 },
+    { "code": 233, "name": "UNKNOWN_0xE9", "kind": "none" },
+    { "code": 1, "name": "UNKNOWN_0x01", "kind": "none" }
+  ],
+
+  "keymap_modes": [
+    { "back": "kb_esc", "code": 241, "kind": "keyboard", "modifier": 0, "keycode": 41 },
+    { "back": "kb_alt_left", "code": 241, "kind": "keyboard", "modifier": 4, "keycode": 80 },
+    { "back": "consumer_back", "code": 241, "kind": "consumer", "consumer": 548 },
+    { "voice": "disabled", "code": 4, "kind": "none" },
+    { "voice": "consumer_mute", "code": 4, "kind": "consumer", "consumer": 226 },
+    { "power": "consumer_sleep", "code": 102, "kind": "consumer", "consumer": 50 },
+    { "power": "consumer_power", "code": 102, "kind": "consumer", "consumer": 48 },
+    { "power": "kb_esc", "code": 102, "kind": "keyboard", "modifier": 0, "keycode": 41 }
+  ],
+
+  "all_key_codes": [128, 129, 241, 102, 36, 93, 192, 82, 81, 80, 79, 40, 4],
+
+  "fuzz": {
+    "iterations": 4000,
+    "seed": 20260910,
+    "note": "Random press/release/duplicate streams over all_key_codes. Invariants checked after every step: at most one host key is down, the translated action is never NONE while a key is down, and after a disconnect or an explicit release-all the host state is completely empty."
+  }
+}

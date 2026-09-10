@@ -1,0 +1,977 @@
+/*
+ * MiRemoteBridge - ESP32-C3 dual-role BLE bridge for Xiaomi RC003 remote
+ *
+ * rc003_client.cpp - upstream BLE central role
+ *
+ * Design notes
+ * -----------
+ * * A dedicated FreeRTOS task owns every blocking BLE central operation
+ *   (scanning, connecting, service discovery, subscribing). The Arduino loop
+ *   stays free to drain the event queue and push HID reports, so a slow scan or
+ *   a 5-second connect attempt can never delay a keystroke.
+ * * GATT notification callbacks run in the NimBLE host task. They do the bare
+ *   minimum: parse the report into a normalised press/release and push it onto
+ *   the SPSC event queue. They never touch the GATT server.
+ * * Reconnection prefers the saved identity address and the stored bond; it
+ *   only falls back to scanning when a direct connect fails (requirement 11).
+ *   After every successful reconnect the services are discovered again and the
+ *   notifications are re-subscribed (requirement 12).
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#include "rc003_client.h"
+
+#include <BLEClient.h>
+#include <BLEDevice.h>
+#include <BLERemoteCharacteristic.h>
+#include <BLERemoteService.h>
+#include <BLEScan.h>
+
+#include <host/ble_gap.h>
+
+#include <string.h>
+
+#include "ble_bonds.h"
+#include "config.h"
+#include "event_bus.h"
+#include "key_definitions.h"
+#include "keymap.h"
+#include "log.h"
+#include "rc003_report.h"
+#include "settings.h"
+
+namespace {
+
+static const char *kTag = "RC";
+static const char *kTagScan = "SCAN";
+static const char *kTagGatt = "GATT";
+static const char *kTagSec = "SEC";
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+enum class St : uint8_t {
+  IDLE = 0,
+  DIRECT_CONNECT,   // try the saved address first
+  SCANNING,
+  CONNECTING,
+  DISCOVERING,
+  READY,            // connected + subscribed
+  BACKOFF,          // idle between scan bursts
+};
+
+St s_state = St::IDLE;
+
+BLEClient *s_client = nullptr;
+BLERemoteCharacteristic *s_charReport = nullptr;
+BLERemoteCharacteristic *s_charAtvvCtl = nullptr;
+
+String s_connectedAddr;
+String s_connectedName;
+int s_lastRssi = 0;
+uint32_t s_lastReportMs = 0;
+uint32_t s_notifyCount = 0;
+bool s_subscribed = false;
+
+rc003_tracker_t s_tracker;
+
+// Timing / supervision
+uint32_t s_stateEnteredMs = 0;
+uint32_t s_lastDirectAttemptMs = 0;
+uint32_t s_scanBurstStartMs = 0;
+uint32_t s_idleUntilMs = 0;
+int s_directAttempts = 0;
+int s_connectFailures = 0;
+
+// Statistics
+uint32_t s_scanStarts = 0;
+uint32_t s_connectAttempts = 0;
+uint32_t s_connectSuccesses = 0;
+uint32_t s_subscriptionFailures = 0;
+
+// Task
+TaskHandle_t s_taskHandle = nullptr;
+
+// ---------------------------------------------------------------------------
+// Requests from the console (loop task) to the central task
+// ---------------------------------------------------------------------------
+portMUX_TYPE s_reqMux = portMUX_INITIALIZER_UNLOCKED;
+volatile bool s_reqScanNow = false;
+volatile bool s_reqReconnect = false;
+volatile bool s_reqForget = false;
+volatile bool s_reqConnect = false;
+char s_reqAddr[24] = {0};
+uint8_t s_reqAddrType = BLE_ADDR_PUBLIC;
+char s_reqName[32] = {0};
+
+// ---------------------------------------------------------------------------
+// Pending target discovered by the scanner
+// ---------------------------------------------------------------------------
+portMUX_TYPE s_pendMux = portMUX_INITIALIZER_UNLOCKED;
+volatile bool s_pendValid = false;
+uint8_t s_pendAddr[6] = {0};
+uint8_t s_pendAddrType = BLE_ADDR_PUBLIC;
+char s_pendName[32] = {0};
+int s_pendRssi = 0;
+
+// ---------------------------------------------------------------------------
+// Advertisement cache for the `scan` console command
+// ---------------------------------------------------------------------------
+constexpr size_t kNearbyMax = 16;
+
+struct NearbyEntry {
+  bool used;
+  uint8_t addr[6];
+  uint8_t addrType;
+  char name[24];
+  int rssi;
+  uint32_t lastSeenMs;
+};
+
+NearbyEntry s_nearby[kNearbyMax];
+portMUX_TYPE s_nearbyMux = portMUX_INITIALIZER_UNLOCKED;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+uint32_t nowMs() { return millis(); }
+
+void setState(St next, const char *why) {
+  if (s_state == next) return;
+  s_state = next;
+  s_stateEnteredMs = nowMs();
+  BR_LOGI(kTag, "state -> %s (%s)", rc003_client::stateName(), why ? why : "");
+}
+
+String addrToString(const uint8_t *a) {
+  char buf[18];
+  snprintf(buf, sizeof(buf), "%02x:%02x:%02x:%02x:%02x:%02x", a[0], a[1], a[2], a[3], a[4], a[5]);
+  return String(buf);
+}
+
+bool nameHintsRemote(const String &name) {
+  if (name.length() == 0) return false;
+  if (name.indexOf(RC003_NAME_HINT_1) >= 0) return true;
+  if (name.indexOf(RC003_NAME_HINT_2) >= 0) return true;
+  if (name.indexOf(RC003_NAME_HINT_3) >= 0) return true;
+  if (name.indexOf(RC003_NAME_HINT_4) >= 0) return true;
+  return false;
+}
+
+void rememberNearby(const uint8_t *addr, uint8_t addrType, const String &name, int rssi) {
+  portENTER_CRITICAL(&s_nearbyMux);
+  int freeSlot = -1;
+  int oldest = 0;
+  uint32_t oldestAge = 0;
+  for (size_t i = 0; i < kNearbyMax; i++) {
+    if (s_nearby[i].used && memcmp(s_nearby[i].addr, addr, 6) == 0) {
+      if (name.length() > 0) {
+        strncpy(s_nearby[i].name, name.c_str(), sizeof(s_nearby[i].name) - 1);
+        s_nearby[i].name[sizeof(s_nearby[i].name) - 1] = '\0';
+      }
+      s_nearby[i].addrType = addrType;
+      s_nearby[i].rssi = rssi;
+      s_nearby[i].lastSeenMs = nowMs();
+      portEXIT_CRITICAL(&s_nearbyMux);
+      return;
+    }
+    if (!s_nearby[i].used && freeSlot < 0) {
+      freeSlot = (int)i;
+    }
+    if (s_nearby[i].used) {
+      const uint32_t age = nowMs() - s_nearby[i].lastSeenMs;
+      if (age >= oldestAge) {
+        oldestAge = age;
+        oldest = (int)i;
+      }
+    }
+  }
+  const int slot = (freeSlot >= 0) ? freeSlot : oldest;
+  memset(&s_nearby[slot], 0, sizeof(NearbyEntry));
+  s_nearby[slot].used = true;
+  memcpy(s_nearby[slot].addr, addr, 6);
+  s_nearby[slot].addrType = addrType;
+  s_nearby[slot].rssi = rssi;
+  s_nearby[slot].lastSeenMs = nowMs();
+  if (name.length() > 0) {
+    strncpy(s_nearby[slot].name, name.c_str(), sizeof(s_nearby[slot].name) - 1);
+    s_nearby[slot].name[sizeof(s_nearby[slot].name) - 1] = '\0';
+  }
+  portEXIT_CRITICAL(&s_nearbyMux);
+}
+
+// ---------------------------------------------------------------------------
+// Notification callbacks - NimBLE host task context.
+//
+// Anything that sends HID reports MUST NOT happen here.
+// ---------------------------------------------------------------------------
+void feedEvents(const rc003_key_event_t *raw, size_t rawCount) {
+  rc003_key_event_t norm[3];
+  for (size_t i = 0; i < rawCount; i++) {
+    const size_t n = rc003_tracker_apply(&s_tracker, &raw[i], norm, 3);
+    for (size_t k = 0; k < n; k++) {
+      event_bus::post(BR_EV_RC_KEY, norm[k].raw_code, norm[k].pressed);
+    }
+  }
+}
+
+void onHogpNotify(BLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool isNotify) {
+  (void)isNotify;
+  s_lastReportMs = nowMs();
+  s_notifyCount++;
+
+  char hex[RC003_KEY_REPORT_MAX_LEN * 3 + 1];
+  rc003_hex_dump(data, length, hex, sizeof(hex));
+
+  const rc003_frame_kind_t kind = rc003_classify(data, length);
+  if (kind == RC003_FRAME_AUDIO) {
+    // Not expected: the audio characteristic is never subscribed. Seeing this
+    // means the remote multiplexed audio onto the report characteristic.
+    BR_LOGRAW(kTagScan, "audio-ish payload len=%u dropped", (unsigned)length);
+    return;
+  }
+
+  BR_LOGRAW(kTagScan, "report len=%u [%s] from %s", (unsigned)length, hex,
+            characteristic ? characteristic->getUUID().toString().c_str() : "?");
+
+  rc003_key_event_t raw[2];
+  const size_t n = rc003_parse_hid_report(data, length, raw, 2);
+  if (n == 0) {
+    BR_LOGI(kTagScan, "raw len=%u [%s] -> no key", (unsigned)length, hex);
+    return;
+  }
+
+  BR_LOGRAW(kTagScan, "parsed raw=0x%02X (%s) %s", raw[0].raw_code, keymap_raw_name(raw[0].raw_code),
+            raw[0].pressed ? "DOWN" : "UP");
+
+  feedEvents(raw, n);
+}
+
+void onAtvvCtlNotify(BLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool isNotify) {
+  (void)characteristic;
+  (void)isNotify;
+  s_lastReportMs = nowMs();
+
+  rc003_key_event_t raw[1];
+  const size_t n = rc003_parse_atvv_ctl(data, length, raw, 1);
+  if (n == 0) return;
+
+  BR_LOGRAW(kTagScan, "atvv ctl op=0x%02X -> VOICE %s", (unsigned)data[0], raw[0].pressed ? "DOWN" : "UP");
+  feedEvents(raw, n);
+}
+
+// ---------------------------------------------------------------------------
+// Client callbacks - NimBLE host task context. Post events only.
+// ---------------------------------------------------------------------------
+class ClientCallbacks : public BLEClientCallbacks {
+ public:
+  void onConnect(BLEClient *pClient) override {
+    (void)pClient;
+    BR_LOGI(kTag, "gatt link established");
+    event_bus::post(BR_EV_RC_LINK_UP);
+  }
+
+  void onDisconnect(BLEClient *pClient) override {
+    (void)pClient;
+    BR_LOGW(kTag, "gatt link lost");
+    s_charReport = nullptr;
+    s_charAtvvCtl = nullptr;
+    s_subscribed = false;
+    rc003_tracker_reset(&s_tracker);
+    event_bus::post(BR_EV_RC_LINK_DOWN);
+  }
+
+#if defined(CONFIG_NIMBLE_ENABLED)
+  bool onConnParamsUpdateRequest(BLEClient *pClient, const ble_gap_upd_params *params) override {
+    (void)pClient;
+    (void)params;
+    return true;  // accept whatever the remote asks for
+  }
+#endif
+};
+
+class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
+ public:
+  void onResult(BLEAdvertisedDevice dev) override {
+    const String name = dev.getName();
+    const uint8_t *addr = dev.getAddress().getNative();
+    const uint8_t addrType = dev.getAddressType();
+    const int rssi = dev.getRSSI();
+
+    rememberNearby(addr, addrType, name, rssi);
+
+    if (name.length() > 0) {
+      BR_LOGD(kTagScan, "%s %s rssi=%d type=%u", name.c_str(), dev.getAddress().toString().c_str(), rssi,
+              (unsigned)addrType);
+    }
+
+    // Already have a candidate queued for connection.
+    portENTER_CRITICAL(&s_pendMux);
+    const bool alreadyPending = s_pendValid;
+    portEXIT_CRITICAL(&s_pendMux);
+    if (alreadyPending) return;
+
+    bool match = false;
+
+    if (settings::hasRc003()) {
+      // Bound: strict matching. The identity address is stable when the remote
+      // uses a public address; when it rotates its resolvable private address
+      // the stored name is the fallback.
+      const String bound = settings::rc003Address();
+      char buf[18];
+      snprintf(buf, sizeof(buf), "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+      if (bound.equalsIgnoreCase(buf)) {
+        match = true;
+      } else {
+        const String boundName = settings::rc003Name();
+        if (boundName.length() > 0 && name.length() > 0 && boundName.equalsIgnoreCase(name)) {
+          BR_LOGI(kTagScan, "bound remote re-advertised with a new address (%s)", buf);
+          match = true;
+        }
+      }
+    } else {
+      // Unbound: only accept an obvious remote. A bare 0x1812 HID service is
+      // deliberately NOT enough - that would latch onto keyboards and mice.
+      if (nameHintsRemote(name)) {
+        match = true;
+      } else if (dev.haveServiceUUID() && dev.isAdvertisingService(BLEUUID(RC003_ATVV_SVC_UUID))) {
+        match = true;
+      }
+    }
+
+    if (!match) return;
+
+    BR_LOGI(kTagScan, "target found: \"%s\" %s rssi=%d type=%u", name.c_str(),
+            dev.getAddress().toString().c_str(), rssi, (unsigned)addrType);
+
+    portENTER_CRITICAL(&s_pendMux);
+    memcpy(s_pendAddr, addr, 6);
+    s_pendAddrType = addrType;
+    s_pendRssi = rssi;
+    strncpy(s_pendName, name.c_str(), sizeof(s_pendName) - 1);
+    s_pendName[sizeof(s_pendName) - 1] = '\0';
+    s_pendValid = true;
+    portEXIT_CRITICAL(&s_pendMux);
+
+    // Stop the scan so the central task wakes up promptly. BLEScan::stop()
+    // releases the task blocked in start().
+    BLEDevice::getScan()->stop();
+  }
+};
+
+ClientCallbacks s_clientCallbacks;
+ScanCallbacks s_scanCallbacks;
+
+// ---------------------------------------------------------------------------
+// Connection / discovery
+// ---------------------------------------------------------------------------
+int startSecurity(uint16_t connHandle) {
+  const int rc = ble_gap_security_initiate(connHandle);
+  if (rc != 0 && rc != BLE_HS_EALREADY) {
+    BR_LOGW(kTagSec, "ble_gap_security_initiate rc=%d", rc);
+    return rc;
+  }
+  return 0;
+}
+
+bool waitForSecurity(uint16_t connHandle, uint32_t timeoutMs) {
+  const uint32_t deadline = nowMs() + timeoutMs;
+  while (nowMs() < deadline) {
+    ble_gap_conn_desc desc;
+    if (ble_gap_conn_find(connHandle, &desc) != 0) return false;
+    if (desc.sec_state.encrypted) {
+      BR_LOGI(kTagSec, "link encrypted (bonded=%d, authenticated=%d)", (int)desc.sec_state.bonded,
+              (int)desc.sec_state.authenticated);
+      return true;
+    }
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
+  BR_LOGW(kTagSec, "link not encrypted after %ums - continuing anyway", (unsigned)timeoutMs);
+  return false;
+}
+
+// Subscribe to every notification source we care about and (re)apply the HID
+// settings the remote expects. Called after every connect, so a reconnected
+// remote is always re-armed (requirement 12).
+bool discoverAndSubscribe() {
+  if (!s_client || !s_client->isConnected()) return false;
+
+  const uint16_t connId = s_client->getConnId();
+
+  // The remote's HID service is unusable until the link is encrypted, and the
+  // bond is what makes the next reconnect instant.
+  startSecurity(connId);
+  waitForSecurity(connId, 3000);
+
+  std::map<std::string, BLERemoteService *> *services = s_client->getServices();
+  if (!services || services->empty()) {
+    BR_LOGE(kTagGatt, "service discovery returned nothing");
+    return false;
+  }
+  BR_LOGI(kTagGatt, "discovered %u service(s)", (unsigned)services->size());
+
+  int subscribed = 0;
+
+  for (auto &kv : *services) {
+    BLERemoteService *svc = kv.second;
+    if (!svc) continue;
+
+    const String svcUuid = svc->getUUID().toString();
+    BR_LOGI(kTagGatt, "service %s", svcUuid.c_str());
+
+    std::map<std::string, BLERemoteCharacteristic *> *chars = svc->getCharacteristics();
+    if (!chars) continue;
+
+    const bool isHidService = svcUuid.indexOf("1812") >= 0;
+    const bool isAtvvService = svcUuid.indexOf("ab5e0001") >= 0;
+
+    for (auto &kc : *chars) {
+      BLERemoteCharacteristic *ch = kc.second;
+      if (!ch) continue;
+
+      const String uuid = ch->getUUID().toString();
+      BR_LOGD(kTagGatt, "  char %s n=%d i=%d w=%d", uuid.c_str(), ch->canNotify() ? 1 : 0,
+              ch->canIndicate() ? 1 : 0, (ch->canWrite() || ch->canWriteNoResponse()) ? 1 : 0);
+
+      // ---- HOGP report characteristic (0x2A4D) -------------------------
+      if (isHidService && uuid.indexOf(RC003_HID_REPORT_UUID) >= 0) {
+        if (ch->canNotify() || ch->canIndicate()) {
+          if (ch->subscribe(/*notifications=*/true, onHogpNotify, /*response=*/false)) {
+            s_charReport = ch;
+            subscribed++;
+            BR_LOGI(kTagGatt, "subscribed to HID report %s", uuid.c_str());
+          } else {
+            s_subscriptionFailures++;
+            BR_LOGE(kTagGatt, "subscribe failed on HID report %s", uuid.c_str());
+          }
+        }
+        continue;
+      }
+
+      // ---- HOGP protocol mode (0x2A4E): force Report Protocol ----------
+      if (isHidService && uuid.indexOf(RC003_PROTOCOL_MODE_UUID) >= 0) {
+        if (ch->canWrite() || ch->canWriteNoResponse()) {
+          uint8_t reportMode = 0x01;
+          if (ch->writeValue(&reportMode, 1, false)) {
+            BR_LOGI(kTagGatt, "protocol mode set to Report (0x01)");
+          }
+        }
+        continue;
+      }
+
+      // ---- HOGP control point (0x2A4C): exit suspend --------------------
+      if (isHidService && uuid.indexOf(RC003_HID_CTRL_POINT_UUID) >= 0) {
+        if (ch->canWrite() || ch->canWriteNoResponse()) {
+          uint8_t exitSuspend = 0x00;
+          ch->writeValue(&exitSuspend, 1, false);
+          BR_LOGD(kTagGatt, "hid control point: exit suspend");
+        }
+        continue;
+      }
+
+      // ---- ATVV control channel: voice button only ---------------------
+      if (BRIDGE_ATVV_CTL_ENABLE && isAtvvService && uuid.indexOf("ab5e0004") >= 0) {
+        if (ch->canNotify() || ch->canIndicate()) {
+          if (ch->subscribe(/*notifications=*/true, onAtvvCtlNotify, /*response=*/false)) {
+            s_charAtvvCtl = ch;
+            subscribed++;
+            BR_LOGI(kTagGatt, "subscribed to ATVV control (voice button only, no audio)");
+          } else {
+            s_subscriptionFailures++;
+            BR_LOGW(kTagGatt, "subscribe failed on ATVV control");
+          }
+        }
+        continue;
+      }
+
+      // The ATVV audio characteristic (ab5e0003) is intentionally NOT
+      // subscribed: this firmware never touches the microphone path.
+    }
+  }
+
+  if (subscribed == 0) {
+    BR_LOGE(kTagGatt, "no notification source found - is this an RC003?");
+    return false;
+  }
+
+  s_client->updateConnParams(12, 12, 0, 400);
+  s_subscribed = true;
+  s_notifyCount = 0;
+  BR_LOGI(kTagGatt, "ready: %d subscription(s), notifications live", subscribed);
+  return true;
+}
+
+bool ensureClient() {
+  if (s_client) return true;
+  s_client = BLEDevice::createClient();
+  if (!s_client) return false;
+  s_client->setClientCallbacks(&s_clientCallbacks);
+  return true;
+}
+
+bool connectToAddress(const uint8_t *addr, uint8_t addrType) {
+  if (!ensureClient()) return false;
+
+  if (s_client->isConnected()) {
+    s_client->disconnect();
+    vTaskDelay(pdMS_TO_TICKS(60));
+  }
+
+  s_connectAttempts++;
+
+  BLEAddress target(addrToString(addr), addrType);
+  BR_LOGI(kTag, "connecting to %s (type %u)...", target.toString().c_str(), (unsigned)addrType);
+
+  bool ok = s_client->connect(target, addrType, BRIDGE_DIRECT_CONNECT_MS);
+
+  if (!ok) {
+    // The remote may be using the opposite address type from what we stored.
+    const uint8_t alt = (addrType == BLE_ADDR_PUBLIC) ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC;
+    BR_LOGW(kTag, "first attempt failed, retrying as type %u", (unsigned)alt);
+    BLEAddress alt1(addrToString(addr), alt);
+    ok = s_client->connect(alt1, alt, BRIDGE_DIRECT_CONNECT_MS);
+    if (ok) {
+      addrType = alt;
+    }
+  }
+
+  if (!ok) {
+    BR_LOGW(kTag, "connect to %s failed", addrToString(addr).c_str());
+    s_connectFailures++;
+    return false;
+  }
+
+  s_connectSuccesses++;
+  s_connectedAddr = addrToString(addr);
+  s_lastRssi = s_client->getRssi();
+  s_connectedName = settings::hasRc003() ? settings::rc003Name() : String("Xiaomi BT Remote");
+
+  // Persist what we successfully connected to. Saving the address we were
+  // actually able to reach is what makes the next reconnect a direct one.
+  if (!settings::hasRc003() || !settings::rc003Address().equalsIgnoreCase(s_connectedAddr) ||
+      settings::rc003AddrType() != addrType) {
+    settings::setRc003(s_connectedAddr, addrType, s_connectedName);
+  }
+
+  return true;
+}
+
+void configureScan() {
+  BLEScan *scan = BLEDevice::getScan();
+  scan->setActiveScan(true);
+  scan->setInterval(BRIDGE_SCAN_INTERVAL_MS);
+  scan->setWindow(BRIDGE_SCAN_WINDOW_MS);
+  scan->setAdvertisedDeviceCallbacks(&s_scanCallbacks, /*wantDuplicates=*/false, /*shouldParse=*/true);
+
+  if (settings::hasRc003()) {
+    BR_LOGI(kTag, "scanning for bound remote %s (\"%s\")", settings::rc003Address().c_str(),
+            settings::rc003Name().c_str());
+  } else {
+    BR_LOGI(kTag, "scanning for a Xiaomi remote (no bound remote yet)");
+  }
+}
+
+// Run one scan chunk. Blocks for up to `seconds`, returns early on a match.
+void runScanChunk(uint32_t seconds) {
+  BLEScan *scan = BLEDevice::getScan();
+  scan->start(seconds, /*is_continue=*/false);
+  scan->clearResults();  // we use the callback, never the result set
+
+  portENTER_CRITICAL(&s_pendMux);
+  const bool found = s_pendValid;
+  portEXIT_CRITICAL(&s_pendMux);
+
+  if (found) {
+    setState(St::CONNECTING, "scan matched");
+  }
+}
+
+bool takePending(uint8_t *addrOut, uint8_t *typeOut, char *nameOut, size_t nameLen, int *rssiOut) {
+  portENTER_CRITICAL(&s_pendMux);
+  if (!s_pendValid) {
+    portEXIT_CRITICAL(&s_pendMux);
+    return false;
+  }
+  memcpy(addrOut, s_pendAddr, 6);
+  *typeOut = s_pendAddrType;
+  *rssiOut = s_pendRssi;
+  if (nameOut && nameLen) {
+    strncpy(nameOut, s_pendName, nameLen - 1);
+    nameOut[nameLen - 1] = '\0';
+  }
+  s_pendValid = false;
+  portEXIT_CRITICAL(&s_pendMux);
+  return true;
+}
+
+void clearPending() {
+  portENTER_CRITICAL(&s_pendMux);
+  s_pendValid = false;
+  portEXIT_CRITICAL(&s_pendMux);
+}
+
+// ---------------------------------------------------------------------------
+// Request handling
+// ---------------------------------------------------------------------------
+void handleRequests() {
+  bool doForget = false;
+  bool doScan = false;
+  bool doReconnect = false;
+  bool doConnect = false;
+  char addr[24] = {0};
+  uint8_t type = BLE_ADDR_PUBLIC;
+  char name[32] = {0};
+
+  portENTER_CRITICAL(&s_reqMux);
+  if (s_reqForget) {
+    s_reqForget = false;
+    doForget = true;
+  }
+  if (s_reqScanNow) {
+    s_reqScanNow = false;
+    doScan = true;
+  }
+  if (s_reqReconnect) {
+    s_reqReconnect = false;
+    doReconnect = true;
+  }
+  if (s_reqConnect) {
+    s_reqConnect = false;
+    doConnect = true;
+    strncpy(addr, s_reqAddr, sizeof(addr) - 1);
+    type = s_reqAddrType;
+    strncpy(name, s_reqName, sizeof(name) - 1);
+  }
+  portEXIT_CRITICAL(&s_reqMux);
+
+  if (doForget) {
+    BR_LOGI(kTag, "forget requested: dropping bond and saved address");
+    if (s_client && s_client->isConnected()) {
+      s_client->disconnect();
+      vTaskDelay(pdMS_TO_TICKS(80));
+    }
+    if (settings::hasRc003()) {
+      BLEAddress bound(settings::rc003Address(), settings::rc003AddrType());
+      ble_bonds::removePeer(bound);
+    }
+    settings::clearRc003();
+    s_directAttempts = 0;
+    s_connectFailures = 0;
+    clearPending();
+    setState(St::SCANNING, "forget");
+  }
+
+  if (doConnect) {
+    BR_LOGI(kTag, "console requested connect to %s (type %u)", addr, (unsigned)type);
+    if (s_client && s_client->isConnected()) {
+      s_client->disconnect();
+      vTaskDelay(pdMS_TO_TICKS(80));
+    }
+    uint8_t raw[6];
+    if (sscanf(addr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &raw[0], &raw[1], &raw[2], &raw[3], &raw[4], &raw[5]) == 6) {
+      memcpy(s_nearby[0].addr, raw, 6);  // not used, kept for clarity
+      s_directAttempts = 0;
+      setState(St::CONNECTING, "console connect");
+      // Reuse the same path as a discovered device.
+      portENTER_CRITICAL(&s_pendMux);
+      memcpy(s_pendAddr, raw, 6);
+      s_pendAddrType = type;
+      s_pendRssi = 0;
+      strncpy(s_pendName, name, sizeof(s_pendName) - 1);
+      s_pendName[sizeof(s_pendName) - 1] = '\0';
+      s_pendValid = true;
+      portEXIT_CRITICAL(&s_pendMux);
+    } else {
+      BR_LOGE(kTag, "bad address \"%s\"", addr);
+    }
+  }
+
+  if (doReconnect) {
+    BR_LOGI(kTag, "console requested reconnect");
+    if (s_client && s_client->isConnected()) {
+      s_client->disconnect();
+      vTaskDelay(pdMS_TO_TICKS(80));
+    }
+    clearPending();
+    s_directAttempts = 0;
+    setState(settings::hasRc003() ? St::DIRECT_CONNECT : St::SCANNING, "manual reconnect");
+  }
+
+  if (doScan) {
+    BR_LOGI(kTag, "console requested a fresh scan");
+    s_directAttempts = 0;
+    clearPending();
+    setState(St::SCANNING, "manual scan");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Central task
+// ---------------------------------------------------------------------------
+void taskLoop() {
+  handleRequests();
+
+  switch (s_state) {
+    case St::IDLE:
+      setState(settings::hasRc003() ? St::DIRECT_CONNECT : St::SCANNING, "boot");
+      break;
+
+    case St::DIRECT_CONNECT: {
+      if (!settings::hasRc003()) {
+        setState(St::SCANNING, "no bound address");
+        break;
+      }
+      // Give the remote a moment after boot; it frequently needs a key press to
+      // wake before it will answer a page.
+      if (s_directAttempts > 0 && (nowMs() - s_lastDirectAttemptMs) < 1500) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        break;
+      }
+
+      uint8_t raw[6];
+      const String bound = settings::rc003Address();
+      if (sscanf(bound.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &raw[0], &raw[1], &raw[2], &raw[3], &raw[4], &raw[5]) !=
+          6) {
+        BR_LOGE(kTag, "stored address \"%s\" is malformed, scanning instead", bound.c_str());
+        settings::clearRc003();
+        setState(St::SCANNING, "bad stored address");
+        break;
+      }
+
+      s_lastDirectAttemptMs = nowMs();
+      setState(St::CONNECTING, "direct connect to bound address");
+
+      if (connectToAddress(raw, settings::rc003AddrType())) {
+        setState(St::DISCOVERING, "connected");
+      } else {
+        s_directAttempts++;
+        if (s_directAttempts >= 2) {
+          BR_LOGI(kTag, "direct connect unsuccessful, falling back to scanning");
+          s_directAttempts = 0;
+          setState(St::SCANNING, "direct connect gave up");
+        } else {
+          setState(St::DIRECT_CONNECT, "retry direct connect");
+        }
+      }
+      break;
+    }
+
+    case St::SCANNING: {
+      if (s_scanBurstStartMs == 0) {
+        s_scanBurstStartMs = nowMs();
+        s_scanStarts++;
+        configureScan();
+      }
+      // Duty cycle the radio so the concurrently connected Windows link keeps
+      // enough air time.
+      if ((nowMs() - s_scanBurstStartMs) > BRIDGE_SCAN_BURST_MS) {
+        BLEDevice::getScan()->stop();
+        s_scanBurstStartMs = 0;
+        s_idleUntilMs = nowMs() + BRIDGE_SCAN_IDLE_MS;
+        setState(St::BACKOFF, "scan burst finished");
+        break;
+      }
+
+      runScanChunk(3);
+      break;
+    }
+
+    case St::BACKOFF:
+      if (nowMs() >= s_idleUntilMs) {
+        s_scanBurstStartMs = 0;
+        setState(St::SCANNING, "backoff over");
+      } else {
+        vTaskDelay(pdMS_TO_TICKS(100));
+      }
+      break;
+
+    case St::CONNECTING: {
+      uint8_t addr[6];
+      uint8_t type = BLE_ADDR_PUBLIC;
+      char name[32] = {0};
+      int rssi = 0;
+      if (!takePending(addr, &type, name, sizeof(name), &rssi)) {
+        setState(St::SCANNING, "nothing to connect to");
+        break;
+      }
+      s_lastRssi = rssi;
+      if (connectToAddress(addr, type)) {
+        if (name[0] != '\0') s_connectedName = name;
+        setState(St::DISCOVERING, "connected");
+      } else {
+        s_connectFailures++;
+        setState(St::SCANNING, "connect failed");
+      }
+      break;
+    }
+
+    case St::DISCOVERING:
+      if (discoverAndSubscribe()) {
+        setState(St::READY, "subscribed");
+        event_bus::post(BR_EV_RC_READY);
+      } else {
+        event_bus::post(BR_EV_RC_BOND_FAIL);
+        BR_LOGE(kTag, "service discovery/subscription failed, disconnecting");
+        if (s_client && s_client->isConnected()) s_client->disconnect();
+        vTaskDelay(pdMS_TO_TICKS(200));
+        setState(St::SCANNING, "discovery failed");
+      }
+      break;
+
+    case St::READY: {
+      if (!s_client || !s_client->isConnected()) {
+        // The disconnect callback already reset the tracker and posted the
+        // BR_EV_RC_LINK_DOWN event.
+        setState(St::SCANNING, "link gone");
+        break;
+      }
+      // Keep the link parameters favourable for latency without hammering the
+      // remote with requests.
+      static uint32_t s_lastParamUpdate = 0;
+      if ((nowMs() - s_lastParamUpdate) > 30000) {
+        s_lastParamUpdate = nowMs();
+        s_client->updateConnParams(12, 12, 0, 400);
+        s_lastRssi = s_client->getRssi();
+      }
+      vTaskDelay(pdMS_TO_TICKS(200));
+      break;
+    }
+  }
+}
+
+void taskEntry(void *arg) {
+  (void)arg;
+  BR_LOGI(kTag, "central task started");
+  for (;;) {
+    taskLoop();
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+}
+
+}  // namespace
+
+namespace rc003_client {
+
+bool begin() {
+  if (s_taskHandle) return true;
+
+  rc003_tracker_reset(&s_tracker);
+  memset(s_nearby, 0, sizeof(s_nearby));
+
+  // The scan callbacks object must outlive the scan, and the client object is
+  // created lazily in the task.
+  BLEDevice::getScan()->setAdvertisedDeviceCallbacks(&s_scanCallbacks, false, true);
+
+  const BaseType_t rc = xTaskCreateUniversal(taskEntry, "rc003", 6144, nullptr, 4, &s_taskHandle,
+                                             ARDUINO_RUNNING_CORE);
+  if (rc != pdPASS) {
+    BR_LOGE(kTag, "failed to start central task");
+    s_taskHandle = nullptr;
+    return false;
+  }
+
+  if (settings::hasRc003()) {
+    BR_LOGI(kTag, "bound remote: %s (\"%s\")", settings::rc003Address().c_str(), settings::rc003Name().c_str());
+  } else {
+    BR_LOGI(kTag, "no bound remote yet - will scan and pair with the first Xiaomi remote it sees");
+  }
+  return true;
+}
+
+void requestScanNow() {
+  portENTER_CRITICAL(&s_reqMux);
+  s_reqScanNow = true;
+  portEXIT_CRITICAL(&s_reqMux);
+}
+
+void requestReconnect() {
+  portENTER_CRITICAL(&s_reqMux);
+  s_reqReconnect = true;
+  portEXIT_CRITICAL(&s_reqMux);
+}
+
+void requestForget() {
+  portENTER_CRITICAL(&s_reqMux);
+  s_reqForget = true;
+  portEXIT_CRITICAL(&s_reqMux);
+}
+
+bool requestConnect(const String &address, uint8_t addrType, const String &name) {
+  if (address.length() == 0 || address.length() >= sizeof(s_reqAddr)) return false;
+  portENTER_CRITICAL(&s_reqMux);
+  strncpy(s_reqAddr, address.c_str(), sizeof(s_reqAddr) - 1);
+  s_reqAddr[sizeof(s_reqAddr) - 1] = '\0';
+  s_reqAddrType = addrType;
+  strncpy(s_reqName, name.c_str(), sizeof(s_reqName) - 1);
+  s_reqName[sizeof(s_reqName) - 1] = '\0';
+  s_reqConnect = true;
+  portEXIT_CRITICAL(&s_reqMux);
+  return true;
+}
+
+const char *stateName() {
+  switch (s_state) {
+    case St::IDLE:           return "IDLE";
+    case St::DIRECT_CONNECT: return "DIRECT";
+    case St::SCANNING:       return "SCANNING";
+    case St::CONNECTING:     return "CONNECTING";
+    case St::DISCOVERING:    return "DISCOVERING";
+    case St::READY:          return "READY";
+    case St::BACKOFF:        return "BACKOFF";
+    default:                 return "?";
+  }
+}
+
+bool connected() { return s_state == St::READY; }
+bool notified() { return s_subscribed; }
+
+String boundAddress() { return settings::hasRc003() ? settings::rc003Address() : String("(none)"); }
+String connectedAddress() { return s_connectedAddr.length() ? s_connectedAddr : String("(none)"); }
+String connectedName() { return s_connectedName.length() ? s_connectedName : String("(none)"); }
+int lastRssi() { return s_lastRssi; }
+
+int lastReportAgeMs() {
+  if (s_lastReportMs == 0) return -1;
+  return (int)(nowMs() - s_lastReportMs);
+}
+
+uint32_t notifyCount() { return s_notifyCount; }
+
+size_t nearbyCount() {
+  size_t n = 0;
+  portENTER_CRITICAL(&s_nearbyMux);
+  for (size_t i = 0; i < kNearbyMax; i++) {
+    if (s_nearby[i].used) n++;
+  }
+  portEXIT_CRITICAL(&s_nearbyMux);
+  return n;
+}
+
+bool nearbyAt(size_t index, String *address, uint8_t *addrType, String *name, int *rssi) {
+  bool ok = false;
+  size_t seen = 0;
+  portENTER_CRITICAL(&s_nearbyMux);
+  for (size_t i = 0; i < kNearbyMax; i++) {
+    if (!s_nearby[i].used) continue;
+    if (seen != index) {
+      seen++;
+      continue;
+    }
+    if (address) *address = addrToString(s_nearby[i].addr);
+    if (addrType) *addrType = s_nearby[i].addrType;
+    if (name) *name = String(s_nearby[i].name);
+    if (rssi) *rssi = s_nearby[i].rssi;
+    ok = true;
+    break;
+  }
+  portEXIT_CRITICAL(&s_nearbyMux);
+  return ok;
+}
+
+uint32_t scanStarts() { return s_scanStarts; }
+uint32_t connectAttempts() { return s_connectAttempts; }
+uint32_t connectSuccesses() { return s_connectSuccesses; }
+uint32_t subscriptionFailures() { return s_subscriptionFailures; }
+
+}  // namespace rc003_client
