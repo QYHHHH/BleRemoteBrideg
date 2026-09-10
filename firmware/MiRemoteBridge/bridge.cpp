@@ -316,6 +316,12 @@ void printStatus() {
           (unsigned long)event_bus::dropped());
   BR_LOGI(kTag, "keymap modes    : back=%s power=%s voice=%s", keymap_back_mode_name(keymap_get_back_mode()),
           keymap_power_mode_name(keymap_get_power_mode()), keymap_voice_mode_name(keymap_get_voice_mode()));
+  // Runtime heap, not just the static allocation the compiler reports. min is
+  // the watermark since boot - if that number trends down over days, something
+  // leaks; max block catches fragmentation before malloc ever fails.
+  BR_LOGI(kTag, "heap free/total : %lu / %lu B (min %lu, largest block %lu)",
+          (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getHeapSize(),
+          (unsigned long)ESP.getMinFreeHeap(), (unsigned long)ESP.getMaxAllocHeap());
   BR_LOGI(kTag, "--------------------------------------");
 }
 
