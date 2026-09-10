@@ -208,6 +208,8 @@ bool begin() {
   hid_gatt::setReportMap(kHidReportMap, HID_REPORT_MAP_LEN);
   hid_gatt::setManufacturer("MiRemoteBridge");
   hid_gatt::setPnpId(0x02 /* USB-IF */, 0x02E5 /* Espressif */, 0x0001, 0x0110);
+  // Placeholder only. The real value arrives once the RC003 has reported its
+  // own charge (BR_EV_RC_BATTERY); until then the host sees this.
   hid_gatt::setBatteryLevel(BRIDGE_BATTERY_LEVEL);
 
   // Registers the HID, Device Information and Battery services. Must happen
@@ -372,6 +374,8 @@ int forgetHostBonds() {
   if (removed == 0) BR_LOGW(kTagHost, "no host bond to forget");
   return removed;
 }
+
+void setBatteryLevel(uint8_t percent) { hid_gatt::setBatteryLevel(percent); }
 
 const char *deviceName() { return s_deviceName.c_str(); }
 

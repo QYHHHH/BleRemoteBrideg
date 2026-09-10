@@ -24,8 +24,18 @@
 // changing it after pairing requires re-pairing on the Windows side.
 #define BRIDGE_HID_DEVICE_NAME  "Mi Remote Bridge"
 
-// Battery level reported over the BLE battery service (cosmetic only).
+// Battery level served over our own BLE battery service (0x180F/0x2A19).
+//
+// This is only the value used *before* the remote has reported one. The RC003
+// exposes the standard battery service, so the real number is read from it and
+// forwarded to the host - see BRIDGE_BATTERY_PASSTHROUGH. Reporting a constant
+// 100% would tell Windows the remote is always full, which is worse than saying
+// nothing.
 #define BRIDGE_BATTERY_LEVEL    100
+
+// Forward the RC003's battery level to the host instead of the constant above.
+// Set to 0 to always report BRIDGE_BATTERY_LEVEL.
+#define BRIDGE_BATTERY_PASSTHROUGH 1
 
 // ---------------------------------------------------------------------------
 // Upstream (central) role: Xiaomi Bluetooth Remote 2 Pro (RC003)
@@ -43,6 +53,11 @@
 #define RC003_HID_REPORT_UUID   "2a4d"
 #define RC003_PROTOCOL_MODE_UUID "2a4e"
 #define RC003_HID_CTRL_POINT_UUID "2a4c"
+
+// Standard battery service. The remote exposes it, so its charge can be read
+// there and re-published by our own battery service.
+#define RC003_BATTERY_SVC_UUID  "180f"
+#define RC003_BATTERY_LEVEL_UUID "2a19"
 
 #define RC003_ATVV_SVC_UUID     "ab5e0001-5a21-4f05-bc7d-af01f617b664"
 #define RC003_ATVV_CHAR_CMD_UUID "ab5e0002-5a21-4f05-bc7d-af01f617b664"

@@ -47,6 +47,8 @@ bool begin();
 void setReportMap(const uint8_t *map, size_t len);
 void setManufacturer(const char *name);
 void setPnpId(uint8_t vendorIdSource, uint16_t vendorId, uint16_t productId, uint16_t productVersion);
+// Publish the remote's charge as our own. Values above 100 are clamped. Notifies
+// subscribed hosts on change; the read callback always serves the current value.
 void setBatteryLevel(uint8_t level);
 
 // ---------------------------------------------------------------------------

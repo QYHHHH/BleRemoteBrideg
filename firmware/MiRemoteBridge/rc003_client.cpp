@@ -82,6 +82,7 @@ St s_state = St::IDLE;
 BLEClient *s_client = nullptr;
 BLERemoteCharacteristic *s_charReport = nullptr;
 BLERemoteCharacteristic *s_charAtvvCtl = nullptr;
+BLERemoteCharacteristic *s_charBattery = nullptr;
 
 String s_connectedAddr;
 String s_connectedName;
@@ -89,6 +90,12 @@ int s_lastRssi = 0;
 uint32_t s_lastReportMs = 0;
 uint32_t s_notifyCount = 0;
 bool s_subscribed = false;
+
+// Charge last reported by the remote. Stays invalid until a read or a
+// notification succeeds, which is what distinguishes "not known yet" from a
+// genuine 0%.
+uint8_t s_remoteBattery = 0;
+bool s_remoteBatteryValid = false;
 
 rc003_tracker_t s_tracker;
 
@@ -295,6 +302,33 @@ void onAtvvCtlNotify(BLERemoteCharacteristic *characteristic, uint8_t *data, siz
   feedEvents(raw, n);
 }
 
+// Battery level from the remote's own 0x180F/0x2A19, forwarded to our battery
+// service so the host shows the remote's charge rather than a constant.
+//
+// Callback context: parse and post only, exactly like the key path.
+void onBatteryNotify(BLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool isNotify) {
+  (void)characteristic;
+  (void)isNotify;
+  if (length < 1) return;
+
+  const uint8_t level = data[0];
+  if (level > 100) {
+    // Not a percentage. Some devices put a status byte first; rather than guess
+    // at the layout, ignore it and say so - a wrong battery reading is worse
+    // than none.
+    BR_LOGW(kTagGatt, "battery value 0x%02X is not a percentage, ignored", (unsigned)level);
+    return;
+  }
+  // Unchanged: the remote pushes the current level right after subscribing, and
+  // some keep re-announcing it. Dropping repeats keeps the console readable -
+  // the value is already published from the initial read.
+  if (s_remoteBatteryValid && s_remoteBattery == level) return;
+
+  s_remoteBattery = level;
+  s_remoteBatteryValid = true;
+  event_bus::post(BR_EV_RC_BATTERY, level, false);
+}
+
 // ---------------------------------------------------------------------------
 // Client callbacks - NimBLE host task context. Post events only.
 // ---------------------------------------------------------------------------
@@ -311,8 +345,12 @@ class ClientCallbacks : public BLEClientCallbacks {
     BR_LOGW(kTag, "gatt link lost");
     s_charReport = nullptr;
     s_charAtvvCtl = nullptr;
+    s_charBattery = nullptr;
     s_subscribed = false;
     rc003_tracker_reset(&s_tracker);
+    // The charge is no longer known. It is deliberately not cleared to a
+    // default: the host keeps showing the last real value instead of jumping to
+    // a fabricated one, and it is re-read on the next reconnect.
     event_bus::post(BR_EV_RC_LINK_DOWN);
   }
 
@@ -466,6 +504,7 @@ bool discoverAndSubscribe() {
 
     const bool isHidService = svcUuid.indexOf("1812") >= 0;
     const bool isAtvvService = svcUuid.indexOf("ab5e0001") >= 0;
+    const bool isBatteryService = svcUuid.indexOf(RC003_BATTERY_SVC_UUID) >= 0;
 
     for (auto &kc : *chars) {
       BLERemoteCharacteristic *ch = kc.second;
@@ -521,6 +560,35 @@ bool discoverAndSubscribe() {
           } else {
             s_subscriptionFailures++;
             BR_LOGW(kTagGatt, "subscribe failed on ATVV control");
+          }
+        }
+        continue;
+      }
+
+      // ---- Battery level (0x2A19): pass the remote's charge through ------
+      //
+      // Read once so the host has a number straight away, and subscribe if the
+      // remote offers notifications. Discovery already runs in this task, so a
+      // blocking read is fine here - unlike in a BLE callback.
+      if (BRIDGE_BATTERY_PASSTHROUGH && isBatteryService &&
+          uuid.indexOf(RC003_BATTERY_LEVEL_UUID) >= 0) {
+        if (ch->canRead()) {
+          const String v = ch->readValue();
+          if (v.length() >= 1 && (uint8_t)v[0] <= 100) {
+            s_remoteBattery = (uint8_t)v[0];
+            s_remoteBatteryValid = true;
+            BR_LOGI(kTagGatt, "remote battery level: %u%%", (unsigned)s_remoteBattery);
+            event_bus::post(BR_EV_RC_BATTERY, s_remoteBattery, false);
+          } else {
+            BR_LOGW(kTagGatt, "remote battery read: %u byte(s), unusable", (unsigned)v.length());
+          }
+        }
+        if (ch->canNotify() || ch->canIndicate()) {
+          if (ch->subscribe(/*notifications=*/true, onBatteryNotify, /*response=*/false)) {
+            s_charBattery = ch;
+            BR_LOGI(kTagGatt, "subscribed to remote battery level");
+          } else {
+            BR_LOGW(kTagGatt, "subscribe failed on remote battery level");
           }
         }
         continue;
@@ -971,6 +1039,8 @@ int lastReportAgeMs() {
 }
 
 uint32_t notifyCount() { return s_notifyCount; }
+
+int batteryLevel() { return s_remoteBatteryValid ? (int)s_remoteBattery : -1; }
 
 bool isNearby(const String &address) {
   bool found = false;

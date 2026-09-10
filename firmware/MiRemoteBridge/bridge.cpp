@@ -178,6 +178,13 @@ void handleEvent(const bridge_event_t &ev) {
       bridge::releaseAllKeys();
       break;
 
+    case BR_EV_RC_BATTERY:
+      // The remote reports its own charge; re-publish it so the host shows the
+      // remote's battery rather than a number this bridge made up.
+      BR_LOGI(kTag, "RC003 battery %u%%", (unsigned)ev.code);
+      hid_server::setBatteryLevel(ev.code);
+      break;
+
     case BR_EV_WIN_LINK_UP:
       BR_LOGI(kTag, "host connected to HID service");
       bridge::releaseAllKeys();
@@ -292,6 +299,14 @@ void printStatus() {
   BR_LOGI(kTag, "rc003 rssi      : %d dBm", rc003_client::lastRssi());
   BR_LOGI(kTag, "notifications   : %lu", (unsigned long)rc003_client::notifyCount());
   BR_LOGI(kTag, "last report age : %d ms", rc003_client::lastReportAgeMs());
+  {
+    const int batt = rc003_client::batteryLevel();
+    if (batt >= 0) {
+      BR_LOGI(kTag, "remote battery  : %d%% (forwarded to host)", batt);
+    } else {
+      BR_LOGI(kTag, "remote battery  : unknown (host sees the placeholder)");
+    }
+  }
   BR_LOGI(kTag, "active key      : %s", s_activeDown ? keymap_raw_name(s_activeRaw) : "(none)");
   BR_LOGI(kTag, "bonds           : %d", ble_bonds::count());
   BR_LOGI(kTag, "events/unknown  : %lu / %lu", (unsigned long)s_eventsHandled, (unsigned long)s_unknownKeys);

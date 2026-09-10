@@ -106,11 +106,13 @@ uint8_t s_lastConsumer[HID_CONSUMER_REPORT_LEN];
 // Filled in by the stack during registration.
 uint16_t s_handleKeyboard = 0;
 uint16_t s_handleConsumer = 0;
+uint16_t s_handleBattery = 0;
 
 bool s_registered = false;
 uint16_t s_connHandle = BLE_HS_CONN_HANDLE_NONE;
 bool s_subKeyboard = false;
 bool s_subConsumer = false;
+bool s_subBattery = false;
 
 struct ble_gap_event_listener s_listener;
 
@@ -239,10 +241,12 @@ static const struct ble_gatt_chr_def s_deviceInfoCharacteristics[] = {
 };
 
 static const struct ble_gatt_chr_def s_batteryCharacteristics[] = {
-    // Read-only. The firmware has no way to measure the battery and never
-    // notifies, so advertising NOTIFY would promise the host something that
-    // never arrives.
-    HID_CHR(kUuidBatteryLevel, A_BATTERY_LEVEL, BLE_GATT_CHR_F_READ, nullptr, nullptr),
+    // Read + notify. The bridge does not measure anything itself, but the RC003
+    // publishes its own charge over the standard battery service, so the value
+    // is forwarded and the host is told about changes. Until the remote has
+    // reported anything, this serves BRIDGE_BATTERY_LEVEL and nothing else.
+    HID_CHR(kUuidBatteryLevel, A_BATTERY_LEVEL, BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY, nullptr,
+            &s_handleBattery),
     {nullptr, nullptr, nullptr, nullptr, (ble_gatt_chr_flags)0, 0, nullptr, nullptr},
 };
 
@@ -271,6 +275,10 @@ int gapEvent(struct ble_gap_event *event, void *arg) {
     s_subConsumer = on;
     s_connHandle = event->subscribe.conn_handle;
     BR_LOGI(kTag, "report %u (consumer) notifications %s", HID_REPORT_ID_CONSUMER, on ? "ENABLED" : "disabled");
+  } else if (attr == s_handleBattery) {
+    s_subBattery = on;
+    s_connHandle = event->subscribe.conn_handle;
+    BR_LOGI(kTag, "battery level notifications %s", on ? "ENABLED" : "disabled");
   } else {
     // The battery or some other characteristic; nothing to track.
     BR_LOGD(kTag, "subscribe event on handle %u", (unsigned)attr);
@@ -360,7 +368,18 @@ void setPnpId(uint8_t vendorIdSource, uint16_t vendorId, uint16_t productId, uin
   s_pnpId[6] = (uint8_t)((productVersion >> 8) & 0xFF);
 }
 
-void setBatteryLevel(uint8_t level) { s_batteryLevel = level; }
+void setBatteryLevel(uint8_t level) {
+  if (level > 100) level = 100;
+
+  const bool changed = level != s_batteryLevel;
+  s_batteryLevel = level;
+  if (!changed) return;
+
+  BR_LOGI(kTag, "battery level -> %u%%", (unsigned)level);
+
+  // No mirror buffer: the read callback serves s_batteryLevel directly.
+  notifyOn(s_handleBattery, s_subBattery, &s_batteryLevel, 1, nullptr);
+}
 
 bool notifyKeyboard(const uint8_t *data, size_t len) {
   return notifyOn(s_handleKeyboard, s_subKeyboard, data, len, s_lastKeyboard);
@@ -376,6 +395,7 @@ bool consumerSubscribed() { return s_subConsumer; }
 void resetSubscriptions() {
   s_subKeyboard = false;
   s_subConsumer = false;
+  s_subBattery = false;
   s_connHandle = BLE_HS_CONN_HANDLE_NONE;
 }
 

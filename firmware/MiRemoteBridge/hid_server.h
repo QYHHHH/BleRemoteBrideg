@@ -42,6 +42,10 @@ void forceReAdvertise();
 // Advertise again if we are not currently advertising and nobody is connected.
 void ensureAdvertising();
 
+// Forward the RC003's battery level to the host. Called from the bridge loop
+// when the remote reports its charge; clamped to 0-100 and notified on change.
+void setBatteryLevel(uint8_t percent);
+
 // Delete the host bond so the next connection has to go through pairing again.
 //
 // When a host is connected its own record is removed. When none is connected

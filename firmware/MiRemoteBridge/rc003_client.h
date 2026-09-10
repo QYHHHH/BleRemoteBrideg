@@ -36,6 +36,11 @@ int lastRssi();
 int lastReportAgeMs();
 uint32_t notifyCount();
 
+// Charge reported by the remote, or -1 when it is not known yet (the remote
+// either was not connected or never answered a battery read). 0 is a real
+// value for a flat battery, so "unknown" has to be distinguishable from it.
+int batteryLevel();
+
 // Dump the cached advertisement table collected during scanning. Used by the
 // `scan` console command; never returns "everything nearby", only what the
 // scanner actually saw while it was running.
