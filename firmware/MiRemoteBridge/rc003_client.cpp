@@ -354,9 +354,14 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
     s_pendValid = true;
     portEXIT_CRITICAL(&s_pendMux);
 
-    // Stop the scan so the central task wakes up promptly. BLEScan::stop()
-    // releases the task blocked in start().
-    BLEDevice::getScan()->stop();
+    // Stop the scan so the central task wakes up promptly instead of waiting
+    // out the rest of the chunk. BLEScan::stop() releases the task blocked in
+    // start(); NimBLE allows cancelling a discovery from inside its own
+    // callback.
+    BLEScan *scan = BLEDevice::getScan();
+    if (scan->isScanning()) {
+      scan->stop();
+    }
   }
 };
 
@@ -863,7 +868,10 @@ bool begin() {
   // created lazily in the task.
   BLEDevice::getScan()->setAdvertisedDeviceCallbacks(&s_scanCallbacks, false, true);
 
-  const BaseType_t rc = xTaskCreateUniversal(taskEntry, "rc003", 6144, nullptr, 4, &s_taskHandle,
+  // 8192 bytes: this task does String formatting, std::map iteration and
+  // native NimBLE calls, all of which are stack hungry. The C3 has one core,
+  // so the priority only decides preemption against the Arduino loop.
+  const BaseType_t rc = xTaskCreateUniversal(taskEntry, "rc003", 8192, nullptr, 4, &s_taskHandle,
                                              ARDUINO_RUNNING_CORE);
   if (rc != pdPASS) {
     BR_LOGE(kTag, "failed to start central task");

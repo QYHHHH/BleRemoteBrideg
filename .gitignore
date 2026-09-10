@@ -16,3 +16,7 @@ build/
 .DS_Store
 Thumbs.db
 
+# Python bytecode from the host-side test tooling
+__pycache__/
+*.pyc
+
