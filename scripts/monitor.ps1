@@ -46,16 +46,30 @@ try {
         # name. Decode as UTF-8 instead.
         $sp.Encoding = [System.Text.Encoding]::UTF8
         $sp.Open()
+        # Write as bytes arrive rather than buffering until the end. A capture
+        # that is still running can then be read (or tailed) while it runs, and
+        # closing the window early no longer throws away everything recorded so
+        # far - which is exactly what happens with a buffer-and-write-at-the-end
+        # capture when the thing you are debugging takes longer than the window.
+        $writer = New-Object System.IO.StreamWriter($logPath, $false, [System.Text.Encoding]::UTF8)
         $deadline = (Get-Date).AddSeconds($Seconds)
-        $buffer = ""
-        while ((Get-Date) -lt $deadline) {
-            try { $buffer += $sp.ReadExisting() } catch { }
-            Start-Sleep -Milliseconds 100
+        try {
+            while ((Get-Date) -lt $deadline) {
+                $chunk = ""
+                try { $chunk = $sp.ReadExisting() } catch { }
+                if ($chunk.Length -gt 0) {
+                    $writer.Write($chunk)
+                    $writer.Flush()
+                    Write-Host $chunk -NoNewline
+                }
+                Start-Sleep -Milliseconds 50
+            }
+        } finally {
+            $writer.Flush()
+            $writer.Close()
+            if ($sp.IsOpen) { $sp.Close() }
         }
-        $sp.Close()
-        $buffer | Out-File -FilePath $logPath -Encoding utf8
         Write-Host ''
-        Write-Host $buffer
         Write-Host ("Saved to {0}" -f $logPath) -ForegroundColor Green
         exit 0
     }

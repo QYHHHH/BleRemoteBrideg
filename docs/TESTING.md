@@ -12,7 +12,7 @@
 | L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11095, failed: 0` |
 | L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `137 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
 | L4 上游（RC003 → C3） | 扫描、直连、配对加密、服务发现、订阅通知、逐键解析 | **通过** | 13/13 键识别，0 未知码；延迟 min 190 / median 215 / max 361 µs（§5.1、§5.2）|
-| L4 下游（C3 → Windows） | Windows 识别为蓝牙键盘 + 媒体控制设备 | **未验证** | 等 Windows 侧配对（§5.1 第 3 步）|
+| L4 下游（C3 → Windows） | Windows 识别为蓝牙键盘 + 媒体控制设备 | **首次失败 → 已修，待复验** | 蓝牙配对成功，但 HID 驱动 Code 10（`HIDP_STATUS_INVALID_REPORT_TYPE`）；根因与修复见 §4.5 |
 | L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **未验证** | §5.3 |
 
 已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`；
@@ -92,7 +92,7 @@ python tests/model/check_vectors.py
    当按键发出去。
 7. **HID 报告描述符解析**：真实解析 `hid_report_map.h` 的字节流，断言
    - 恰好 **一个** 输入报告：Report ID 1 = 80 bit（10 字节 = 8 键盘 + 2 Consumer）
-   - 输出（LED）报告 = 8 bit（1 字节）
+   - **不得声明任何输出报告**（HIDP_STATUS_INVALID_REPORT_TYPE 的回归防护，见 §4.5）
    - **不得声明 Report ID 2**（那会需要第二个同 UUID 的特征，见 §4.2）
    - 只有 2 个顶层 Collection、Collection 不嵌套
    - Array 项的 Usage Maximum 不超过 Logical Maximum
@@ -256,6 +256,54 @@ rc = ble_gap_connect(BLEDevice::m_ownAddrType, &peerAddr_t, m_connectTimeout, ..
 另外把"人工选择"做成了一等路径：`scan` 输出带序号，`connect <index>` 直接按序号连，
 并把扫描到的地址类型一并带上。
 
+### 4.5 Windows 报"驱动程序错误"：描述符声明了不存在的报告类型
+
+现象：Windows 11 蓝牙设备卡片上显示 `Mi Remote Bridge` + **"驱动程序错误"**，键盘不可用。
+
+设备端日志显示链路其实是通的：
+
+```
+[353228][WIN    ] host connected (id 1 addr xx:xx:xx:xx:xx:xx mtu 23)
+[358567][WIN    ] report 1 notifications ENABLED (handle 1)     <- Windows 订阅成功
+[361688][WIN    ] host disconnected (handle 1, remaining 0)     <- 3 秒后自己撤了
+```
+
+**取证（全部来自 Windows 自身，不是推测）：**
+
+| 来源 | 内容 |
+| --- | --- |
+| `Get-PnpDevice` | `符合蓝牙低能耗 GATT 的 HID 设备`，`Problem=CM_PROB_FAILED_START`，**只有这一个设备失败** |
+| 内核 PnP 事件 411 | `问题: 0xA`（Code 10），**`问题状态: 0xC0110002`** |
+| System 日志 / BTHUSB | `远程适配器 (60:55:f9:xx:xx:xx) 成功地与本地适配器配对` |
+
+`0xC0110002` 查 WDK 头文件即 `HIDP_STATUS_INVALID_REPORT_TYPE`：
+
+```c
+#define HIDP_STATUS_INVALID_REPORT_TYPE (HIDP_ERROR_CODES(0xC,2))
+```
+
+**根因**：报告描述符里声明了一个 **Output（LED）** 报告（从标准 USB 键盘描述符照抄来的
+1 字节 LED 状态），但 HID 服务里**只有一条 Input 类型的 Report 特征**
+（`BLEHIDDevice::inputReport()` 建的，Report Reference = `{1, 0x01}`）。
+HOGP 要求描述符里声明的每一种报告都有对应类型的 Report 特征；Windows 去找 Output 那条，
+只找到标着 "input" 的，判定报告类型无效，驱动启动失败。
+
+**为什么不能"补一条 output 特征"**：`BLEHIDDevice::outputReport()` 建的是第二个 `0x2A4D`
+特征，会踩 §4.2 那个重复 UUID 的坑，特征根本不会出现在 GATT 表里。本固件从不驱动键盘 LED，
+所以**删掉这个声明**既正确又是唯一可行解（描述符 90 → 72 字节，`0x91` 项全部移除）。
+
+#### 一个方法论上的教训
+
+我一度写下"Windows 这条链路没有配对事件，所以配对没成功"。**这个推断是错的。**
+`onAuthenticationComplete` 属于 `BLESecurityCallbacks`，而我们的固件**从未注册**它
+（它是全局单槽，且同组回调里 `onConfirmPIN` / `onAuthorizationRequest` 的返回值会被库采用，
+为一行日志去注册会影响已经跑通的 RC003 配对，不划算）。所以日志里没有那一行，
+只说明"没人打印"，**不等于"没发生"**。真相由 Windows 自己的 BTHUSB 日志给出：配对是成功的。
+
+**日志里没有 ≠ 没发生。** 这是本次排查里唯一一次走错方向，值得记下来。
+
+---
+
 ## 5. L4 实机验收清单（部分完成）
 
 按顺序做完并回填。每条都有"怎么判"和"期望结果"。
@@ -266,8 +314,8 @@ rc = ble_gap_connect(BLEDevice::m_ownAddrType, &peerAddr_t, m_connectTimeout, ..
 | --- | --- | --- | --- | --- |
 | 1 | 烧录 | `.\scripts\flash.ps1 -Port COM3` | `UPLOAD OK`，串口出启动横幅 | ✅ 2026-09-10 |
 | 2 | 上游配对 | `scan` → `connect <index>`（人工选择） | `ready: N subscription(s)` | ✅ 秒连，见下 |
-| 3 | 下游配对 | Windows 蓝牙添加 `Mi Remote Bridge` | 日志 `host connected` 变 1 | ☐ **待做** |
-| 4 | Windows 识别 | 设置 / 设备管理器 | 出现"键盘"+ 消费类控制设备 | ☐ **待做** |
+| 3 | 下游配对 | Windows 蓝牙添加 `Mi Remote Bridge` | 日志 `host connected` 变 1 | ⚠️ 连接与订阅成功，但驱动 Code 10（§4.5）；修复后**待复验** |
+| 4 | Windows 识别 | 设置 / 设备管理器 | 出现"键盘"+ 消费类控制设备 | ⏳ 待在步骤 3 通过后确认 |
 | 5 | 设备端自检 | `selftest` | `RESULT: PASS` | ✅ 见 §3 |
 
 上游配对的实测日志（`connect` 发出后约 270 ms 建链）：

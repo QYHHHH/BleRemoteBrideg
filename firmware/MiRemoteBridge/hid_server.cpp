@@ -136,6 +136,16 @@ class BridgeServerCallbacks : public BLEServerCallbacks {
     (void)desc;
     BR_LOGD(kTag, "mtu -> %u", (unsigned)mtu);
   }
+
+  // NOTE: pairing events are NOT observable from here. onAuthenticationComplete
+  // lives on BLESecurityCallbacks (registered once via
+  // BLEDevice::setSecurityCallbacks, a single global slot shared by both the
+  // upstream and downstream links) rather than on BLEServerCallbacks. It was
+  // deliberately left unregistered: the same class also carries onConfirmPIN and
+  // onAuthorizationRequest, whose return values the BLE library actually uses, so
+  // installing it to gain one log line would put the already-working RC003
+  // pairing at risk. The real evidence that Windows bonds is Windows' own
+  // BTHUSB event ("the remote adapter paired successfully").
 #else
   void onConnect(BLEServer *pServer) override {
     (void)pServer;

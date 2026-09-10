@@ -10,6 +10,9 @@
  *     bytes 0..7  keyboard   [modifier, reserved, k0..k5]
  *     bytes 8..9  consumer   16-bit usage, little endian (0 = none)
  *
+ * No output (LED) report is declared. That is deliberate and is the difference
+ * between a device Windows starts and one it does not - see below.
+ *
  * Why one report instead of the usual "report ID 1 = keyboard,
  * report ID 2 = media keys"
  * ---------------------------------------------------------------------
@@ -27,10 +30,33 @@
  *
  * Sharing a single report ID across the two collections is legal HID: report
  * IDs are unique per report type, not per collection, and the bytes of all
- * collections sharing an ID are simply concatenated. Windows enumerates the
- * collections from the descriptor exactly as it does for any other composite
- * HID device. It also keeps us on the public API instead of patching a core
- * library that lives outside this repository.
+ * collections sharing an ID are simply concatenated. It also keeps us on the
+ * public API instead of patching a core library that lives outside this
+ * repository.
+ *
+ * Why there is no output report
+ * ---------------------------------------------------------------------
+ * A standard USB keyboard descriptor also declares a one-byte LED output
+ * report, and this file used to copy that. It is wrong for HOGP: every report
+ * the descriptor declares must have a matching Report characteristic carrying
+ * a Report Reference descriptor of that report TYPE, and BLEHIDDevice only
+ * ever creates an INPUT report characteristic here.
+ *
+ * Windows 11 makes that fatal rather than merely untidy. With the LED output
+ * present, the HID-over-GATT device failed to start with CM_PROB_FAILED_START
+ * (Code 10) and problem status 0xC0110002, i.e. HIDP_STATUS_INVALID_REPORT_TYPE
+ * - the driver went looking for the output report it had been told about and
+ * found only a characteristic marked "input". The other four GATT services
+ * started fine, and the device was correctly paired the whole time, which is
+ * what pointed at the descriptor rather than at the radio or the security
+ * setup.
+ *
+ * Adding a real output report characteristic is not an option with this
+ * library version: BLEHIDDevice::outputReport() creates a second 0x2A4D
+ * characteristic and therefore hits the duplicate-UUID bug described above,
+ * so the characteristic would silently never exist. Since this firmware never
+ * drives keyboard LEDs, dropping the declaration is both the correct HALF of
+ * the fix and the only workable one.
  *
  * A 16-bit array field was chosen for Consumer Control on purpose: it can
  * express any usage in the page, so AC Back (0x0224) and friends work, whereas
@@ -88,16 +114,6 @@ static const uint8_t kHidReportMap[] = {
     0x75, 0x08,        //   Report Size (8)
     0x95, 0x06,        //   Report Count (6)
     0x81, 0x00,        //   Input (Data,Array,Abs)        -> 6 key codes
-
-    0x05, 0x08,        //   Usage Page (LEDs)
-    0x19, 0x01,        //   Usage Minimum (Num Lock)
-    0x29, 0x05,        //   Usage Maximum (Kana)
-    0x95, 0x05,        //   Report Count (5)
-    0x75, 0x01,        //   Report Size (1)
-    0x91, 0x02,        //   Output (Data,Var,Abs)         -> LED state
-    0x95, 0x01,        //   Report Count (1)
-    0x75, 0x03,        //   Report Size (3)
-    0x91, 0x01,        //   Output (Const)
     0xC0,              // End Collection
 
     // =================================================================

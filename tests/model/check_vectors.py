@@ -551,9 +551,16 @@ def check_descriptor() -> None:
         inputs.get(1) == 80,
         f"input report 1 must be 80 bits (10 bytes: 8 keyboard + 2 consumer), descriptor says {inputs.get(1)}",
     )
+    # No output report may be declared. Every report a descriptor mentions needs a
+    # Report characteristic of that report TYPE, and BLEHIDDevice only ever creates
+    # an input one. With the standard keyboard LED output copied in, Windows 11
+    # failed to start the HID-over-GATT device: CM_PROB_FAILED_START (Code 10) with
+    # problem status 0xC0110002 = HIDP_STATUS_INVALID_REPORT_TYPE. It was reproduced
+    # on hardware, so this is a regression guard.
     check(
-        outputs.get(1) == 8,
-        f"keyboard output (LED) report 1 must be 8 bits (1 byte), descriptor says {outputs.get(1)}",
+        not outputs,
+        f"no output report may be declared (HIDP_STATUS_INVALID_REPORT_TYPE); "
+        f"descriptor declares outputs={sorted(outputs)}",
     )
     check(
         2 not in inputs,
