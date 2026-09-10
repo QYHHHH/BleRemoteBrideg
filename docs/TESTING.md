@@ -414,8 +414,37 @@ Arduino 封装层做不到（见上），所以下一步是**绕过 `BLEHIDDevic
 **没有改动**：`ble_core`、`ble_bonds`、`rc003_client`、`keymap`、`event_bus`、`bridge`、`cli`。
 RC003 那一侧和配对/Bond 逻辑完全不受影响。
 
-**状态**：编译通过（0 warning，685939 B），模型检查 11096/0。
-**尚未上机**——烧录时板子的 USB 串口消失（`CM_PROB_PHANTOM`），未能烧入。
+**状态**：编译通过（0 warning，686595 B），模型检查 11096/0。**已上机，Windows 枚举通过。**
+
+上机结果（2026-09-10 19:33，见 `build/win-pair4.log` 与 `build/win-diag4.txt`）：
+
+```
+设备端：
+  [40696][HIDG] report 1 (keyboard) notifications ENABLED
+  [40936][HIDG] report 2 (consumer) notifications ENABLED     ← 两条特征都被订阅
+
+Windows 内核 PnP（hidbthle.inf 正常启动，无 Code 10）：
+  ...&Col01  → keyboard.inf  (kbdhid)     键盘集合
+  ...&Col02  → hidserv.inf                 Consumer 集合
+  HIDClass 里非 OK 的设备：0 个
+```
+
+**`Col02` 的存在是 4.5/4.6 那个故障的反证**：旧结构下 Windows 连子设备都建不出来
+（`CM_PROB_FAILED_START` / `0xC0110002`），现在两个集合各自绑定了正确的驱动。
+
+对照本次与上一次（诊断版）的差异 —— 注意这里有**两个**变量同时变了，所以下表不能
+单独用来归因：
+
+| | 诊断版（单集合） | 本版（两集合两报告 ID） |
+| --- | --- | --- |
+| Windows HID 驱动 | `Status=OK` | `Status=OK` |
+| 建出的集合 | 1 个（`Col01`）| **2 个（`Col01` + `Col02`）** |
+| 连续运行断开次数 | 0 / 15 分钟 | 见 §5.4.2（受配对状态影响，见下） |
+
+**过程中踩到的一个坑**：为了让服务结构变更后从干净状态重新配对，只在 C3 侧执行了
+`forget win`，Windows 侧仍保留配对记录 → 两侧密钥不一致 → Windows **每 6～7 秒断开重连一次**
+（MTU 也从 256 掉到 23），期间按下的键落入断开窗口而丢失。Windows 后来自行完成重新配对
+（`bonds` 由 1 变回 2）后才稳定。**结论：清配对必须两边同时清**，已写进 `docs/RECOVERY.md`。
 
 ## 5. L4 实机验收清单（部分完成）
 
