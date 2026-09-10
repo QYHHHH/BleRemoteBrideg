@@ -1,0 +1,12 @@
+board_manager:
+  additional_urls:
+    - https://espressif.github.io/arduino-esp32/package_esp32_index.json
+directories:
+  # Espressif's Windows RISC-V linker cannot reliably resolve non-ASCII paths.
+  # Keep the toolchain in an ASCII-only local path outside the Chinese repo path.
+  data: C:/code/arduino-c3-data/data
+  downloads: C:/code/arduino-c3-data/downloads
+  user: C:/code/arduino-c3-data/user
+updater:
+  enable_notification: false
+
