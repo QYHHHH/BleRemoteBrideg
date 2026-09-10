@@ -113,11 +113,12 @@ map power consumer_sleep
 
 | 模式名 | 输出 |
 | --- | --- |
-| `kb_ralt_comma`（默认） | 右 Alt + 逗号（微信/QQ 语音输入热键） |
+| `kb_ralt_comma`（出厂默认） | 右 Alt + 逗号（微信/QQ 语音输入热键） |
 | `consumer_mute` | Consumer Mute `0x00E2` |
+| `kb_lctrl_lgui` | **左 Ctrl + 左 Win 同时按下**（纯修饰键和弦，无主键——适合给支持自定义 `Ctrl+Win+X` 热键的软件当触发前缀） |
 | `disabled` | 不转发（按下时只打印一行日志） |
 
-```
+```map
 map voice disabled
 ```
 

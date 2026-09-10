@@ -94,8 +94,14 @@ void sendReports() {
   }
   keyboard[HID_KB_OFFSET_MODIFIER] = mod;
   keyboard[HID_KB_OFFSET_RESERVED] = 0x00;
-  for (size_t i = 0; i < s_downCount && i < HID_KB_KEY_COUNT; i++) {
-    keyboard[HID_KB_OFFSET_KEYS + i] = s_down[i].keycode;
+  // Pure-modifier chords (keycode 0) contribute to `mod` above but must not
+  // occupy a key slot: HID ignores a 0 in the array, yet a slot spent on it is
+  // a slot a real key can no longer use.
+  size_t keySlot = 0;
+  for (size_t i = 0; i < s_downCount && keySlot < HID_KB_KEY_COUNT; i++) {
+    if (s_down[i].keycode != HID_KEY_NONE) {
+      keyboard[HID_KB_OFFSET_KEYS + keySlot++] = s_down[i].keycode;
+    }
   }
 
   uint8_t consumer[HID_CONSUMER_REPORT_LEN];
@@ -244,7 +250,11 @@ void pressAction(const hid_action_t &action) {
   if (action.kind == HID_ACT_NONE) return;
 
   if (action.kind == HID_ACT_KEYBOARD) {
-    if (action.keycode == HID_KEY_NONE) return;
+    // A keyboard action with no base key is still meaningful when it carries
+    // modifiers: Ctrl+Win with nothing else is a valid HID report and exactly
+    // what a "voice" key bound to a modifier chord should produce. Only an
+    // action with literally nothing in it is a no-op.
+    if (action.keycode == HID_KEY_NONE && action.modifier == HID_MOD_NONE) return;
     if (keyIsDown(action.modifier, action.keycode)) return;  // idempotent
 
     if (s_downCount >= HID_KB_KEY_COUNT) {

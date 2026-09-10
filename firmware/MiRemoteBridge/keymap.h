@@ -92,6 +92,7 @@ typedef enum {
 typedef enum {
   MAP_VOICE_RALT_COMMA = 0,    // Right Alt + Comma (WeChat/TIM voice IME)
   MAP_VOICE_CONSUMER_MUTE,     // Mute
+  MAP_VOICE_KB_LCTRL_LGUI,     // Left Ctrl + Left Win, no base key (chord)
   MAP_VOICE_DISABLED,          // do not forward the voice button
   MAP_VOICE_COUNT
 } keymap_voice_mode_t;

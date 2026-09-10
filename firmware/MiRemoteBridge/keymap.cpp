@@ -92,6 +92,7 @@ static const char *const kPowerNames[MAP_POWER_COUNT] = {
 static const char *const kVoiceNames[MAP_VOICE_COUNT] = {
     "kb_ralt_comma",   // MAP_VOICE_RALT_COMMA
     "consumer_mute",   // MAP_VOICE_CONSUMER_MUTE
+    "kb_lctrl_lgui",   // MAP_VOICE_KB_LCTRL_LGUI
     "disabled",        // MAP_VOICE_DISABLED
 };
 
@@ -209,6 +210,14 @@ static hid_action_t resolve_dynamic(uint8_t raw_code) {
       case MAP_VOICE_CONSUMER_MUTE:
         a.kind = HID_ACT_CONSUMER;
         a.consumer = HID_CONSUMER_MUTE;
+        break;
+      case MAP_VOICE_KB_LCTRL_LGUI:
+        // A chord of two modifiers with no base key. The host sees Left Ctrl
+        // and Left Win go down together, which is a valid HID report and a
+        // useful prefix for tools that bind their own Ctrl+Win+<key> hotkeys.
+        a.kind = HID_ACT_KEYBOARD;
+        a.modifier = HID_MOD_LCTRL | HID_MOD_LGUI;
+        a.keycode = HID_KEY_NONE;
         break;
       case MAP_VOICE_DISABLED:
       default:
