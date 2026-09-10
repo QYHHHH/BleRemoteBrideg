@@ -191,6 +191,11 @@ int gattAccess(uint16_t connHandle, uint16_t attrHandle, struct ble_gatt_access_
 
     case A_BATTERY_LEVEL:
       if (ctxt->op != BLE_GATT_ACCESS_OP_READ_CHR) return BLE_ATT_ERR_UNLIKELY;
+      // Logged on purpose: whether the host actually re-reads this value after
+      // a reconnect decides how the stale-100% display gets fixed. Without
+      // this, "Windows caches it" and "Windows never came back to look" are
+      // indistinguishable from the device side.
+      BR_LOGI(kTag, "host READ battery -> %u%%", (unsigned)s_batteryLevel);
       return appendValue(ctxt, &s_batteryLevel, 1);
   }
 
