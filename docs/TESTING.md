@@ -8,7 +8,7 @@
 
 | 层级 | 内容 | 状态 | 证据 |
 | --- | --- | --- | --- |
-| L1 编译验证 | 对 `esp32:esp32:esp32c3` 干净编译 | **通过** | 0 error / 0 warning，flash 692269 B (52%)，RAM 19564 B (5%) |
+| L1 编译验证 | 对 `esp32:esp32:esp32c3` 干净编译 | **通过** | 0 error / 0 warning，flash 691805 B (52%)，RAM 19788 B (6%) |
 | L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11093, failed: 0` |
 | L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **未运行（阻塞）** | 串口打不开，见 §4 |
 | L4 实机端到端 | RC003 ↔ C3 ↔ Windows 全链路 | **未运行（阻塞）** | 同上 |
@@ -33,11 +33,11 @@ arduino-cli compile --fqbn esp32:esp32:esp32c3 `
 实测结果：
 
 ```
-Sketch uses 692269 bytes (52%) of program storage space. Maximum is 1310720 bytes.
-Global variables use 19564 bytes (5%) of dynamic memory, leaving 308116 bytes for local variables.
+Sketch uses 691805 bytes (52%) of program storage space. Maximum is 1310720 bytes.
+Global variables use 19788 bytes (6%) of dynamic memory, leaving 307892 bytes for local variables.
 ```
 
-无 warning、无 error。
+无 warning、无 error。（体积会随每次改动小幅变化，以实际输出为准。）
 
 ### 编译相关排查
 

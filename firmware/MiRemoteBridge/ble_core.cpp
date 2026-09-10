@@ -24,7 +24,11 @@ bool s_started = false;
 namespace ble_core {
 
 const char *stackName() {
-  return BLEDevice::getBLEStackString().c_str();
+  // getBLEStackString() returns a String by value, so returning .c_str()
+  // straight from it would hand back a pointer into a destroyed temporary.
+  // A function-local static keeps it alive for the life of the program.
+  static String s_name = BLEDevice::getBLEStackString();
+  return s_name.c_str();
 }
 
 bool started() { return s_started; }
