@@ -27,21 +27,21 @@ RC003 复用了 HID 输入报告的格式，但**没有使用标准 HID Usage**�
 
 ## 2. 13 个物理按键与默认输出
 
-| # | 物理键 | 原始码 | 默认 HID 输出 | 类型 | Report |
+| # | 物理键 | 原始码 | 默认 HID 输出 | 类型 | 报告 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 音量 + | `0x80` | Consumer Volume Up `0x00E9` | 媒体键 | ID 2 |
-| 2 | 音量 − | `0x81` | Consumer Volume Down `0x00EA` | 媒体键 | ID 2 |
-| 3 | 返回 | `0xF1` | Consumer AC Back `0x0224`（可配置） | 媒体键 | ID 2 |
-| 4 | 上 | `0x52` | 键盘 ↑ `0x52` | 键盘 | ID 1 |
-| 5 | 下 | `0x51` | 键盘 ↓ `0x51` | 键盘 | ID 1 |
-| 6 | 左 | `0x50` | 键盘 ← `0x50` | 键盘 | ID 1 |
-| 7 | 右 | `0x4F` | 键盘 → `0x4F` | 键盘 | ID 1 |
-| 8 | 确定 | `0x28` | Enter `0x28` | 键盘 | ID 1 |
-| 9 | 主页 | `0x24` | Win + D（`LGUI` + `0x07`） | 键盘 | ID 1 |
-| 10 | 菜单 | `0x5D` | 空格 `0x2C` | 键盘 | ID 1 |
-| 11 | 电视 | `0xC0` | F8 `0x41` | 键盘 | ID 1 |
-| 12 | 电源 | `0x66` | Alt + F4（`LALT` + `0x3D`，可配置） | 键盘 | ID 1 |
-| 13 | 语音 | `0x04` / `0x3E` | 右 Alt + 逗号（可配置） | 键盘 | ID 1 |
+| 1 | 音量 + | `0x80` | Consumer Volume Up `0x00E9` | 媒体键 | 共用 ID 1 |
+| 2 | 音量 − | `0x81` | Consumer Volume Down `0x00EA` | 媒体键 | 共用 ID 1 |
+| 3 | 返回 | `0xF1` | Consumer AC Back `0x0224`（可配置） | 媒体键 | 共用 ID 1 |
+| 4 | 上 | `0x52` | 键盘 ↑ `0x52` | 键盘 | 共用 ID 1 |
+| 5 | 下 | `0x51` | 键盘 ↓ `0x51` | 键盘 | 共用 ID 1 |
+| 6 | 左 | `0x50` | 键盘 ← `0x50` | 键盘 | 共用 ID 1 |
+| 7 | 右 | `0x4F` | 键盘 → `0x4F` | 键盘 | 共用 ID 1 |
+| 8 | 确定 | `0x28` | Enter `0x28` | 键盘 | 共用 ID 1 |
+| 9 | 主页 | `0x24` | Win + D（`LGUI` + `0x07`） | 键盘 | 共用 ID 1 |
+| 10 | 菜单 | `0x5D` | 空格 `0x2C` | 键盘 | 共用 ID 1 |
+| 11 | 电视 | `0xC0` | F8 `0x41` | 键盘 | 共用 ID 1 |
+| 12 | 电源 | `0x66` | Alt + F4（`LALT` + `0x3D`，可配置） | 键盘 | 共用 ID 1 |
+| 13 | 语音 | `0x04` / `0x3E` | 右 Alt + 逗号（可配置） | 键盘 | 共用 ID 1 |
 
 设计取舍：
 
@@ -120,16 +120,39 @@ map voice disabled
 
 ## 5. HID 报告描述符
 
-`firmware/MiRemoteBridge/hid_report_map.h` 广播两个报告：
+`firmware/MiRemoteBridge/hid_report_map.h` 只广播**一个输入报告（Report ID 1，10 字节）**，
+里面包含两个顶层应用集合：
 
 | Report ID | 内容 | 长度 |
 | --- | --- | --- |
-| 1 | 键盘：`[修饰键, 保留, k0..k5]` | 8 字节 |
+| 1 | 键盘集合：`[修饰键, 保留, k0..k5]` | 8 字节（偏移 0–7）|
+| 1 | Consumer Control 集合：16 位 Usage，小端，`0x0000` = 无 | 2 字节（偏移 8–9）|
 | 1 | 输出（LED 状态，仅供主机读取） | 1 字节 |
-| 2 | Consumer Control：16 位 Usage，小端，`0x0000` = 无 | 2 字节 |
 
-`tests/model/check_vectors.py` 会实际解析这份描述符并断言上述长度，避免出现
-"编译通过但 Windows 枚举失败"的情况。
+两个集合同用一个 Report ID 是合法的：HID 只要求 Report ID 在同一报告类型内唯一，
+不要求每个集合一个；共用 ID 的集合其字节按顺序拼接，Windows 照常枚举出
+"键盘 + 消费类控制设备"。
+
+**为什么不用"键盘 ID 1 / 媒体键 ID 2"这种更常见的布局**：HOGP 把每个 Report ID 映射到
+一个 Report 特征，两个 ID 就意味着两个同为 `0x2A4D` 的特征。而 Arduino-ESP32 3.3.11
+的 BLE 封装层**无法注册两个同 UUID 的特征**：
+
+- `BLEService::addCharacteristic()` 检测到重复 UUID 后**不把第二个写进服务映射表**；
+- 于是它既不会进入 GATT 表，也永远不会被调用 `executeCreate()`；
+- 而 `BLECharacteristic` 构造函数**不初始化 `m_pService`**，只有 `executeCreate()` 会赋值；
+- 结果 `notify()` 里 `getService()->getServer()` 读到野指针 → `Load access fault` 崩溃。
+
+这个崩溃**已在真机上复现**（`docs/TESTING.md` §3），库自带的 `Server_Gamepad` 示例
+只创建了一个 input report，所以上游从未走过这条路径。共用 Report ID 既绕开了这个缺陷，
+又不必去改仓库外的核心库。
+
+`tests/model/check_vectors.py` 会实际解析这份描述符，并断言：
+
+- **恰好一个**输入报告，且为 80 位（10 字节）——这是针对上述崩溃的回归防护；
+- **不得声明 Report ID 2**，否则又会需要第二个 `0x2A4D` 特征；
+- 输出报告 1 字节；
+- `hid_report_map.h` 里的偏移常量与描述符一致（键区结束处正好是 consumer 字段起点）。
+
 
 ---
 

@@ -33,6 +33,13 @@ bool latencyEnabled();
 
 void printf(uint8_t level, const char *tag, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 
+// Bypasses both the level filter and the rate limiter. Reserved for output that
+// is useless if it is dropped: the outcome of the on-device self test, and the
+// console replies that confirm a command. Everything else, including the
+// per-report dumps, stays on the throttled path so that no component can stall
+// the loop by flooding the UART.
+void always(const char *tag, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+
 }  // namespace brlog
 
 #define BR_LOGE(tag, ...) brlog::printf(BR_LOG_ERROR, tag, __VA_ARGS__)

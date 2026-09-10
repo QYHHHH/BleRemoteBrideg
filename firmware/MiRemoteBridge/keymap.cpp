@@ -227,10 +227,21 @@ static const keymap_entry_t *find_entry(const keymap_entry_t *table, size_t coun
   return NULL;
 }
 
+// The keys whose target is chosen at runtime. resolve_dynamic() owns them
+// completely, including the "deliberately unmapped" answer.
+static bool is_dynamic_key(uint8_t raw_code) {
+  return raw_code == MI_KEY_BACK || raw_code == MI_KEY_POWER || raw_code == MI_KEY_POWER_ALT ||
+         raw_code == MI_KEY_VOICE || raw_code == MI_KEY_VOICE_ALT;
+}
+
 hid_action_t keymap_lookup_ex(const keymap_entry_t *table, size_t count, uint8_t raw_code) {
-  // Runtime-selectable keys win, in both the default and the custom table.
-  hid_action_t dyn = resolve_dynamic(raw_code);
-  if (dyn.kind != HID_ACT_NONE) return dyn;
+  // Runtime-selectable keys must NOT fall through to the static table when the
+  // runtime answer is NONE: that NONE means "the user turned this button off"
+  // (e.g. `map voice disabled`), and falling through would silently ignore the
+  // setting because the same code also has a default row in the table.
+  if (is_dynamic_key(raw_code)) {
+    return resolve_dynamic(raw_code);
+  }
 
   if (!table || count == 0) {
     table = kDefaultTable;

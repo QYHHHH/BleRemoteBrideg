@@ -41,12 +41,20 @@ static const char *kTag = "TEST";
 int s_pass = 0;
 int s_fail = 0;
 
+// The console logger is rate limited so that no component can stall the loop
+// by flooding the UART. A failing selftest is exactly such a flood, and the
+// totals at the end are the part that must never be dropped - so only the
+// first few failures are printed in full and the rest are only counted.
+constexpr int kMaxFailDetails = 8;
+
 void ok(bool condition, const char *what) {
   if (condition) {
     s_pass++;
-  } else {
-    s_fail++;
-    BR_LOGE(kTag, "FAIL: %s", what);
+    return;
+  }
+  s_fail++;
+  if (s_fail <= kMaxFailDetails) {
+    brlog::always(kTag, "FAIL: %s", what);
   }
 }
 
@@ -56,12 +64,19 @@ void okf(bool condition, const char *fmt, ...) {
     return;
   }
   s_fail++;
+  if (s_fail > kMaxFailDetails) return;
   char buf[160];
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
-  BR_LOGE(kTag, "FAIL: %s", buf);
+  brlog::always(kTag, "FAIL: %s", buf);
+}
+
+void reportSuppressed() {
+  if (s_fail > kMaxFailDetails) {
+    brlog::always(kTag, "... %d further failure(s) not printed individually", s_fail - kMaxFailDetails);
+  }
 }
 
 bool sameAction(const hid_action_t &a, const st_action_expect_t &e) {
@@ -200,8 +215,10 @@ void suiteQueue() {
 }
 
 void suiteDescriptorConstants() {
-  ok(HID_KEYBOARD_REPORT_LEN == 8, "keyboard report must be 8 bytes");
-  ok(HID_CONSUMER_REPORT_LEN == 2, "consumer report must be 2 bytes");
+  ok(HID_INPUT_REPORT_LEN == 10, "input report must be 10 bytes (8 keyboard + 2 consumer)");
+  ok(HID_INPUT_OFFSET_CONSUMER == 8, "the consumer field must follow the 8 keyboard bytes");
+  ok(HID_INPUT_OFFSET_KEYS + HID_INPUT_KEY_COUNT == HID_INPUT_OFFSET_CONSUMER,
+     "keyboard keys must exactly fill the space before the consumer field");
   ok(kHidReportMap[0] == 0x05 && kHidReportMap[1] == 0x01, "report map must start with Usage Page (Generic Desktop)");
   ok(kHidReportMap[HID_REPORT_MAP_LEN - 1] == 0xC0, "report map must end with End Collection");
   ok(HID_REPORT_MAP_LEN > 80 && HID_REPORT_MAP_LEN < 200, "report map size is implausible");
@@ -255,7 +272,7 @@ int runVectors() {
   s_pass = 0;
   s_fail = 0;
 
-  BR_LOGI(kTag, "--- vector suite ---");
+  brlog::always(kTag, "--- vector suite ---");
   suiteParse();
   suiteAtvv();
   suiteTracker();
@@ -264,7 +281,8 @@ int runVectors() {
   suiteQueue();
   suiteDescriptorConstants();
 
-  BR_LOGI(kTag, "vector suite: %d passed, %d failed", s_pass, s_fail);
+  reportSuppressed();
+  brlog::always(kTag, "vector suite: %d passed, %d failed", s_pass, s_fail);
   return s_fail;
 }
 
@@ -272,7 +290,7 @@ int runSimulation() {
   s_pass = 0;
   s_fail = 0;
 
-  BR_LOGI(kTag, "--- dispatch simulation ---");
+  brlog::always(kTag, "--- dispatch simulation ---");
   rc003_tracker_reset(&s_simTracker);
 
   // 1. simple press/release
@@ -365,7 +383,8 @@ int runSimulation() {
   }
   ok(bridge::activeRawCode() == 0, "voice button must release on ATVV AUDIO_STOP");
 
-  BR_LOGI(kTag, "dispatch simulation: %d passed, %d failed", s_pass, s_fail);
+  reportSuppressed();
+  brlog::always(kTag, "dispatch simulation: %d passed, %d failed", s_pass, s_fail);
   return s_fail;
 }
 
@@ -373,11 +392,11 @@ int runAll() {
   const int a = runVectors();
   const int b = runSimulation();
   bridge::releaseAllKeys();
-  BR_LOGI(kTag, "selftest total: %d failure(s)", a + b);
+  brlog::always(kTag, "selftest total: %d failure(s)", a + b);
   if (a + b == 0) {
-    BR_LOGI(kTag, "RESULT: PASS");
+    brlog::always(kTag, "RESULT: PASS");
   } else {
-    BR_LOGE(kTag, "RESULT: FAIL");
+    brlog::always(kTag, "RESULT: FAIL");
   }
   return a + b;
 }

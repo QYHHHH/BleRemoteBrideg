@@ -29,7 +29,15 @@ function Get-BridgePaths {
         Sketch    = Join-Path $script:BridgeProjectRoot 'firmware\MiRemoteBridge'
         OutputDir = Join-Path $script:BridgeProjectRoot 'build\MiRemoteBridge'
         BuildDir  = Join-Path $script:BridgeProjectRoot 'build'
-        Fqbn      = 'esp32:esp32:esp32c3'
+        # FlashMode=dio is REQUIRED on this board, not a preference:
+        # the default menu choice builds with build.boot=qio, i.e. the image
+        # headers say DIO (so the ROM loads) but the bootloader configures the
+        # flash driver in QIO. This board's Macronix flash does not answer in
+        # QIO, so every bootloader read returns 0xFF and the chip reset-loops
+        # with "partition 0 invalid magic number". Verified on hardware:
+        # 80MHz+QIO fails, 40MHz+QIO fails, 80MHz+DIO boots.
+        # See docs/TESTING.md section 4.
+        Fqbn      = 'esp32:esp32:esp32c3:FlashMode=dio'
     }
 }
 

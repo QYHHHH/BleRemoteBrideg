@@ -144,8 +144,7 @@ connect c0:5d:39:xx:xx:xx random
 
    ```
    [  xx][WIN    ] host connected (id 1 addr xx:xx:.. mtu 517 total 1)
-   [  xx][WIN    ] report 1 notifications ENABLED (id 1)
-   [  xx][WIN    ] report 2 notifications ENABLED
+   [  xx][WIN    ] report 1 notifications ENABLED (handle 1)
    ```
 
    `report 1 notifications ENABLED` 是关键：**只有这一行出现后，Windows 才会真正接收按键**。

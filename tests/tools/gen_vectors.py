@@ -121,11 +121,12 @@ def main() -> int:
     for idx, vec in enumerate(parse_vectors):
         expects = vec.get("expect", [])
         exp = ", ".join(f"{{ {int(e['code'])}, {'true' if e['pressed'] else 'false'} }}" for e in expects)
-        pad = ", " + exp if exp else ""
+        # The C array is fixed at 8 entries, so it must be padded. The real
+        # expectations come FIRST: the consumer walks expect[0..count-1].
+        init = ("{ " + exp + ", { 0, false } }") if exp else "{ { 0, false } }"
         name = vec["name"].replace('"', '\\"')
         out.append(
-            f'  {{ "{name}", kParseBytes_{idx}, {len(vec.get("bytes", []))}, {len(expects)}, '
-            f"{{ {{ 0, false }}{pad} }} }},"
+            f'  {{ "{name}", kParseBytes_{idx}, {len(vec.get("bytes", []))}, {len(expects)}, {init} }},'
         )
     out.append("};")
     out.append(f"static const size_t kParseVectorCount = {len(parse_vectors)};")
@@ -140,11 +141,10 @@ def main() -> int:
     for idx, vec in enumerate(atvv_vectors):
         expects = vec.get("expect", [])
         exp = ", ".join(f"{{ {int(e['code'])}, {'true' if e['pressed'] else 'false'} }}" for e in expects)
-        pad = ", " + exp if exp else ""
+        init = ("{ " + exp + ", { 0, false } }") if exp else "{ { 0, false } }"
         name = vec["name"].replace('"', '\\"')
         out.append(
-            f'  {{ "{name}", kAtvvBytes_{idx}, {len(vec.get("bytes", []))}, {len(expects)}, '
-            f"{{ {{ 0, false }}{pad} }} }},"
+            f'  {{ "{name}", kAtvvBytes_{idx}, {len(vec.get("bytes", []))}, {len(expects)}, {init} }},'
         )
     out.append("};")
     out.append(f"static const size_t kAtvvVectorCount = {len(atvv_vectors)};")
@@ -162,11 +162,11 @@ def main() -> int:
     for idx, vec in enumerate(tracker_vectors):
         expects = vec.get("expect", [])
         exp = ", ".join(f"{{ {int(e['code'])}, {'true' if e['pressed'] else 'false'} }}" for e in expects)
-        pad = ", " + exp if exp else ""
+        init = ("{ " + exp + ", { 0, false } }") if exp else "{ { 0, false } }"
         name = vec["name"].replace('"', '\\"')
         out.append(
             f'  {{ "{name}", kTrackerCodes_{idx}, kTrackerPressed_{idx}, {len(vec.get("input", []))}, '
-            f"{len(expects)}, {{ {{ 0, false }}{pad} }} }},"
+            f"{len(expects)}, {init} }},"
         )
     out.append("};")
     out.append(f"static const size_t kTrackerVectorCount = {len(tracker_vectors)};")

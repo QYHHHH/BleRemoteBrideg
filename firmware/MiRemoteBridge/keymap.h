@@ -34,9 +34,9 @@ typedef struct {
   uint16_t          consumer;   // HID_CONSUMER_* (consumer only)
 } hid_action_t;
 
-// Report IDs advertised in the HID report map.
-#define HID_REPORT_ID_KEYBOARD 1
-#define HID_REPORT_ID_CONSUMER 2
+// The HID report layout (report id, field offsets and lengths) lives in
+// hid_report_map.h so the descriptor, the report builder and the tests all read
+// from one place.
 
 // ---------------------------------------------------------------------------
 // Mapping table

@@ -36,15 +36,31 @@ HID 报告后再以蓝牙键盘的身份发出去，因此**免驱、不改系�
 
 | 层级 | 状态 |
 | --- | --- |
-| L1 编译验证 | ✅ 通过（0 warning，flash 52%，RAM 5%） |
-| L2 宿主端模型验证 | ✅ 通过（11093 项断言，含 4000 步随机不变量测试） |
-| L3 设备端自检（`selftest`） | ⏸ **未运行** —— 串口打不开 |
-| L4 实机端到端验收 | ⏸ **未运行** —— 同上 |
+| L1 编译验证 | ✅ 通过（0 warning，flash 52% / RAM 6%） |
+| L2 宿主端模型验证 | ✅ 通过（11094 项断言，含 4000 步随机不变量测试） |
+| L3 设备端自检（`selftest`） | ✅ **真机通过**：`137 passed / 0 failed` + 分发仿真 `44 passed / 0 failed` |
+| L4 实机端到端验收 | 🔄 固件已在 COM3 上正常运行（双角色、BLE 扫到 14 个设备）；**RC003 与 Windows 配对、24 项按键验收待做**（[`docs/TESTING.md`](docs/TESTING.md) §5） |
 
-**尚未在真实硬件上验证过。** 阻塞原因、已确认的证据和需要的操作写在
-[`docs/TESTING.md`](docs/TESTING.md) §4。简要说：COM3 是 CH343 USB 转串口芯片，
-PnP 报"工作正常"，但端口无法打开（`ERROR_GEN_FAILURE`），因此无法确认 ESP32-C3
-是否真的连在这条串口上、是否上电。
+固件内延迟（设备端分发仿真，13 次采样）：**min 19 µs / median 26 µs / max 203 µs**。
+
+**固件已在真实 ESP32-C3 上烧录并运行**（MAC `60:55:f9:xx:xx:xx`，bootloader → app 正常启动，
+串口控制台可用）。端到端（RC003 ↔ C3 ↔ Windows）的按键验收还没做，清单在
+[`docs/TESTING.md`](docs/TESTING.md) §5。
+
+### 这块板子必须用 `FlashMode=dio`
+
+默认 FQBN 会构建成"镜像头写 DIO、驱动用 QIO"，**本板卡在这种配置下无法启动**：
+bootloader 读分区表返回全 `0xFF`，报 `partition 0 invalid magic number` 并复位循环。
+实机对比确认：
+
+| 配置 | 结果 |
+| --- | --- |
+| 80MHz + QIO（FQBN 默认） | ❌ 复位循环 |
+| 40MHz + QIO | ❌ 复位循环（读回 `0xFFFF`）|
+| 80MHz + **DIO** | ✅ 正常启动 |
+
+所以 `scripts/_common.ps1` 里的 FQBN 固定为 `esp32:esp32:esp32c3:FlashMode=dio`。
+手工编译时也要带上这个选项，细节与取证过程见 [`docs/TESTING.md`](docs/TESTING.md) §4。
 
 ---
 
@@ -52,7 +68,8 @@ PnP 报"工作正常"，但端口无法打开（`ERROR_GEN_FAILURE`），因此�
 
 | 项 | 值 |
 | --- | --- |
-| 目标芯片 | ESP32-C3（FQBN `esp32:esp32:esp32c3`） |
+| 目标芯片 | ESP32-C3 rev v0.3，4MB Macronix flash（`esp32:esp32:esp32c3:FlashMode=dio`）|
+| 已验证硬件 | COM3 / CH343 USB 转串口，MAC `60:55:f9:xx:xx:xx` |
 | Arduino CLI | 1.5.1，`C:\code\MiRemoteBridge\.tools\arduino-cli-1.5.1`（不入 Git） |
 | Arduino-ESP32 | 3.3.11，数据目录 `C:\code\arduino-c3-data`（不入 Git） |
 | BLE 主机栈 | **NimBLE**（该核心为 C3 默认且唯一构建的栈：`CONFIG_BT_NIMBLE_ENABLED=y`，Bluedroid 未编译） |

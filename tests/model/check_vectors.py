@@ -374,15 +374,30 @@ def parse_descriptor(data: list[int]) -> dict:
 
 
 def read_report_map() -> list[int]:
+    """Pull the descriptor bytes out of hid_report_map.h.
+
+    Simple `#define NAME 1` macros are resolved too, so the header can use
+    HID_REPORT_ID_INPUT instead of a bare literal without the two drifting
+    apart. Anything that cannot be resolved is an error rather than a silently
+    skipped byte - skipping a byte would shift the whole descriptor and make
+    every assertion below meaningless.
+    """
     text = REPORT_MAP_H.read_text(encoding="utf-8")
+    defines = {m.group(1): int(m.group(2)) for m in re.finditer(r"#define\s+(\w+)\s+(\d+)\b", text)}
+
     start = text.index("kHidReportMap[] = {")
-    end = text.index("};", start)
-    body = text[start:end]
+    body = text[text.index("{", start) + 1: text.index("};", start)]
+
     values: list[int] = []
     for line in body.splitlines():
         line = re.sub(r"//.*$", "", line)
-        for token in re.findall(r"0x[0-9A-Fa-f]{2}", line):
-            values.append(int(token, 16))
+        for token in re.findall(r"0x[0-9A-Fa-f]{2}|[A-Za-z_]\w*", line):
+            if token.startswith("0x"):
+                values.append(int(token, 16))
+            elif token in defines:
+                values.append(defines[token])
+            else:
+                raise AssertionError(f"unresolved token in the report map: {token!r}")
     return values
 
 
@@ -517,24 +532,29 @@ def check_descriptor() -> None:
     inputs = result["inputs"]
     outputs = result["outputs"]
 
-    # Report ID 1 must be the 8-byte keyboard report; ID 2 the 2-byte consumer
-    # report. Anything else and the firmware would push reports of the wrong
-    # length, which Windows handles by silently dropping them.
+    # There must be exactly ONE input report, carrying 8 keyboard bytes plus the
+    # 16-bit consumer field. Two report IDs would mean two Report
+    # characteristics sharing UUID 0x2A4D, which the Arduino-ESP32 3.3.11 BLE
+    # wrapper cannot register - the second one is dropped from the service map,
+    # never gets its service pointer assigned, and notify() on it panics the
+    # chip. That was reproduced on hardware, so this assertion is a regression
+    # guard, not a style preference.
     check(
-        inputs.get(1) == 64,
-        f"keyboard input report 1 must be 64 bits (8 bytes), descriptor says {inputs.get(1)}",
+        len(result["inputs"]) == 1,
+        f"exactly 1 input report expected (risk of the two-characteristic crash), "
+        f"descriptor declares {sorted(result['inputs'])}",
+    )
+    check(
+        inputs.get(1) == 80,
+        f"input report 1 must be 80 bits (10 bytes: 8 keyboard + 2 consumer), descriptor says {inputs.get(1)}",
     )
     check(
         outputs.get(1) == 8,
         f"keyboard output (LED) report 1 must be 8 bits (1 byte), descriptor says {outputs.get(1)}",
     )
     check(
-        inputs.get(2) == 16,
-        f"consumer input report 2 must be 16 bits (2 bytes), descriptor says {inputs.get(2)}",
-    )
-    check(
-        len(result["inputs"]) == 2,
-        f"exactly 2 input reports expected, descriptor declares {sorted(result['inputs'])}",
+        2 not in inputs,
+        "report ID 2 must not be declared: it would need a second 0x2A4D characteristic",
     )
     check(
         result["collections"] == 2,
@@ -544,10 +564,20 @@ def check_descriptor() -> None:
 
     # Cross-check against the lengths the firmware actually sends.
     hid_header = (ROOT / "firmware" / "MiRemoteBridge" / "hid_report_map.h").read_text(encoding="utf-8")
-    kb_len = int(re.search(r"#define HID_KEYBOARD_REPORT_LEN\s+(\d+)", hid_header).group(1))
-    cons_len = int(re.search(r"#define HID_CONSUMER_REPORT_LEN\s+(\d+)", hid_header).group(1))
-    check(kb_len * 8 == inputs.get(1), f"HID_KEYBOARD_REPORT_LEN={kb_len} disagrees with the descriptor")
-    check(cons_len * 8 == inputs.get(2), f"HID_CONSUMER_REPORT_LEN={cons_len} disagrees with the descriptor")
+    report_len = int(re.search(r"#define HID_INPUT_REPORT_LEN\s+(\d+)", hid_header).group(1))
+    keys_off = int(re.search(r"#define HID_INPUT_OFFSET_KEYS\s+(\d+)", hid_header).group(1))
+    keys_cnt = int(re.search(r"#define HID_INPUT_KEY_COUNT\s+(\d+)", hid_header).group(1))
+    cons_off = int(re.search(r"#define HID_INPUT_OFFSET_CONSUMER\s+(\d+)", hid_header).group(1))
+
+    check(report_len * 8 == inputs.get(1), f"HID_INPUT_REPORT_LEN={report_len} disagrees with the descriptor")
+    check(
+        keys_off + keys_cnt == cons_off == 8,
+        f"field layout mismatch: keys end at {keys_off + keys_cnt}, consumer starts at {cons_off}",
+    )
+    check(
+        cons_off + 2 == report_len,
+        f"consumer field must be the last two bytes (offset {cons_off}, report {report_len} bytes)",
+    )
 
 
 def check_consumer_usage_range() -> None:
