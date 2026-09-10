@@ -38,7 +38,7 @@
 [   1240][BRIDGE ] console ready at 115200 baud
 [   1250][BRIDGE ] keymap: back=consumer_back power=kb_alt_f4 voice=kb_ralt_comma
 [   1300][BLE    ] host stack: nimble, own address: xx:xx:xx:xx:xx:xx
-[   1450][HID    ] HID peripheral up: name="Mi Remote Bridge" report-map 98 bytes, host stack nimble
+[   1450][HID    ] HID peripheral up: name="Mi Remote Bridge" report-map 90 bytes, host stack nimble
 [   1460][BRIDGE ] bridge running: dual role (central -> RC003, peripheral -> host)
 [   1500][RC     ] no bound remote yet - will scan and pair with the first Xiaomi remote it sees
 ```
