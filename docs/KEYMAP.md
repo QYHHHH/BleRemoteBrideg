@@ -143,71 +143,82 @@ map voice disabled
 
 ---
 
-## 5. HID 报告描述符
+## 5. HID 报告描述符与服务结构
 
-`firmware/MiRemoteBridge/hid_report_map.h` 只广播**一个输入报告（Report ID 1，10 字节）**，
-里面包含两个顶层应用集合：
+### 5.1 两个集合，各用自己的报告 ID
 
-| Report ID | 内容 | 长度 |
+`firmware/MiRemoteBridge/hid_report_map.h` 声明**两个顶层应用集合**，每个集合**独占一个报告 ID**：
+
+| Report ID | 集合 | 长度 | 字节含义 |
+| --- | --- | --- | --- |
+| 1 | Keyboard | 8 字节 | `[修饰键, 保留, k0..k5]` |
+| 2 | Consumer Control | 2 字节 | 16 位 Usage，小端，`0x0000` = 无 |
+
+描述符全长 72 字节，**没有输出（Output）报告**。
+
+对应的 GATT 结构里因此有**两条 `0x2A4D`（Report）特征**，靠各自的
+**Report Reference 描述符（`0x2908`）** 区分：
+
+```
+0x2A4D 特征 A  ── Report Reference {报告 ID 1, 类型 Input} ── 键盘集合  → Windows 绑 kbdhid
+0x2A4D 特征 B  ── Report Reference {报告 ID 2, 类型 Input} ── Consumer  → Windows 认音量/媒体
+```
+
+**为什么必须两条同 UUID 特征**：HOGP 规定"每个（报告 ID，报告类型）对应一条 Report 特征"。
+而 HID 服务里 Report 特征的 UUID **只有 `0x2A4D` 一个**——它区分的是"类型"不是"实例"，
+区别在 Report Reference 里。所以两条特征必然同 UUID。罗技等真实蓝牙键盘就是这么做的。
+
+### 5.2 服务层为什么绕过了 `BLEHIDDevice`
+
+Arduino-ESP32 3.3.11 的 `BLEService` 用 `std::map<std::string, BLECharacteristic*>` 存特征，
+**假设一个 UUID 对应一个特征**。`addCharacteristic()` 遇到重复 UUID 时**不把第二个写进 map**，
+于是它既进不了 GATT 表，也永远不会被调 `executeCreate()`——而 `BLECharacteristic` 构造函数
+**不初始化 `m_pService`**，只有 `executeCreate()` 会赋值，结果是 `notify()` 读野指针 →
+`Load access fault` 崩溃（真机复现过）。
+
+这条路堵死了：
+- `BLEUUID::toString()` 对 `0x2A4D` 的 16 位 / 32 位 / 128 位三种写法**输出同一个字符串**，
+  所以"换个写法骗过判重"不可行；
+- `executeCreate()` 是 private，无法手动调用；
+- `BLEServer` 判重那段代码在 `#if CONFIG_NIMBLE_ENABLED` **之前**，换 Bluedroid 一样无效。
+
+而 **NimBLE 本身没有这条限制**：`ble_gatt_svc_def` 就是一个数组，同 UUID 重复完全合法。
+所以 HID / 设备信息 / 电池三个服务改由 `hid_gatt.cpp` 直接用 NimBLE 构建，
+其余部分（`BLEDevice` / `BLEServer` / 广播 / RC003 那一侧 / 配对与 Bond）仍走封装层。
+
+### 5.3 走过的两条弯路（都已在真机复现）
+
+| 尝试 | 描述符 | 结果 |
 | --- | --- | --- |
-| 1 | 键盘集合：`[修饰键, 保留, k0..k5]` | 8 字节（偏移 0–7）|
-| 1 | Consumer Control 集合：16 位 Usage，小端，`0x0000` = 无 | 2 字节（偏移 8–9）|
+| ① 两集合共用报告 ID 1 + 一条特征 | 90 字节，含 LED 输出 | Windows `Code 10`，问题状态 `0xC0110002` |
+| ② 同上但删掉 LED 输出 | 72 字节，无输出 | **错误码一字不差**——LED 不是原因 |
+| ③ 诊断：合并成**一个**顶层集合 | 65 字节 | **通过**（`Status=OK`，绑 `kbdhid`）|
+| ④ 两集合、**各自报告 ID**、两条特征 | 72 字节 | 正确结构（本版）|
 
-**只有输入报告，没有输出报告。** 描述符全长 72 字节。
+`0xC0110002` = `HIDP_STATUS_INVALID_REPORT_TYPE`。**合法 HID 不等于 Windows 接受**——
+Windows 的 BLE HID 栈不接受两个顶层集合共用一条 Report 特征。
+完整取证见 `docs/TESTING.md` §4.5 / §4.6。
 
-标准 USB 键盘描述符里通常还有一个 1 字节的 LED 输出报告，这里**故意不声明**——原因见下面
-"为什么删掉了 LED 输出报告"一节。总之一句话：**描述符里声明的每一种报告，都必须有对应类型的
-Report 特征**，而本固件只建了 Input 那一条。
+> 教训：一个"更简洁"的设计如果偏离了所有可用实现的做法，先查有没有人这么干成过，
+> 而不是先假定"合法就够了"。
 
-两个集合同用一个 Report ID 是合法的：HID 只要求 Report ID 在同一报告类型内唯一，
-不要求每个集合一个；共用 ID 的集合其字节按顺序拼接，Windows 照常枚举出
-"键盘 + 消费类控制设备"。
+### 5.4 为什么没有输出（LED）报告
 
-**为什么不用"键盘 ID 1 / 媒体键 ID 2"这种更常见的布局**：HOGP 把每个 Report ID 映射到
-一个 Report 特征，两个 ID 就意味着两个同为 `0x2A4D` 的特征。而 Arduino-ESP32 3.3.11
-的 BLE 封装层**无法注册两个同 UUID 的特征**：
+标准 USB 键盘描述符里有一个 1 字节的 LED 输出报告。**HOGP 下不能照抄**：描述符里声明的
+每一种报告都必须有对应类型的 Report 特征，而本固件不驱动 LED。
+而且 `BLEHIDDevice::outputReport()` 建的是第二个 `0x2A4D`，正是需要避开的那条路。
 
-- `BLEService::addCharacteristic()` 检测到重复 UUID 后**不把第二个写进服务映射表**；
-- 于是它既不会进入 GATT 表，也永远不会被调用 `executeCreate()`；
-- 而 `BLECharacteristic` 构造函数**不初始化 `m_pService`**，只有 `executeCreate()` 会赋值；
-- 结果 `notify()` 里 `getService()->getServer()` 读到野指针 → `Load access fault` 崩溃。
+> 注意：删掉 LED 输出**没有**修好 Code 10（见 5.3 的第 ② 行）。它本身是对的清理，
+> 但不是那次故障的原因，**别把它当成故障原因记**。
 
-这个崩溃**已在真机上复现**（`docs/TESTING.md` §3），库自带的 `Server_Gamepad` 示例
-只创建了一个 input report，所以上游从未走过这条路径。共用 Report ID 既绕开了这个缺陷，
-又不必去改仓库外的核心库。
+### 5.5 回归防护
 
-### 为什么删掉了 LED 输出报告（真机故障复盘）
+`tests/model/check_vectors.py` 会实际解析这份描述符并断言：
 
-标准 USB 键盘描述符里有一个 1 字节的 LED 输出报告，本文件原来照抄了它。**这在 HOGP 下是错的。**
-
-HOGP 的规则是：**描述符里声明的每一种报告，都必须有一条对应类型的 Report 特征。**
-而 `BLEHIDDevice::inputReport()` 只建了 **Input** 那一条（Report Reference = `{1, 0x01}`）。
-于是 Windows 被告知"报告 ID 1 有一个 Output 报告"，去找对应的特征时只找到标着 "input" 的，
-直接判定**报告类型无效**：
-
-```
-设备 {00001812-...} 在启动时出现问题
-  驱动程序: hidbthle.inf   服务: mshidumdf
-  问题: 0xA（Code 10 / CM_PROB_FAILED_START）
-  问题状态: 0xC0110002       ← HIDP_STATUS_INVALID_REPORT_TYPE
-```
-
-而且**只有 HID 这一个服务失败**，GAP / GATT / 设备信息 / 电池四个服务全部正常启动，
-蓝牙层的配对也已经成功 —— 正是这些旁证把嫌疑锁定在描述符，而不是射频或安全配置。
-
-**为什么不是"加一条 output 特征"来配对**：`BLEHIDDevice::outputReport()` 建的是第二个
-`0x2A4D` 特征，会直接踩上面那个重复 UUID 的坑，特征根本不会出现在 GATT 表里。
-本固件从不驱动键盘 LED，所以删掉这个声明既是对的，也是唯一可行的修法。
-
-### 回归防护
-
-`tests/model/check_vectors.py` 会实际解析这份描述符，并断言：
-
-- **恰好一个**输入报告，且为 80 位（10 字节）——针对重复 UUID 崩溃的回归防护；
-- **不得声明 Report ID 2**，否则又会需要第二个 `0x2A4D` 特征；
-- **不得声明任何输出报告**——针对上面这个 Code 10 的回归防护；
-- `hid_report_map.h` 里的偏移常量与描述符一致（键区结束处正好是 consumer 字段起点）。
-
+- **恰好两个**输入报告，报告 ID 为 **1（64 位）和 2（16 位）**；
+- **恰好两个**顶层应用集合，且不嵌套；
+- **不得声明任何输出报告**；
+- `hid_report_map.h` 里的常量（报告 ID、长度、键区偏移）与描述符逐项一致。
 
 ---
 

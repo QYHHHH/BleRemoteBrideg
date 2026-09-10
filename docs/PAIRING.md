@@ -144,10 +144,13 @@ connect c0:5d:39:xx:xx:xx random
 
    ```
    [  xx][WIN    ] host connected (id 1 addr xx:xx:.. mtu 517 total 1)
-   [  xx][WIN    ] report 1 notifications ENABLED (handle 1)
+   [  xx][WIN    ] report 1 (keyboard) notifications ENABLED
+   [  xx][WIN    ] report 2 (consumer) notifications ENABLED
    ```
 
-   `report 1 notifications ENABLED` 是关键：**只有这一行出现后，Windows 才会真正接收按键**。
+   这两行是关键：**只有它们出现后，Windows 才会真正接收按键**。
+   `report 1` 是键盘（8 字节报告），`report 2` 是消费类媒体键（2 字节报告）——
+   它们对应 HID 服务里**两条同为 `0x2A4D`、靠 Report Reference 区分**的特征。
    如果连接了但没有这一行，说明 Windows 还没完成 HID 枚举，稍等几秒或断开重连。
 
 6. Windows 里应出现：
@@ -175,7 +178,7 @@ connect c0:5d:39:xx:xx:xx random
 | 现象 | 检查 |
 | --- | --- |
 | Windows 列表里没有设备 | `status` 看是否在广播；`forget win` 强制重广播；关/开 Windows 蓝牙 |
-| 已连接但按键没反应 | 确认日志里有 `report 1 notifications ENABLED` |
+| 已连接但按键没反应 | 确认日志里有 `report 1 (keyboard) notifications ENABLED`；媒体键还要看 `report 2` |
 | 显示为"未知设备" | 删除该配对，`forget win`，再重新配对（有时 Windows 会缓存旧的描述符） |
 | 出现按键卡住 | 不应当发生；把 `raw on` 日志附上并记下按下的键。任一侧断线都会触发 `releaseAll()` |
 

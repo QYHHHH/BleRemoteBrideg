@@ -84,3 +84,26 @@
 ## 3. 本项目的许可证
 
 本仓库源码以 **MIT** 许可发布，见根目录 `LICENSE`。
+
+---
+
+## 3. NimBLE-Arduino（仅作为实现方式的核实依据）
+
+| 项目 | 内容 |
+| --- | --- |
+| 仓库 | https://github.com/h2zero/NimBLE-Arduino |
+| 许可证 | Apache License 2.0 |
+| 使用方式 | **未引入、未链接、未复制代码。** 仅在排查 §4.6 时阅读其 `NimBLEService.cpp`，用来核实"底层 NimBLE 是否允许一个服务里有两条同 UUID 特征"这个问题 |
+
+**为什么值得记录**：本项目的 `hid_gatt.cpp` 之所以能给出两条 `0x2A4D` 特征，前提是
+"NimBLE 本身没有 UUID 唯一性限制"。这个结论是通过阅读 NimBLE-Arduino 的实现得到的——
+它用 `std::vector` 存特征，`addCharacteristic()` 只比较指针而不比较 UUID，`getCharacteristic()`
+甚至带 `idx` 参数用于取"同 UUID 的第几条"。
+
+不过它所采用的做法（构建 `ble_gatt_chr_def[]` → `ble_gatts_count_cfg()` →
+`ble_gatts_add_svcs()`）**与 Arduino-ESP32 核心自带的 `BLEService::start()` 完全一致**——
+本项目也是照这条既有路径写的，并未搬运 NimBLE-Arduino 的代码。
+
+本项目仍然只使用 Arduino-ESP32 核心自带的 NimBLE 主机栈，**没有引入任何第三方 BLE 库**。
+
+---

@@ -12,7 +12,7 @@
 | L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11095, failed: 0` |
 | L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `137 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
 | L4 上游（RC003 → C3） | 扫描、直连、配对加密、服务发现、订阅通知、逐键解析 | **通过** | 13/13 键识别，0 未知码；延迟 min 190 / median 215 / max 361 µs（§5.1、§5.2）|
-| L4 下游（C3 → Windows） | Windows 识别为蓝牙键盘 | **通过**（键盘键）；媒体键待恢复 | 根因是"两个顶层集合共用一条 Report 特征"；改单集合后 Windows `Status=OK`、绑定 `kbdhid`，详见 §4.6 |
+| L4 下游（C3 → Windows） | 键盘 + 媒体键 | 键盘**已通过**（`Status=OK`、`kbdhid`）；媒体键结构已改为两报告 ID，**未上机复验** | 见 §4.6（根因）与 §4.7（自建服务层）|
 | L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **未验证** | §5.3 |
 
 已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`；
@@ -91,12 +91,14 @@ python tests/model/check_vectors.py
 6. **未知码全覆盖检查**：遍历 0x00–0xFF，任何非已知键码都必须映射为"无"——保证不会把杂散字节
    当按键发出去。
 7. **HID 报告描述符解析**：真实解析 `hid_report_map.h` 的字节流，断言
-   - 恰好 **一个** 输入报告：Report ID 1 = 80 bit（10 字节 = 8 键盘 + 2 Consumer）
-   - **不得声明任何输出报告**（HIDP_STATUS_INVALID_REPORT_TYPE 的回归防护，见 §4.5）
-   - **不得声明 Report ID 2**（那会需要第二个同 UUID 的特征，见 §4.2）
-   - 只有 2 个顶层 Collection、Collection 不嵌套
+   - **恰好两个**输入报告：Report ID 1 = 64 bit（8 字节键盘）、Report ID 2 = 16 bit（2 字节 Consumer）
+   - **恰好两个**顶层 Collection、Collection 不嵌套
+   - **不得声明任何输出报告**（HOGP 要求每种报告都有对应类型的特征）
    - Array 项的 Usage Maximum 不超过 Logical Maximum
-   - 字段偏移常量（`HID_INPUT_OFFSET_*`）与描述符逐项一致
+   - `hid_report_map.h` 里的常量（报告 ID、两个报告长度、键区偏移）与描述符逐项一致
+
+   这几条都不是风格偏好，是三次真机故障换来的：两集合共用一个报告 ID → Windows `Code 10`
+   （§4.6）；报告类型对不上 → 同样的 `0xC0110002`（§4.5）。
 8. **随机不变量测试**（4000 步，固定种子 20260910）：随机产生按下/松开/重复/强制全松开序列，
    每一步都断言
    - 主机侧同时按下的键**至多 1 个**；
@@ -392,6 +394,28 @@ Arduino 封装层做不到（见上），所以下一步是**绕过 `BLEHIDDevic
 日志里出现 `host READ 00002a4b-...` 就证明主机确实重新读了报告描述符，诊断才成立。
 
 ---
+
+### 4.7 自建 HID 服务（修复 4.6 的根因）
+
+§4.6 证实"两个顶层集合共用一条 Report 特征"是 Windows 不肯启动的原因。
+正确结构需要**两条同为 `0x2A4D` 的 Report 特征**，而 Arduino 封装层做不到（原因见
+`hid_gatt.h` 的注释）。因此新增 `hid_gatt.cpp`，用 NimBLE 的 `ble_gatt_svc_def`
+直接构建 HID（0x1812）/ 设备信息（0x180A）/ 电池（0x180F）三个服务。
+
+**改动范围**：
+
+| 文件 | 作用 |
+| --- | --- |
+| `hid_gatt.h` / `hid_gatt.cpp`（新增，约 420 行） | 服务定义、访问回调、订阅监听、通知发送 |
+| `hid_report_map.h` | 恢复两集合，每个集合**自己的报告 ID**（1 键盘 8 字节 / 2 Consumer 2 字节）|
+| `hid_server.cpp` | 内部改用 `hid_gatt`；**对外 API 一字未改** |
+| `hid_report_map.h` 常量 / `selftest.cpp` / `check_vectors.py` | 同步为新布局 |
+
+**没有改动**：`ble_core`、`ble_bonds`、`rc003_client`、`keymap`、`event_bus`、`bridge`、`cli`。
+RC003 那一侧和配对/Bond 逻辑完全不受影响。
+
+**状态**：编译通过（0 warning，685939 B），模型检查 11096/0。
+**尚未上机**——烧录时板子的 USB 串口消失（`CM_PROB_PHANTOM`），未能烧入。
 
 ## 5. L4 实机验收清单（部分完成）
 
