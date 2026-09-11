@@ -179,38 +179,19 @@ void handleReset() {
   sendJson(200, "{\"ok\":true}");
 }
 
-// GET / - the page is ~48 KB of PROGMEM.
+// GET / - the page lives in PROGMEM.
 //
-// It must NOT go out through a single send_P(): that hands the whole buffer to
-// lwIP at once, which needs a large contiguous block. With the AP up the free
-// heap is only ~20 KB and the largest block ~7 KB, so the transfer dies half
-// way and the server stops answering afterwards (measured on hardware
-// 2026-09-11: page served 0 bytes, /api/bindings then silent, heap min 472 B).
-// Stream it in 1 KB chunks with chunked transfer encoding instead, so the peak
-// allocation is one chunk regardless of page size.
-void handleRoot() {
-  static const size_t kChunk = 1024;
-  const size_t total = strlen_P(kIndexHtml);
-
-  s_server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  s_server->send(200, "text/html", "");
-
-  char buf[kChunk];
-  for (size_t off = 0; off < total; off += kChunk) {
-    if (!s_server->client().connected()) break;
-    const size_t n = (total - off < kChunk) ? (total - off) : kChunk;
-    memcpy_P(buf, kIndexHtml + off, n);
-    s_server->sendContent(buf, n);
-    // Give lwIP a chance to drain between chunks; without this the send queue
-    // grows faster than the link and the heap goes with it.
-    yield();
-  }
-  s_server->sendContent("", 0);  // terminating chunk
-  // The library does not restore this itself (_finalizeResponse only closes
-  // chunking), and leaving it UNKNOWN would make every later JSON response
-  // chunked too.
-  s_server->setContentLength(CONTENT_LENGTH_NOT_SET);
-}
+// IMPORTANT - page size is a hard budget, see docs/TESTING.md 4.13:
+//   * 13087 B served fine (the original page);
+//   * 47845 B did NOT: send_P() hands the whole buffer to the socket in one
+//     call, NetworkClient::write() gives up after WIFI_CLIENT_MAX_WRITE_RETRY
+//     and returns a PARTIAL count, the rest is silently dropped, and the HTTP
+//     server stops answering afterwards.
+// A hand-rolled flow-controlled loop (retry on partial writes, wait while the
+// send buffer is full) was tried as well and still failed on hardware, so it
+// was removed rather than shipped unverified. Keep this file small and re-test
+// on the board before claiming the page works.
+void handleRoot() { s_server->send_P(200, "text/html", kIndexHtml); }
 
 void handleNotFound() { s_server->send(404, "text/plain", "not found"); }
 

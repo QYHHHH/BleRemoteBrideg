@@ -605,18 +605,29 @@ AP 本身约吃 38 KB；BLE 两条链路再把堆压到 13 KB 量级。
 失效的是下游 —— 日志里 `host connected: no (0)`，按键没有接收方。
 `wifi off` 后堆回到 ~50 KB，桥接器恢复正常。
 
-**页面体积红线**：旧版 13087 B 真机可用；新版 47845 B 不可用。
+**页面体积红线（实测三档）**
 
-**下一步（未做，二选一）**
+| 页面大小 | 发送方式 | 结果 |
+| --- | --- | --- |
+| 13087 B | `send_P` | ✅ 可用（原版页面） |
+| 21482 B | `send_P` | ❌ 200 但 0 字节，之后服务卡死 |
+| 21482 B | 1 KB 分块 + 无流控 | ❌ 只到 29696/47845 字节后卡死 |
+| 47845 B | `send_P` | ❌ 同上 |
 
-1. 把页面压到 ~13–16 KB（旧版大小是已验证可行值）；或
-2. gzip 预压缩（约 10 KB）+ 正确的 TCP 流控，保住现有设计。
+**所以可用上限在 13 KB 附近**，不是"越大越危险"的渐进关系，而是超过某个点就完全发不出去。
+根因：`NetworkClient::write_P()` 只是 `write()`（flash 内存映射，不需要大缓冲），
+而 `write()` 在 `WIFI_CLIENT_MAX_WRITE_RETRY` 次重试后**返回部分写入量**，
+`send_P` 不看返回值 → 剩余字节被静默丢弃，HTTP 服务随后不再应答。
 
-无论哪条，`handleRoot()` 都必须加 `availableForWrite()` 流控。
+**试过但失败的方案**：`availableForWrite()` 式流控循环（1 KB 缓冲 + 按返回值重试 + 缓冲满时 `delay(2)`）
+在真机上**仍然失败**（21.5 KB 依旧 0 字节），因此**已回退**，不作为未验证代码留在树里。
+
+**下一步（未做）**：把页面压到 ≤ 13 KB（旧版大小），再上机复测。
 **在真机复测通过之前，不得声称 Web UI 真机可用。**
 
-**已保留的诊断（有价值）**：`wifi status` 打印 `stations` / `AP IP` / `heap free`；
-AP 事件打印 station joined / left(reason) / **got an IP** ——
+**已验证可用的诊断（保留）**：`wifi status` 打印 `stations` / `AP IP` / `heap free`；
+AP 事件打印 station joined / left(reason) / **got an IP**。
+真机确认过 `station left (aid 1, reason 2)` 与 `AP stopped, heap back to 49484 B`。
 `STAIPASSIGNED` 只在 DHCP 真的发出地址时触发，是区分"连不上"与"连上但无租约"的关键。
 
 ---

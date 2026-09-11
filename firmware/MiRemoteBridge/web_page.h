@@ -1,118 +1,219 @@
 /*
- * MiRemoteBridge - self-contained, offline Web UI served from PROGMEM.
- * Independent implementation inspired by user-provided control-surface references.
- * One physical key -> one HID action; no gesture recognition or audio features.
+ * MiRemoteBridge - Web UI page, served from PROGMEM.
+ *
+ * SIZE IS A HARD CONSTRAINT. The ESP32-C3 runs BLE and Wi-Fi on one radio; with
+ * the config AP up the free heap is only ~13-20 KB. A 47.8 KB page could not be
+ * sent at all (docs/TESTING.md 4.13). Keep this file around 13-16 KB: compact
+ * CSS/JS and Unicode glyphs instead of inline SVG. Check with:
+ *   python tests/tools/web_ui_preview.py   (prints the page size)
+ *
+ * One physical key maps to exactly one HID action; presses and releases are
+ * forwarded live. No gestures, macros or audio.
+ *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #pragma once
 #include <pgmspace.h>
 
 static const char kIndexHtml[] PROGMEM = R"rawliteral(<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light">
-<title>MiRemoteBridge · 遥控器控制台</title>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><title>MiRemoteBridge 按键映射</title>
 <style>
-:root{--bg:#f6f7f9;--surface:#fff;--line:#e6e8ec;--ink:#252931;--muted:#78818e;--blue:#1674ed;--blue-soft:#edf5ff;--green:#328564;--green-soft:#edf7f1;--orange:#aa6d22;--shadow:0 5px 22px #26324904}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}button,input,select{font:inherit}button,a,input,select{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.48}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #1674ed66;outline-offset:3px}button{color:inherit}a{color:var(--blue)}[hidden]{display:none!important}h1,h2,h3,p{margin:0}h1{font-size:27px;letter-spacing:-.8px;line-height:1.4}h2{font-size:17px;font-weight:650}h3{font-size:14px;font-weight:600}.muted{color:var(--muted)}.mono{font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.8px}.icon{width:19px;height:19px;display:inline-block;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:middle}.topbar{height:77px;display:flex;align-items:center;padding:0 31px;border-bottom:1px solid var(--line);background:#ffffffed;gap:25px}.brand{display:flex;gap:11px;align-items:center;text-decoration:none;color:var(--ink)}.brand-mark{width:34px;height:34px;border-radius:10px;background:#eef3fa;color:#334e71;display:grid;place-items:center}.brand-mark .icon{width:24px;height:24px}.brand b{display:block;font-size:14px;letter-spacing:-.2px}.brand small{display:block;font-size:9px;color:var(--muted);letter-spacing:1.35px}.top-divider{height:25px;width:1px;background:var(--line)}.crumb{font-size:14px;font-weight:600}.top-right{margin-left:auto;display:flex;align-items:center;gap:18px}.local-label{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}.status-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;background:#f1f3f5;border:1px solid var(--line);border-radius:7px;font-size:11px;color:var(--muted)}.dot{width:6px;height:6px;background:currentColor;border-radius:50%;display:inline-block;flex:none}.good{color:var(--green)}.status-pill.good{background:var(--green-soft);border-color:#dbece2}.warn{color:var(--orange)}.shell{display:flex;min-height:calc(100vh - 77px)}.sidebar{width:91px;flex:none;border-right:1px solid var(--line);background:#fff;display:flex;align-items:center;flex-direction:column;padding:27px 9px 20px;gap:12px}.nav-btn{display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;width:70px;min-height:65px;text-decoration:none;border-radius:10px;color:#89919c;font-size:11px}.nav-btn .icon{width:21px;height:21px}.nav-btn:hover{background:#f7f8fa}.nav-btn.active{color:var(--blue);background:var(--blue-soft);font-weight:650}.nav-bottom{margin-top:auto;color:#a6adb7;font-size:9px;letter-spacing:1px;writing-mode:vertical-rl;padding-top:30px}.main{width:100%;min-width:0;max-width:1320px;margin:0 auto;padding:35px 42px 20px}.page-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:25px}.eyebrow{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted);letter-spacing:1.7px;margin-bottom:9px}.eyebrow:before{content:"";width:19px;height:2px;background:#72a58e}.subtitle{font-size:12px;color:var(--muted);margin-top:6px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:38px;border:1px solid #dfe3e9;border-radius:7px;background:#fff;padding:8px 15px;font-size:12px;text-decoration:none;color:var(--ink);white-space:nowrap}.btn:hover{background:#f8fafc;border-color:#c6ced9}.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.btn.primary:hover{background:#0966d9}.btn.soft{background:#f5f7fa}.btn.icon-only{width:38px;padding:8px}.btn.danger{color:#b45345}.btn .icon{width:15px;height:15px}.panel{border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:var(--shadow)}.hero{display:grid;grid-template-columns:1fr 260px;min-height:264px;overflow:hidden}.hero-copy{padding:35px 34px;display:flex;flex-direction:column;justify-content:center}.hero h1{font-size:32px;margin:4px 0 10px}.hero p{font-size:13px;color:var(--muted);max-width:500px}.hero-actions{display:flex;gap:9px;margin-top:23px}.hero-art{background:#f0f2f3;position:relative;display:flex;align-items:center;justify-content:center;gap:19px;border-left:1px solid var(--line);overflow:hidden}.hero-art:before{content:"";position:absolute;width:260px;height:260px;border:1px solid #e5e8e9;border-radius:50%;left:65px;top:20px}.hero-art:after{content:"";position:absolute;width:310px;height:310px;border:1px solid #e9eced;border-radius:50%;left:40px;top:-5px}.hero-meta{z-index:1;align-self:center;font-size:11px;line-height:2}.hero-meta strong{font-size:15px}.hero-meta .battery-text{font-size:11px;color:#6c7780;display:block;margin-top:6px}.mini-remote{position:relative;width:72px;height:226px;flex:none;z-index:1;filter:drop-shadow(7px 11px 8px #2631351a)}.mini-remote .remote-body{transform:scale(.514);transform-origin:top left;position:absolute;top:0;left:0}.summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}.metric{padding:18px 22px;display:flex;gap:14px;align-items:center}.metric-icon,.check-icon{background:#f5f7f8;border:1px solid var(--line);border-radius:9px;color:#7b8995;display:grid;place-items:center;width:39px;height:39px;flex:none}.metric strong{font-size:17px;font-weight:600;display:block}.metric small{font-size:11px;color:var(--muted)}.home-bottom{display:grid;grid-template-columns:minmax(0,1fr) 263px;gap:21px;margin-top:29px}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-head small{color:var(--muted);font-size:11px}.checks{padding:0 20px}.check-row{display:flex;align-items:center;gap:14px;padding:20px 0;border-bottom:1px solid #eef0f3}.check-row:last-child{border-bottom:0}.check-row p{font-size:11px;color:var(--muted);margin-top:3px}.check-icon{width:33px;height:33px;border-radius:7px}.check-state{margin-left:auto;white-space:nowrap;font-size:11px;padding-left:8px;display:flex;align-items:center;gap:5px}.quick-panel{padding:19px 20px}.quick-panel h2{margin-bottom:11px}.quick-link{display:flex;text-align:left;align-items:center;gap:11px;text-decoration:none;width:100%;color:var(--ink);background:none;border:0;border-bottom:1px solid #eef0f3;padding:13px 0}.quick-link .icon{color:#8c98a4}.quick-link strong{font-size:12px;display:block}.quick-link small{color:var(--muted);font-size:10px;display:block;margin-top:2px}.quick-link .chevron{margin-left:auto;font-size:17px;color:#b0b6be}.local-note{display:flex;align-items:flex-start;gap:9px;font-size:10px;color:var(--muted);margin-top:16px}.local-note .icon{width:14px;height:14px;color:#80a491;margin-top:2px}.footer{display:flex;justify-content:space-between;align-items:center;color:#929aa5;font-size:10px;margin-top:26px;padding-top:12px;gap:10px}.footer .mono{font-size:9px}.connection-card{background:#fff;border:1px solid var(--line);padding:10px 16px;border-radius:9px;display:flex;align-items:center;gap:13px;font-size:11px;min-width:220px}.connection-card .icon{color:#8492a1}.connection-card b{display:block;font-size:12px}.connection-card small{color:var(--muted);font-size:10px}.map-bar{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:15px 21px;border-bottom:1px solid var(--line)}.map-bar .legend{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}.legend .swatch{width:7px;height:7px;border-radius:2px;background:var(--blue)}.map-layout{display:grid;grid-template-columns:minmax(0,1fr) 250px minmax(0,1fr);gap:0;position:relative;padding:23px 25px 22px;align-items:center}.key-col{display:flex;flex-direction:column;gap:10px;z-index:1}.key-card{border:1px solid #e7e9ed;background:#f9fafb;border-radius:9px;overflow:hidden;transition:border-color .15s,background .15s}.key-card.selected{background:#edf5ff;border-color:#9bc5fb;box-shadow:0 0 0 1px #b7d5fd30}.key-slot{width:100%;text-align:left;background:none;border:0;padding:9px 12px;display:block;min-height:75px}.key-top{display:flex;align-items:center;gap:7px;line-height:1.6;font-size:12px}.key-top .icon{width:15px;height:15px;color:#67717d}.key-top .tag{font-size:9px;color:#8d96a1;margin-left:auto;letter-spacing:.4px}.key-card.custom .tag{color:var(--blue)}.key-bottom{display:flex;align-items:center;justify-content:space-between;padding-top:6px;gap:8px}.key-action{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.key-edit{font-size:10px;color:#9aa3af}.key-card.selected .key-edit,.key-card.selected .key-top .icon{color:var(--blue)}.key-card:hover{border-color:#b2c9e6}.remote-stage{position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;z-index:1;pointer-events:none}.remote-body{width:140px;height:440px;border:1px solid #bfc4c7;border-radius:16px 16px 20px 20px;background:linear-gradient(90deg,#c6c9cb 0%,#e4e5e4 7%,#f2f2f0 43%,#e5e5e3 91%,#b9bdbf 100%);position:relative;box-shadow:8px 13px 20px #27344210,inset 1px 0 0 #ffffffbb;flex:none;pointer-events:auto}.remote-body:after{content:"RC003";position:absolute;bottom:31px;width:100%;text-align:center;font:10px ui-monospace,Consolas,monospace;letter-spacing:3px;color:#a3a7a9}.remote-button{position:absolute;display:grid;place-items:center;padding:0;width:34px;height:34px;border:1px solid #61666a;background:#53595d;color:#f4f5f5;border-radius:50%;font-size:12px;box-shadow:inset 0 1px 1px #ffffff25}.remote-button .icon{width:16px;height:16px}.remote-button:hover{background:#606d7a}.remote-button.selected{color:#fff;background:#327ede;border-color:#286eca;box-shadow:0 0 0 3px #72a9f333}.remote-button.top{top:18px;background:#e9eae8;color:#646b71;border:1px solid #a4aaae;width:27px;height:27px}.remote-button.top.selected{color:var(--blue);background:#ecf4ff;border-color:var(--blue)}.r-power{left:20px}.r-voice{right:20px}.dpad{position:absolute;width:110px;height:110px;left:14px;top:59px;border-radius:50%;background:#4c5255;border:1px solid #353b3e;box-shadow:inset 0 2px 2px #ffffff12}.dpad .remote-button{border:0;box-shadow:none;background:transparent;width:32px;height:28px;color:#b7bfc5}.dpad .remote-button.selected{background:#327ede;color:white}.dpad .remote-button .icon{width:13px;height:13px}.dpad .r-up{left:38px;top:0}.dpad .r-down{left:38px;bottom:0}.dpad .r-left{left:0;top:40px;width:27px}.dpad .r-right{right:0;top:40px;width:27px}.dpad .r-ok{left:28px;top:28px;width:52px;height:52px;border-radius:50%;border:1px solid #363d40;background:#555c61;color:#dfe4e6;font-size:9px}.dpad .r-ok.selected{background:#327ede;border-color:#438feb}.r-back{left:25px;top:186px}.r-home{left:25px;top:232px}.r-menu{left:25px;top:278px}.r-plus{right:25px;top:186px;border-radius:18px 18px 6px 6px;height:41px}.r-minus{right:25px;top:228px;border-radius:6px 6px 18px 18px;height:40px}.r-tv{right:25px;top:278px}.remote-caption{text-align:center;font-size:9px;color:#97a0aa;line-height:1.9}.remote-caption b{color:#6d7781;font-size:10px;font-weight:500;display:block;letter-spacing:1.8px}.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}.wires path{fill:none;stroke:#dce1e7;stroke-width:1;vector-effect:non-scaling-stroke}.wires path.active{stroke:#64a4f4;stroke-width:1.5}.map-foot{display:flex;align-items:center;justify-content:space-between;gap:17px;padding:17px 23px;border-top:1px solid var(--line)}.map-foot p{font-size:11px;color:var(--muted)}.map-foot strong{font-size:12px;display:block;font-weight:500;color:#5b6672}.map-foot .buttons{display:flex;gap:8px}.scope-note{font-size:11px;color:#919aa4;display:flex;gap:7px;align-items:flex-start;margin-top:14px}.scope-note .icon{width:14px;height:14px;margin-top:2px}.device-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.device-panel{padding:24px}.device-panel h2{margin-bottom:18px}.detail-row{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid #eef0f3;padding:12px 0;font-size:12px}.detail-row dt{color:var(--muted)}.detail-row dd{margin:0;overflow-wrap:anywhere;text-align:right}.help-block{margin-top:20px;padding:23px}.help-block p{font-size:12px;color:var(--muted);margin-top:7px}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:21px}.step{font-size:12px;color:#697482}.step span{font-size:10px;color:var(--blue);display:block;margin-bottom:7px;letter-spacing:1px}.step code{background:#f1f4f8;padding:2px 6px;border-radius:4px;color:#47566a}.notice{background:#fff8ee;border:1px solid #f1dfc4;border-radius:8px;padding:12px 16px;color:#906b34;font-size:12px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:15px}.demo-notice{background:#edf4fc;border-color:#d4e3f6;color:#567898}.notice button{background:none;border:0;color:inherit;font-size:12px;text-decoration:underline;white-space:nowrap}.editor{border:1px solid var(--line);border-radius:15px;padding:0;width:min(484px,calc(100vw - 30px));max-height:calc(100dvh - 40px);overflow:auto;color:var(--ink);box-shadow:0 25px 90px #1d2e442b}.editor::backdrop{background:#26354b38;backdrop-filter:blur(3px)}.editor-head{display:flex;align-items:center;justify-content:space-between;padding:22px 25px 18px;border-bottom:1px solid var(--line)}.editor-head h2{font-size:18px}.editor-head small{font-size:10px;color:var(--muted)}.editor-body{padding:21px 25px}.field{display:block;font-size:12px;color:#67717e;margin-bottom:16px}.field select{display:block;width:100%;margin-top:7px;border:1px solid #dce1e8;border-radius:7px;background:#fff;color:var(--ink);padding:10px;font-size:13px;min-height:42px}.mod-label{font-size:12px;color:#67717e;margin-bottom:8px}.mods{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:16px}.mod{background:#f6f8fa;border:1px solid var(--line);border-radius:6px;font-size:11px;padding:8px 3px}.mod[aria-pressed="true"]{background:var(--blue-soft);color:var(--blue);border-color:#a1c9fd}.preview-action{padding:14px 16px;background:#f6f8fb;border:1px solid var(--line);border-radius:8px;font-size:16px;font-weight:600;line-height:1.9;margin-top:12px}.preview-action small{font-size:10px;font-weight:400;display:block;color:var(--muted)}.editor-note{font-size:11px;color:var(--muted);line-height:1.9;margin-top:13px}.editor-actions{display:flex;justify-content:flex-end;gap:8px;padding:17px 25px;border-top:1px solid var(--line)}.editor-actions .reset-one{margin-right:auto;background:none;border:0;font-size:11px;color:#788698;padding:0}.inline-error{font-size:12px;line-height:1.8;color:#b04937;background:#fff4f0;border-radius:6px;padding:10px 12px;margin-top:12px}.toast{position:fixed;bottom:25px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid #cadbe9;box-shadow:0 8px 30px #2038541a;color:#416080;padding:12px 22px;border-radius:10px;font-size:12px;z-index:20;max-width:calc(100vw - 30px);text-align:center}.reset-body{padding:24px;font-size:13px;color:#667281;line-height:1.9}.reset-body strong{color:var(--ink)}
-@media(min-width:1450px){.main{padding-top:45px}.map-layout{grid-template-columns:minmax(0,1fr) 320px minmax(0,1fr)}}
-@media(max-width:1120px){.main{padding:28px 24px 20px}.map-layout{grid-template-columns:minmax(0,1fr) 200px minmax(0,1fr);padding:20px}.hero{grid-template-columns:1fr 220px}.hero-copy{padding:28px}.home-bottom{grid-template-columns:minmax(0,1fr) 230px}.metric{padding:16px}.metric strong{font-size:15px}.topbar{padding:0 24px}}
-@media(max-width:850px){.sidebar{width:74px;padding-left:6px;padding-right:6px}.nav-btn{width:59px}.main{padding:23px 18px 18px}.home-bottom{grid-template-columns:1fr}.quick-panel{display:none}.hero{grid-template-columns:1fr 180px}.hero-copy{padding:25px}.hero h1{font-size:27px}.hero-art{gap:8px}.hero-meta{font-size:9px}.metric-icon{display:none}.map-layout{grid-template-columns:minmax(0,1fr) 155px minmax(0,1fr);padding:17px 15px}.remote-stage{transform:scale(.9)}.key-slot{padding:9px 10px}.key-top .tag{font-size:8px}.key-edit{display:none}.map-foot p{max-width:300px}.connection-card{min-width:185px;padding:8px 12px}.top-right .local-label{display:none}.device-grid{gap:13px}.device-panel{padding:18px}}
-@media(max-width:640px){.topbar{height:66px;padding:0 18px;gap:12px}.top-divider,.crumb{display:none}.brand b{font-size:13px}.brand small{font-size:8px}.brand-mark{width:31px;height:31px}.top-right{gap:0}.status-pill{font-size:10px;padding:4px 8px}.shell{min-height:calc(100vh - 66px);display:block}.sidebar{width:100%;padding:5px 15px;flex-direction:row;gap:8px;border-right:0;border-bottom:1px solid var(--line)}.nav-btn{width:auto;flex:1;min-height:40px;flex-direction:row;font-size:12px;gap:7px;border-radius:7px}.nav-btn .icon{width:16px;height:16px}.nav-bottom{display:none}.main{padding:24px 16px 18px}.page-heading{margin-bottom:18px;gap:10px;align-items:flex-start}h1{font-size:24px}.subtitle{font-size:11px}.page-heading .connection-card{min-width:0;padding:8px 10px;gap:8px}.connection-card b{font-size:10px}.connection-card>.icon{display:none}.hero{grid-template-columns:1fr 93px;min-height:248px}.hero-copy{padding:22px 19px}.hero h1{font-size:25px}.hero p{font-size:11px;line-height:1.9}.hero .eyebrow{font-size:8px;letter-spacing:1px}.hero-art{justify-content:flex-start;padding-left:16px}.hero-meta{display:none}.hero-actions{flex-wrap:wrap;gap:7px;margin-top:18px}.hero-actions .btn{padding:7px 10px;font-size:11px;min-height:35px}.hero-actions .icon-only{display:none}.mini-remote{transform:scale(.84);transform-origin:center left}.summary-grid{gap:8px;margin-top:11px}.metric{padding:13px 12px}.metric strong{font-size:13px}.metric small{font-size:9px}.home-bottom{margin-top:24px}.checks{padding:0 15px}.check-row{gap:10px;padding:16px 0}.check-row p{font-size:10px}.check-state{font-size:10px;padding-left:0}.check-icon{width:29px;height:29px}.check-row h3{font-size:12px}.check-row p{max-width:190px}.footer{font-size:9px;align-items:flex-start}.footer .mono{font-size:8px;max-width:115px;text-align:right}.map-bar{padding:12px 15px}.map-bar .legend{font-size:9px}.map-bar .muted{font-size:10px}.map-layout{grid-template-columns:1fr 1fr;gap:10px;padding:13px;align-items:start}.remote-stage{grid-column:1 / -1;grid-row:1;transform:none;height:176px;flex-direction:row;gap:23px;border-bottom:1px solid var(--line);margin-bottom:6px;padding-bottom:16px;overflow:hidden}.remote-stage .remote-body{transform:scale(.34);transform-origin:center center;margin:-140px -42px}.remote-caption{text-align:left;font-size:10px}.remote-caption b{font-size:11px}.key-col{gap:8px}.key-slot{padding:10px;min-height:81px}.key-top{font-size:11px;gap:5px}.key-top .icon{width:13px;height:13px}.key-action{font-size:11px}.key-top .tag{font-size:8px}.key-bottom{padding-top:9px}.wires{display:none}.map-foot{align-items:flex-start;flex-direction:column;padding:15px;gap:12px}.map-foot .buttons{width:100%}.map-foot .buttons .btn{flex:1}.map-foot p{max-width:none;font-size:10px}.map-foot strong{font-size:11px}.scope-note{font-size:10px}.device-grid{grid-template-columns:1fr}.steps{grid-template-columns:1fr;gap:18px}.help-block{padding:20px}.notice{font-size:10px;align-items:flex-start}.editor-head{padding:19px 20px}.editor-body{padding:18px 20px}.editor-actions{padding:16px 20px}.mods{gap:6px}.mod{font-size:10px}.editor-actions .btn{padding:8px 12px}}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
-</style>
-</head>
-<body>
-<header class="topbar">
-<a href="#home" class="brand" aria-label="MiRemoteBridge 首页"><span class="brand-mark" data-icon="bridge"></span><span><b>MiRemoteBridge</b><small>RC003 CONTROL SURFACE</small></span></a>
-<span class="top-divider"></span><span class="crumb" id="crumb">首页</span>
-<div class="top-right"><span class="local-label"><span data-icon="shield"></span>仅本地连接</span><span class="status-pill" id="apiBadge"><i class="dot"></i><span>正在连接</span></span></div>
-</header>
-<div class="shell">
-<nav class="sidebar" aria-label="主导航"><a href="#home" class="nav-btn active" data-page="home"><span data-icon="home"></span>首页</a><a href="#mapping" class="nav-btn" data-page="mapping"><span data-icon="keyboard"></span>按键映射</a><a href="#device" class="nav-btn" data-page="device"><span data-icon="sliders"></span>设备信息</a><span class="nav-bottom">ESP32-C3 / BLE BRIDGE</span></nav>
-<main class="main">
-<div id="demoBanner" class="notice demo-notice" hidden><span>设计预览 · 连接、电量与映射均为模拟数据，不会操作真实设备。</span></div>
-<div id="offlineBanner" class="notice" role="status" hidden><span>无法连接桥接器。当前显示上次读取的数据，编辑已暂停。请连接 MiRemoteBridge 热点后重试。</span><button id="retryBtn" type="button">重新连接</button></div>
-<section id="page-home" aria-labelledby="homeHeading">
-<div class="page-heading"><div><h1 id="homeHeading">你的遥控器，更多可能。</h1><p class="subtitle">从客厅到桌面，让每一个按键恰如其分。</p></div><span class="mono muted">CONTROL CENTER / 01</span></div>
-<div class="panel hero"><div class="hero-copy"><div class="eyebrow">RC003 · BLUETOOTH BRIDGE</div><h1 id="heroTitle">正在读取设备状态</h1><p id="heroDesc">连接桥接器配置热点，即可查看连接状态与按键映射。</p><div class="hero-actions"><a href="#mapping" class="btn primary"><span data-icon="keyboard"></span>编辑按键映射<span aria-hidden="true">→</span></a><a href="#device" class="btn"><span data-icon="sliders"></span>设备信息</a><button class="btn icon-only refresh-btn" aria-label="刷新设备状态"><span data-icon="refresh"></span></button></div></div><div class="hero-art"><div class="hero-meta"><span class="mono muted">XIAOMI</span><br><strong>RC003</strong><br><span id="heroRemote" class="muted">读取中</span><span class="battery-text" id="heroBattery">电量 —</span></div><div id="heroRemoteArt" class="mini-remote" aria-hidden="true"></div></div></div>
-<div class="summary-grid"><div class="panel metric"><span class="metric-icon" data-icon="bluetooth"></span><div><strong id="remoteMetric">—</strong><small>遥控器连接</small></div></div><div class="panel metric"><span class="metric-icon" data-icon="monitor"></span><div><strong id="hostMetric">—</strong><small>蓝牙主机连接</small></div></div><div class="panel metric"><span class="metric-icon" data-icon="keyboard"></span><div><strong><span id="customMetric">—</span> <span class="muted" style="font-size:11px;font-weight:400">/ 13 键</span></strong><small>自定义映射</small></div></div></div>
-<div class="home-bottom"><div><div class="section-head"><h2>运行检查</h2><small>实时状态 · 每 5 秒刷新</small></div><div class="panel checks">
-<div class="check-row"><span class="check-icon" data-icon="bluetooth"></span><div><h3>遥控器连接</h3><p id="remoteNameText">等待 RC003 连接状态</p></div><span class="check-state muted" id="checkRemote">读取中</span></div>
-<div class="check-row"><span class="check-icon" data-icon="monitor"></span><div><h3>蓝牙 HID 主机</h3><p>标准键盘与媒体控制，一次连接一台主机。</p></div><span class="check-state muted" id="checkHost">读取中</span></div>
-<div class="check-row"><span class="check-icon" data-icon="keyboard"></span><div><h3>按键映射</h3><p id="mappingDesc">一对一转发按下与松开，不处理音频。</p></div><span class="check-state muted" id="checkMap">读取中</span></div>
-<div class="check-row"><span class="check-icon" data-icon="wifi"></span><div><h3>本地配置热点</h3><p>Wi-Fi 按需开启，配置完成后建议关闭。</p></div><span class="check-state muted" id="checkWifi">读取中</span></div>
-</div></div><aside class="panel quick-panel"><h2>快捷操作</h2><a class="quick-link" href="#mapping"><span data-icon="keyboard"></span><span><strong>按键映射</strong><small>定义你的快捷键与媒体操作</small></span><span class="chevron">›</span></a><a class="quick-link" href="#device"><span data-icon="sliders"></span><span><strong>设备信息</strong><small>连接状态与使用说明</small></span><span class="chevron">›</span></a><button class="quick-link refresh-btn"><span data-icon="refresh"></span><span><strong>刷新状态</strong><small>重新读取桥接器数据</small></span><span class="chevron">›</span></button><a class="quick-link" href="#device"><span data-icon="terminal"></span><span><strong>串口控制台</strong><small>查看配置与排查命令</small></span><span class="chevron">›</span></a><div class="local-note"><span data-icon="shield"></span><span>配置保存在桥接器<br>无需账号，不上传云端。</span></div></aside></div>
-</section>
-<section id="page-mapping" aria-labelledby="mappingHeading" hidden>
-<div class="page-heading"><div><h1 id="mappingHeading">按键映射</h1><p class="subtitle">一个按键，一个动作。把熟悉的操作放在手边。</p></div><div class="connection-card"><span data-icon="bluetooth"></span><div><b>小米蓝牙遥控器 2 Pro</b><small id="mapRemoteStatus">读取连接状态…</small></div></div></div>
-<div class="panel mapping-panel"><div class="map-bar"><span class="muted" style="font-size:11px">点击卡片或遥控器按键开始编辑</span><span class="legend"><i class="swatch"></i><span id="mappingCount">— 项自定义</span></span></div><div class="map-layout" id="mapLayout"><svg class="wires" id="wires" aria-hidden="true"></svg><div class="key-col" id="colL"></div><div class="remote-stage"><div id="mappingRemote"></div><div class="remote-caption"><b>RC003</b>13 个按键 · 标准蓝牙 HID<br>蓝色表示正在编辑的按键</div></div><div class="key-col" id="colR"></div></div><div class="map-foot"><div><strong>按下即转发，松开即释放</strong><p>保存后立即应用，重启后保留。不会改变遥控器原有的转发时序。</p></div><div class="buttons"><button class="btn soft refresh-btn"><span data-icon="refresh"></span>刷新映射</button><button class="btn reset-all" disabled>恢复默认映射</button></div></div></div>
-<p class="scope-note"><span data-icon="info"></span><span>本固件不区分单击、双击与长按动作，不提供音频或宏功能。恢复默认仅清除自定义绑定，保留串口设置的基础模式与蓝牙配对。</span></p>
-</section>
-<section id="page-device" aria-labelledby="deviceHeading" hidden>
-<div class="page-heading"><div><h1 id="deviceHeading">设备信息</h1><p class="subtitle">清晰可见的连接，不打扰日常的配置。</p></div><button class="btn refresh-btn"><span data-icon="refresh"></span>刷新状态</button></div>
-<div class="device-grid"><div class="panel device-panel"><h2>桥接器</h2><dl><div class="detail-row"><dt>设备名称</dt><dd>Mi Remote Bridge</dd></div><div class="detail-row"><dt>硬件平台</dt><dd>ESP32-C3</dd></div><div class="detail-row"><dt>配置热点</dt><dd>MiRemoteBridge</dd></div><div class="detail-row"><dt>设备页面</dt><dd>http://192.168.4.1/</dd></div><div class="detail-row"><dt>主机连接</dt><dd id="deviceHost">—</dd></div><div class="detail-row"><dt>输出协议</dt><dd>BLE HID · 键盘 + 媒体控制</dd></div></dl></div><div class="panel device-panel"><h2>遥控器</h2><dl><div class="detail-row"><dt>型号</dt><dd>小米蓝牙遥控器 2 Pro / RC003</dd></div><div class="detail-row"><dt>广播名称</dt><dd id="deviceRemoteName">—</dd></div><div class="detail-row"><dt>连接状态</dt><dd id="deviceRemote">—</dd></div><div class="detail-row"><dt>最近上报电量</dt><dd id="deviceBattery">—</dd></div><div class="detail-row"><dt>物理按键</dt><dd>13 个</dd></div><div class="detail-row"><dt>自定义绑定（含串口）</dt><dd id="deviceBindings">—</dd></div></dl></div></div>
-<div class="panel help-block"><h2>按需连接，用完即关</h2><p>配置页面不需要互联网。Wi-Fi 与 BLE 共享射频资源，日常使用建议关闭热点。</p><div class="steps"><div class="step"><span>01 / 开启配置</span>串口输入 <code>wifi on</code>，再连接 MiRemoteBridge 热点。</div><div class="step"><span>02 / 编辑按键</span>在按键映射中选择快捷键或媒体动作，保存后按实体键验证。</div><div class="step"><span>03 / 关闭热点</span>串口输入 <code>wifi off</code>，蓝牙桥接继续工作。</div></div></div>
-<div class="panel help-block"><h2>需要进一步排查？</h2><p>串口波特率 115200。输入 <code>status</code> 查看设备状态，<code>bind list</code> 查看映射，<code>help</code> 查看全部命令。</p><p>重新配对时，桥接器和主机两侧都要清除对应的旧配对。此页面不会清除配对，也不会恢复出厂。</p></div>
-</section>
-<footer class="footer"><span>MiRemoteBridge <span style="color:#c5cbd3;padding:0 6px">/</span> 只做按键，简单可靠。</span><span class="mono">OPEN SOURCE · GPL-3.0-or-later</span></footer>
-</main></div>
-<dialog class="editor" id="editor" aria-labelledby="edTitle"><form id="editForm"><div class="editor-head"><div><h2 id="edTitle">编辑按键</h2><small id="edCode" class="mono"></small></div><button type="button" class="btn icon-only" id="closeEditor" aria-label="关闭编辑"><span data-icon="close"></span></button></div><div class="editor-body"><label class="field">动作类型<select id="kind"><option value="1">键盘快捷键</option><option value="2">媒体 / 系统控制</option><option value="0">恢复基础映射</option></select></label><div id="kbArea"><p class="mod-label">修饰键 <span class="muted">· 可多选，支持仅修饰键组合</span></p><div class="mods" id="mods"></div><label class="field">主键<select id="key"></select></label></div><div id="consArea" hidden><label class="field">媒体 / 系统动作<select id="cons"></select></label></div><div class="preview-action"><small>保存后输出</small><span id="actionPreview">—</span></div><p class="editor-note" id="editorHint">按下与松开实时转发。Win 在 Apple 主机上对应 Command；语音键仅作普通按键，不传输麦克风音频。</p><div class="inline-error" id="editError" role="alert" hidden></div></div><div class="editor-actions"><button type="button" class="reset-one" id="clearBinding">恢复此键默认</button><button type="button" class="btn" id="cancelEditor">取消</button><button type="submit" class="btn primary" id="saveBtn">保存映射</button></div></form></dialog>
-<dialog class="editor" id="resetDialog" aria-labelledby="resetTitle"><div class="editor-head"><h2 id="resetTitle">恢复默认映射？</h2></div><div class="reset-body"><strong>将清除全部自定义绑定，包括通过串口设置的绑定。</strong><p>保留返回、电源、语音键的串口基础模式；不删除蓝牙配对，不重启桥接器。此操作不可撤销。</p><div class="inline-error" id="resetError" role="alert" hidden></div></div><div class="editor-actions"><button class="btn" id="cancelReset">取消</button><button class="btn danger" id="confirmReset">确认恢复</button></div></dialog>
-<div class="toast" id="toast" role="status" hidden></div>
+:root{--bg:#f6f7f9;--card:#fff;--line:#e6e8ec;--ink:#252931;--mut:#78818e;--blue:#1674ed;--soft:#edf5ff;--ok:#328564;--warn:#aa6d22}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+button{font:inherit;color:inherit;cursor:pointer}button:disabled{cursor:not-allowed;opacity:.45}a{color:var(--blue)}
+[hidden]{display:none!important}h1,h2,h3,p{margin:0}h1{font-size:22px}h2{font-size:15px}h3{font-size:13px;font-weight:600}
+.mut{color:var(--mut)}.mono{font:10px ui-monospace,Consolas,monospace;letter-spacing:1px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:#fff;font-size:11px;color:var(--mut)}
+.pill.ok{color:var(--ok);border-color:#cfe9db}.pill.off{color:var(--warn);border-color:#f0dfc0}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--line);background:#fff}
+.bar b{font-size:14px}.bar .grow{flex:1}
+main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 18px #26324904}
+.hero{display:flex;align-items:center;gap:18px;padding:18px 20px;margin-bottom:14px}
+.hero .t{flex:1;min-width:0}.hero h1{margin-bottom:4px}.hero p{font-size:12px;color:var(--mut)}
+.btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 14px;border:1px solid #dfe3e9;border-radius:7px;background:#fff;font-size:12px;white-space:nowrap}
+.btn:hover{background:#f8fafc}.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}.btn.p:hover{background:#0966d9}
+.btn.d{color:#b45345}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 190px minmax(0,1fr);gap:12px;align-items:center}
+.col{display:flex;flex-direction:column;gap:8px}
+.k{border:1px solid #e7e9ed;background:#f9fafb;border-radius:9px;overflow:hidden;transition:.15s}
+.k.sel{background:var(--soft);border-color:#9bc5fb}
+.k:hover{border-color:#b2c9e6}
+.k button{display:block;width:100%;text-align:left;background:none;border:0;padding:9px 11px;min-height:62px}
+.k .r1{display:flex;align-items:center;gap:6px;font-size:12px;color:#67717d}
+.k .r1 b{color:var(--ink);font-weight:600}
+.k .tg{margin-left:auto;font-size:9px;color:#8d96a1}
+.k.cus .tg{color:var(--blue)}
+.k .r2{display:flex;justify-content:space-between;gap:8px;align-items:center;padding-top:5px}
+.k .act{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.k .ed{font-size:10px;color:#9aa3af}
+.rm{display:flex;flex-direction:column;align-items:center;gap:12px}
+.rm .body{width:132px;height:410px;border:1px solid #bfc4c7;border-radius:15px 15px 18px 18px;background:linear-gradient(90deg,#c6c9cb,#e4e5e4 8%,#f2f2f0 45%,#e5e5e3 92%,#b9bdbf);position:relative;box-shadow:7px 11px 18px #27344210;flex:none}
+.rm .body:after{content:"RC003";position:absolute;bottom:26px;width:100%;text-align:center;font:10px ui-monospace,Consolas,monospace;letter-spacing:3px;color:#a3a7a9}
+.rb{position:absolute;display:grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid #61666a;border-radius:50%;background:#53595d;color:#f4f5f5;font-size:13px}
+.rb:hover{background:#606d7a}.rb.sel{background:#327ede;border-color:#286eca;color:#fff}
+.rb.top{top:16px;width:25px;height:25px;background:#e9eae8;color:#646b71;border-color:#a4aaae}
+.rb.top.sel{background:#ecf4ff;color:var(--blue);border-color:var(--blue)}
+.p1{left:19px}.p2{right:19px}.p3{left:23px;top:172px}.p4{left:23px;top:214px}.p5{left:23px;top:256px}
+.p6{right:23px;top:172px}.p7{right:23px;top:210px}.p8{right:23px;top:256px}
+.dp{position:absolute;left:13px;top:55px;width:106px;height:106px;border-radius:50%;background:#4c5255;border:1px solid #353b3e}
+.dp .rb{width:30px;height:26px;border:0;background:none;color:#b7bfc5;font-size:11px}
+.dp .rb.sel{background:#327ede;color:#fff}
+.du{left:38px;top:0}.dd{left:38px;bottom:0}.dl{left:0;top:40px;width:26px}.dr{right:0;top:40px;width:26px}
+.do{left:27px;top:27px;width:50px;height:50px;font-size:9px;background:#555c61;color:#dfe4e6;border-color:#363d40}
+.do.sel{background:#327ede}
+.cap{text-align:center;font-size:9px;color:#97a0aa;line-height:1.8}.cap b{display:block;color:#6d7781;font-size:10px;letter-spacing:2px;font-weight:500}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 18px;margin-top:14px;flex-wrap:wrap}
+.foot p{font-size:11px;color:var(--mut)}.foot .bs{display:flex;gap:8px}
+.note{font-size:11px;color:#919aa4;margin-top:10px}
+dialog{border:1px solid var(--line);border-radius:14px;padding:0;width:min(460px,calc(100vw - 24px));max-height:calc(100dvh - 30px);overflow:auto;color:var(--ink);box-shadow:0 22px 70px #1d2e442b}
+dialog::backdrop{background:#26354b38}
+.dh{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.db{padding:16px 20px}.da{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--line)}
+.da .rs{margin-right:auto;border:0;background:none;font-size:11px;color:#788698;padding:0}
+label.f{display:block;font-size:12px;color:#67717e;margin-bottom:14px}
+select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;border:1px solid #dce1e8;border-radius:7px;background:#fff;color:var(--ink);font:inherit}
+.ms{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}
+.m{padding:7px 2px;border:1px solid var(--line);border-radius:6px;background:#f6f8fa;font-size:11px}
+.m[aria-pressed=true]{background:var(--soft);border-color:#a1c9fd;color:var(--blue)}
+.pv{padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:#f6f8fb;font-size:16px;font-weight:600;word-break:break-all}
+.pv small{display:block;font-size:10px;font-weight:400;color:var(--mut)}
+.hint{font-size:11px;color:var(--mut);line-height:1.8;margin-top:11px}
+.err{font-size:12px;line-height:1.7;color:#b04937;background:#fff4f0;border-radius:6px;padding:9px 11px;margin-top:11px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);max-width:calc(100vw - 24px);padding:11px 18px;border:1px solid #cadbe9;border-radius:9px;background:#fff;box-shadow:0 8px 26px #2038541a;color:#416080;font-size:12px;z-index:9;text-align:center}
+.warn{background:#fff8ee;border:1px solid #f1dfc4;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#906b34;display:flex;gap:10px;align-items:center;justify-content:space-between}
+.warn button{border:0;background:none;text-decoration:underline;font-size:12px}
+.demo{background:#edf4fc;border-color:#d4e3f6;color:#567898}
+@media(max-width:860px){.grid{grid-template-columns:minmax(0,1fr) 150px minmax(0,1fr);gap:9px}main{padding:14px 14px 20px}.hero{flex-direction:column;align-items:stretch}.rm .body{transform:scale(.9)}}
+@media(max-width:620px){.bar{padding:11px 14px}.grid{grid-template-columns:1fr 1fr;gap:8px}.rm{grid-column:1/-1;flex-direction:row;justify-content:center;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:4px}.rm .body{transform:scale(.34);margin:-128px -40px}.cap{text-align:left}.k button{min-height:70px;padding:9px}.k .ed{display:none}.foot{flex-direction:column;align-items:stretch}.foot .bs .btn{flex:1}.hero{padding:15px 16px}}
+</style></head><body>
+<div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span><span class="grow"></span>
+<span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
+<main>
+<div class="warn demo" id="demo" hidden><span>设计预览 · 数据为模拟，不会操作真实设备。</span></div>
+<div class="warn" id="off" hidden><span>无法连接桥接器，显示的是上次读取的数据，编辑已暂停。</span><button id="retry">重新连接</button></div>
+<div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">连接 MiRemoteBridge 热点后打开本页。</p></div>
+<button class="btn p" id="goMap">编辑按键映射</button><button class="btn" id="refresh">刷新</button></div>
+<div class="head"><h2>按键映射</h2><span class="mut" style="font-size:11px"><span id="cnt">—</span> 项自定义 · 点卡片或遥控器按键编辑</span></div>
+<div class="card" style="padding:14px 16px"><div class="grid" id="grid">
+<div class="col" id="colL"></div>
+<div class="rm"><div class="body" id="rmArt"></div><div class="cap"><b>RC003</b>13 键 · 标准蓝牙 HID<br>蓝色为正在编辑的按键</div></div>
+<div class="col" id="colR"></div>
+</div></div>
+<div class="card foot"><div><h3>按下即转发，松开即释放</h3><p>保存后立即生效并写入 NVS，重启后保留。不改变遥控器原有转发时序。</p></div>
+<div class="bs"><button class="btn" id="refresh2">刷新映射</button><button class="btn d" id="resetAll" disabled>恢复默认映射</button></div></div>
+<p class="note">本固件不区分单击、双击与长按，不提供音频或宏。恢复默认仅清除自定义绑定，保留串口 <b>map</b> 基础模式与蓝牙配对。</p>
+</main>
+<dialog id="ed"><form id="edF">
+<div class="dh"><div><h2 id="edT">编辑按键</h2><span class="mono mut" id="edC"></span></div><button type="button" class="btn" id="edX" aria-label="关闭">✕</button></div>
+<div class="db">
+<label class="f">动作类型<select id="kind"><option value="1">键盘快捷键</option><option value="2">媒体 / 系统控制</option><option value="0">恢复基础映射</option></select></label>
+<div id="kb"><p class="mut" style="font-size:12px;margin-bottom:7px">修饰键 · 可多选，支持仅修饰键组合</p><div class="ms" id="mods"></div>
+<label class="f">主键<select id="key"></select></label></div>
+<div id="cs" hidden><label class="f">媒体 / 系统动作<select id="cons"></select></label></div>
+<div class="pv"><small>保存后输出</small><span id="pv">—</span></div>
+<p class="hint" id="edH"></p><div class="err" id="edE" hidden></div>
+</div>
+<div class="da"><button type="button" class="rs" id="clr">恢复此键默认</button><button type="button" class="btn" id="edC2">取消</button><button type="submit" class="btn p" id="sv">保存映射</button></div>
+</form></dialog>
+<dialog id="rd"><div class="dh"><h2>恢复默认映射？</h2></div>
+<div class="db"><h3>将清除全部自定义绑定，包括通过串口设置的绑定。</h3><p class="hint">保留返回、电源、语音键的串口基础模式；不删除蓝牙配对，不重启桥接器。此操作不可撤销。</p><div class="err" id="rdE" hidden></div></div>
+<div class="da"><button class="btn" id="rdC">取消</button><button class="btn d" id="rdY">确认恢复</button></div></dialog>
+<div id="toast" role="status" hidden></div>
 <script>
 'use strict';
-const $=id=>document.getElementById(id);
-const ICONS={bridge:'M4 5h5v14H4zM15 5h5v14h-5zM9 9h6M9 15h6',home:'m3 10 9-7 9 7M5 9v11h5v-6h4v6h5V9',keyboard:'M3 5h18v14H3zM6 9h1m3 0h1m3 0h1m3 0h0M6 12h1m3 0h1m3 0h1m3 0h0M7 16h10',bluetooth:'m8 7 9 10-5 4V3l5 4L8 17',monitor:'M3 4h18v13H3zM8 21h8m-4-4v4',wifi:'M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0m-9 4a4 4 0 0 1 6 0m-3 4h0',shield:'M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6zM8 12l3 3 5-6',sliders:'M4 7h6m4 0h6M4 17h10m4 0h2M10 4v6m4 4v6',refresh:'M20 8a8 8 0 1 0 0 8M20 3v5h-5',terminal:'M3 5h18v14H3zM6 9l3 3-3 3m6 0h5',info:'M12 8h0m0 4v4M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',power:'M12 3v8M7 5a8 8 0 1 0 10 0',mic:'M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0zM6 10v2a6 6 0 0 0 12 0v-2m-6 8v3m-3 0h6',up:'m6 14 6-6 6 6',down:'m6 10 6 6 6-6',left:'m14 6-6 6 6 6',right:'m10 6 6 6-6 6',back:'M9 5 3 11l6 6M3 11h11a6 6 0 0 1 6 6',ok:'M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0M8 12l3 3 5-6',menu:'M5 6h14M5 12h14M5 18h14',plus:'M12 5v14M5 12h14',minus:'M5 12h14',tv:'M3 6h18v13H3zM8 2l4 4 4-4M8 11h8m-4 0v5',close:'m6 6 12 12M6 18 18 6'};
-function icon(name){return '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="'+ICONS[name]+'"/></svg>';}
-document.querySelectorAll('[data-icon]').forEach(e=>e.innerHTML=icon(e.dataset.icon));
-const KEYS=[{raw:0x66,name:'电源键',ico:'power',col:'L',pos:'top r-power'},{raw:0x52,name:'上键',ico:'up',col:'L',pos:'r-up'},{raw:0x50,name:'左键',ico:'left',col:'L',pos:'r-left'},{raw:0xF1,name:'返回键',ico:'back',col:'L',pos:'r-back'},{raw:0x4A,name:'主页键',ico:'home',col:'L',pos:'r-home'},{raw:0x65,name:'菜单键',ico:'menu',col:'L',pos:'r-menu'},{raw:0x3E,name:'语音键',ico:'mic',col:'R',pos:'top r-voice'},{raw:0x4F,name:'右键',ico:'right',col:'R',pos:'r-right'},{raw:0x28,name:'确定键',ico:'ok',col:'R',pos:'r-ok'},{raw:0x51,name:'下键',ico:'down',col:'R',pos:'r-down'},{raw:0x80,name:'音量 +',ico:'plus',col:'R',pos:'r-plus'},{raw:0x81,name:'音量 −',ico:'minus',col:'R',pos:'r-minus'},{raw:0x35,name:'TV 键',ico:'tv',col:'R',pos:'r-tv'}];
-const KB_KEYS=[[0,'无主键（仅修饰键）'],[40,'Enter'],[41,'Esc'],[42,'Backspace'],[43,'Tab'],[44,'Space'],[79,'→'],[80,'←'],[81,'↓'],[82,'↑'],[54,','],[55,'.'],[56,'/'],[45,'-'],[46,'='],[47,'['],[48,']'],[49,'\\'],[51,';'],[52,"'"],[53,'`'],[57,'Caps Lock'],[73,'Insert'],[74,'Home'],[75,'Page Up'],[76,'Delete'],[77,'End'],[78,'Page Down']];
-for(let i=0;i<26;i++)KB_KEYS.push([4+i,String.fromCharCode(65+i)]);
-for(let i=0;i<10;i++)KB_KEYS.push([30+i,String((i+1)%10)]);
-for(let i=0;i<12;i++)KB_KEYS.push([58+i,'F'+(i+1)]);
-const CONS_KEYS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
-const MODS=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
-const state={bindings:{},effective:{},defaults:{},selected:40,editing:0,mods:0,online:false,loaded:false,busy:false,loading:false,status:null,page:'home',timer:null};
-function hex(v){return v.toString(16).toUpperCase().padStart(2,'0');}
-function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return (CONS_KEYS.find(k=>k[0]===a.cons)||[0,'Consumer 0x'+hex(a.cons)])[1];const parts=MODS.filter(m=>a.mod&m[0]).map(m=>m[1]);if(a.key)parts.push((KB_KEYS.find(k=>k[0]===a.key)||[0,'HID 0x'+hex(a.key)])[1]);return parts.join(' + ')||'未指定动作';}
-function current(raw){return state.effective[raw]||state.bindings[raw]||state.defaults[raw];}
-function remoteMarkup(interactive){const keyButton=k=>'<'+(interactive?'button':'span')+' class="remote-button '+k.pos+'"'+(interactive?' type="button" data-raw="'+k.raw+'" aria-label="编辑'+k.name+'"':'')+'>'+ (k.raw===40?'OK':icon(k.ico))+'</'+(interactive?'button':'span')+'>';return '<div class="remote-body">'+KEYS.filter(k=>!['r-up','r-down','r-left','r-right','r-ok'].includes(k.pos)).map(keyButton).join('')+'<div class="dpad">'+KEYS.filter(k=>['r-up','r-down','r-left','r-right','r-ok'].includes(k.pos)).map(keyButton).join('')+'</div></div>';}
-$('heroRemoteArt').innerHTML=remoteMarkup(false);$('mappingRemote').innerHTML=remoteMarkup(true);
-KEYS.forEach(k=>{const card=document.createElement('div');card.className='key-card';card.id='card-'+k.raw;card.innerHTML='<button class="key-slot" type="button" data-raw="'+k.raw+'" aria-label="编辑'+k.name+'" disabled><span class="key-top">'+icon(k.ico)+'<b>'+k.name+'</b><span class="tag">默认</span></span><span class="key-bottom"><span class="key-action">等待读取</span><span class="key-edit">编辑 ›</span></span></button>';$('col'+k.col).appendChild(card);});
-document.querySelectorAll('[data-raw]').forEach(e=>e.addEventListener('click',()=>openEditor(+e.dataset.raw)));
-MODS.forEach(([bit,label])=>{const b=document.createElement('button');b.type='button';b.className='mod';b.dataset.bit=bit;b.textContent=label;b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{state.mods^=bit;updateDraft();});$('mods').appendChild(b);});
-function fillOptions(id,list){list.forEach(([value,label])=>$(id).add(new Option(label,String(value))));}
-fillOptions('key',KB_KEYS);fillOptions('cons',CONS_KEYS);
-function setSelect(id,value){if(!Array.from($(id).options).some(o=>+o.value===value))$(id).add(new Option('HID 0x'+hex(value),String(value)));$(id).value=String(value);}
-function toast(message){clearTimeout(state.timer);$('toast').textContent=message;$('toast').hidden=false;state.timer=setTimeout(()=>$('toast').hidden=true,3500);}
-function updateButtons(){const locked=state.busy||state.loading;document.querySelectorAll('[data-raw],.reset-all').forEach(e=>e.disabled=!state.loaded||!state.online||locked);document.querySelectorAll('.refresh-btn').forEach(e=>e.disabled=locked);document.querySelectorAll('#kind,#key,#cons,.mod').forEach(e=>e.disabled=state.busy);$('saveBtn').disabled=!state.online||locked;$('confirmReset').disabled=!state.online||locked;$('clearBinding').disabled=locked||!state.online;$('cancelEditor').disabled=state.busy;$('closeEditor').disabled=state.busy;$('cancelReset').disabled=state.busy;}
-function setOnline(on){state.online=on;$('apiBadge').className='status-pill'+(on?' good':' warn');$('apiBadge').lastElementChild.textContent=on?'配置已连接':'连接已中断';$('offlineBanner').hidden=on;updateButtons();}
-async function request(url,method='GET'){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),6500);try{const r=await fetch(url,{method,cache:'no-store',signal:controller.signal});let data;try{data=await r.json();}catch(e){throw new Error('设备返回了无效数据，请刷新后重试');}if(!r.ok||data.error)throw new Error(data.error||('请求失败（'+r.status+'）'));return data;}finally{clearTimeout(timer);}}
-function index(list){return Object.fromEntries((list||[]).map(a=>[a.raw,a]));}
-function applyBindings(data){if(!Array.isArray(data.bindings)||!Array.isArray(data.defaults))throw new Error('按键数据不完整，请刷新重试');state.bindings=index(data.bindings);state.defaults=index(data.defaults);state.effective=index(data.effective);state.loaded=true;renderBindings();}
-function renderBindings(){KEYS.forEach(k=>{const c=$('card-'+k.raw);c.classList.toggle('custom',!!state.bindings[k.raw]);c.querySelector('.tag').textContent=state.bindings[k.raw]?'自定义':'基础';c.querySelector('.key-action').textContent=fmt(current(k.raw));});const count=KEYS.filter(k=>state.bindings[k.raw]).length;$('mappingCount').textContent=count+' 项自定义';$('customMetric').textContent=count;$('deviceBindings').textContent=Object.keys(state.bindings).length+' 项';$('mappingDesc').textContent='13 个物理按键 · '+count+' 项自定义 · 按下与松开一对一转发';markSelection();updateButtons();}
-function markSelection(){KEYS.forEach(k=>$('card-'+k.raw).classList.toggle('selected',k.raw===state.selected));document.querySelectorAll('#mappingRemote [data-raw]').forEach(e=>e.classList.toggle('selected',+e.dataset.raw===state.selected));requestAnimationFrame(drawWires);}
-function drawWires(){if(state.page!=='mapping'||window.innerWidth<=640)return;const box=$('mapLayout').getBoundingClientRect();$('wires').setAttribute('viewBox','0 0 '+box.width+' '+box.height);$('wires').innerHTML='';KEYS.forEach(k=>{const b=document.querySelector('#mappingRemote [data-raw="'+k.raw+'"]').getBoundingClientRect(),c=$('card-'+k.raw).getBoundingClientRect();const x=b.left+b.width/2-box.left,y=b.top+b.height/2-box.top,tx=(k.col==='L'?c.right:c.left)-box.left,ty=c.top+c.height/2-box.top;const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d','M '+x+' '+y+' C '+((x+tx)/2)+' '+y+' '+((x+tx)/2)+' '+ty+' '+tx+' '+ty);if(k.raw===state.selected)p.setAttribute('class','active');$('wires').appendChild(p);});}
-function text(id,value){$(id).textContent=value;}
-function check(id,ok,on,off){$(id).className='check-state '+(ok?'good':'muted');$(id).textContent=ok?on:off;}
-function renderStatus(j){state.status=j;const rc=!!j.remoteConnected,host=!!j.hostConnected;const battery=Number.isInteger(j.battery)&&j.battery>=0&&j.battery<=100?j.battery+'%':'未知';text('heroTitle',rc&&host?'RC003 已就绪':rc?'遥控器已连接':'等待遥控器连接');text('heroDesc',rc&&host?'蓝牙链路已连接。现在可以直接编辑按键，让遥控器成为你的桌面快捷入口。':rc?'遥控器已连接，请在电脑或手机蓝牙设置中连接 Mi Remote Bridge。':'遥控器尚未连接。已有映射仍保留，也可以在此提前配置。');text('heroRemote',rc?'已连接':'未连接');$('heroRemote').className=rc?'good':'muted';text('heroBattery','最近电量 '+battery);text('remoteMetric',rc?'已连接':'未连接');text('hostMetric',host?'已连接':'待连接');text('remoteNameText',j.remoteName||'等待已配对的 RC003 自动连接');check('checkRemote',rc,'已连接','未连接');check('checkHost',host,'已连接','待连接');check('checkMap',state.loaded,'已读取','读取中');check('checkWifi',true,'已开启','');text('mapRemoteStatus',(rc?'已连接':'未连接')+' · 最近电量 '+battery);text('deviceHost',host?'已连接':'未连接');text('deviceRemote',rc?'已连接':'未连接');text('deviceRemoteName',j.remoteName||'—');text('deviceBattery',battery);}
-async function refresh(manual=false){if(state.loading||state.busy||$('editor').open||$('resetDialog').open)return;state.loading=true;updateButtons();try{const bindings=await request('/api/bindings');applyBindings(bindings);const status=await request('/api/status');if(typeof status.remoteConnected!=='boolean'||typeof status.hostConnected!=='boolean')throw new Error('设备状态数据不完整');renderStatus(status);setOnline(true);if(manual)toast('设备状态与映射已刷新');}catch(e){setOnline(false);if(manual)toast('连接失败，请确认热点与设备页面地址');}finally{state.loading=false;updateButtons();}}
-function showPage(){const name=location.hash.slice(1);state.page=['home','mapping','device'].includes(name)?name:'home';for(const p of ['home','mapping','device'])$('page-'+p).hidden=p!==state.page;document.querySelectorAll('[data-page]').forEach(e=>{e.classList.toggle('active',e.dataset.page===state.page);if(e.dataset.page===state.page)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current');});text('crumb',{home:'首页',mapping:'按键映射',device:'设备信息'}[state.page]);if(state.page==='mapping')requestAnimationFrame(drawWires);}
-function openEditor(raw){if(!state.loaded||!state.online||state.busy||state.loading)return;state.selected=raw;state.editing=raw;const a=current(raw)||{kind:1,mod:0,key:40,cons:233};state.mods=a.mod||0;$('kind').value=String(a.kind||0);setSelect('key',a.key||0);setSelect('cons',a.cons||233);text('edTitle','编辑'+KEYS.find(k=>k.raw===raw).name);text('edCode','RC003 / RAW 0x'+hex(raw));$('editError').hidden=true;updateDraft();markSelection();$('editor').showModal();}
-function draft(){const kind=+$('kind').value;return {raw:state.editing,kind,mod:kind===1?state.mods:0,key:kind===1?+$('key').value:0,cons:kind===2?+$('cons').value:0};}
-function updateDraft(){const a=draft();$('kbArea').hidden=a.kind!==1;$('consArea').hidden=a.kind!==2;document.querySelectorAll('.mod').forEach(e=>e.setAttribute('aria-pressed',String(!!(state.mods&+e.dataset.bit))));text('actionPreview',a.kind===0?'移除自定义，使用串口基础模式':fmt(a));text('editorHint',a.kind===0?'仅移除此键的自定义绑定。返回、电源、语音键会使用现有串口模式，而非恢复出厂设置。':'按下与松开实时转发。Win 在 Apple 主机上对应 Command；语音键仅作普通按键，不传输麦克风音频。');}
-function closeEditor(){if(!state.busy)$('editor').close();}
-function sameAction(a,b){return !!a&&a.kind===b.kind&&a.mod===b.mod&&a.key===b.key&&a.cons===b.cons;}
-function errorMessage(e){return e.name==='AbortError'?'请求超时，结果未确认。请刷新核对后重试。':e.message==='Failed to fetch'?'连接中断，结果未确认。请连接热点后刷新核对。':e.message;}
-async function save(){if(state.busy||state.loading||!state.online)return;const a=draft();if(a.kind===1&&!a.mod&&!a.key){$('editError').hidden=false;text('editError','请至少选择一个修饰键或主键。');return;}state.busy=true;updateButtons();$('editError').hidden=true;try{const q=new URLSearchParams({...a,raw:hex(a.raw)});const result=await request('/api/set?'+q,'POST');if(result.ok!==true)throw new Error('设备未确认保存');const data=await request('/api/bindings');applyBindings(data);const actual=state.bindings[a.raw];if(a.kind===0?!!actual:!sameAction(actual,a))throw new Error('回读结果与提交不一致，保存未确认；请检查绑定容量或设备状态');$('editor').close();toast(a.kind===0?'已恢复此键基础映射':'映射已保存并回读确认');}catch(e){text('editError',errorMessage(e));$('editError').hidden=false;}finally{state.busy=false;updateButtons();}}
-async function resetAll(){if(state.busy||state.loading||!state.online)return;state.busy=true;updateButtons();$('resetError').hidden=true;try{const result=await request('/api/reset','POST');if(result.ok!==true)throw new Error('设备未确认恢复');const data=await request('/api/bindings');applyBindings(data);if(data.bindings.length)throw new Error('仍存在自定义绑定，恢复未确认');$('resetDialog').close();toast('已清除全部自定义绑定，配对与基础模式保持不变');}catch(e){text('resetError',errorMessage(e));$('resetError').hidden=false;}finally{state.busy=false;updateButtons();}}
-$('editForm').addEventListener('submit',e=>{e.preventDefault();save();});$('kind').addEventListener('change',updateDraft);$('key').addEventListener('change',updateDraft);$('cons').addEventListener('change',updateDraft);$('clearBinding').addEventListener('click',()=>{$('kind').value='0';updateDraft();});$('cancelEditor').addEventListener('click',closeEditor);$('closeEditor').addEventListener('click',closeEditor);
-for(const id of ['editor','resetDialog'])$(id).addEventListener('cancel',e=>{if(state.busy)e.preventDefault();});
-document.querySelectorAll('.reset-all').forEach(e=>e.addEventListener('click',()=>{$('resetError').hidden=true;$('resetDialog').showModal();}));$('cancelReset').addEventListener('click',()=>$('resetDialog').close());$('confirmReset').addEventListener('click',resetAll);document.querySelectorAll('.refresh-btn').forEach(e=>e.addEventListener('click',()=>refresh(true)));$('retryBtn').addEventListener('click',()=>refresh(true));window.addEventListener('hashchange',showPage);window.addEventListener('resize',()=>requestAnimationFrame(drawWires));document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
-showPage();updateButtons();refresh();setInterval(()=>{if(!document.hidden&&!$('editor').open&&!$('resetDialog').open)refresh();},5000);
-</script>
-</body>
-</html>)rawliteral";
+var $=function(i){return document.getElementById(i)};
+var KEYS=[[0x66,'电源键','⏻','L','p1'],[0x52,'上键','↑','L','du'],[0x50,'左键','←','L','dl'],[0xF1,'返回键','↩','L','p3'],[0x4A,'主页键','⌂','L','p4'],[0x65,'菜单键','☰','L','p5'],
+[0x3E,'语音键','🎤','R','p2'],[0x4F,'右键','→','R','dr'],[0x28,'确定键','OK','R','do'],[0x51,'下键','↓','R','dd'],[0x80,'音量 +','＋','R','p6'],[0x81,'音量 −','－','R','p7'],[0x35,'TV 键','TV','R','p8']];
+var KB=[[0,'无主键（仅修饰键）'],[40,'Enter'],[41,'Esc'],[42,'Backspace'],[43,'Tab'],[44,'Space'],[79,'→'],[80,'←'],[81,'↓'],[82,'↑'],[54,','],[55,'.'],[56,'/'],[45,'-'],[46,'='],[47,'['],[48,']'],[51,';'],[52,"'"],[53,'`'],[57,'Caps Lock'],[73,'Insert'],[74,'Home'],[75,'Page Up'],[76,'Delete'],[77,'End'],[78,'Page Down']];
+for(var i=0;i<26;i++)KB.push([4+i,String.fromCharCode(65+i)]);
+for(i=0;i<10;i++)KB.push([30+i,String((i+1)%10)]);
+for(i=0;i<12;i++)KB.push([58+i,'F'+(i+1)]);
+var CS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
+var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
+var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,busy2:false,load:false,t:null};
+function hx(v){return ('0'+v.toString(16).toUpperCase()).slice(-2)}
+function pick(l,v,d){for(var i=0;i<l.length;i++)if(l[i][0]===v)return l[i][1];return d}
+function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return pick(CS,a.cons,'媒体 0x'+hx(a.cons));
+var p=[],i;for(i=0;i<MD.length;i++)if(a.mod&MD[i][0])p.push(MD[i][1]);
+if(a.key)p.push(pick(KB,a.key,'HID 0x'+hx(a.key)));return p.join(' + ')||'未指定动作'}
+function cur(r){return S.e[r]||S.b[r]||S.d[r]}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function toast(m){clearTimeout(S.t);$('toast').textContent=m;$('toast').hidden=false;S.t=setTimeout(function(){$('toast').hidden=true},3500)}
+function rmMark(inter){return KEYS.map(function(k){return '<'+(inter?'button type="button"':'span')+' class="rb '+k[4]+'"'+(inter?' data-r="'+k[0]+'" aria-label="编辑'+k[1]+'"':'')+'>'+esc(k[2])+'</'+(inter?'button':'span')+'>'}).join('')}
+$('rmArt').innerHTML=rmMark(true);
+KEYS.forEach(function(k){var d=document.createElement('div');d.className='k';d.id='k'+k[0];
+d.innerHTML='<button type="button" data-r="'+k[0]+'" aria-label="编辑'+k[1]+'" disabled><span class="r1">'+esc(k[2])+' <b>'+esc(k[1])+'</b><span class="tg">基础</span></span><span class="r2"><span class="act">等待读取</span><span class="ed">编辑 ›</span></span></button>';
+$('col'+k[3]).appendChild(d)});
+function opt(id,l){l.forEach(function(x){$(id).add(new Option(x[1],String(x[0])))});}
+opt('key',KB);opt('cons',CS);
+MD.forEach(function(m){var b=document.createElement('button');b.type='button';b.className='m';b.dataset.bit=m[0];b.textContent=m[1];b.setAttribute('aria-pressed','false');
+b.onclick=function(){S.mods^=m[0];draft()};$('mods').appendChild(b)});
+function setSel(id,v){if(!Array.prototype.some.call($(id).options,function(o){return +o.value===v}))$(id).add(new Option('HID 0x'+hx(v),String(v)));$(id).value=String(v)}
+function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.querySelectorAll('[data-r],#resetAll'),function(e){e.disabled=!S.ok||!S.on||L});
+Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=S.busy});
+$('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
+function online(v){S.on=v;$('off').hidden=v;btns()}
+function req(u,m){var c=new AbortController(),t=setTimeout(function(){c.abort()},6500);
+return fetch(u,{method:m||'GET',cache:'no-store',signal:c.signal}).then(function(r){return r.json().catch(function(){throw Error('设备返回了无效数据')}).then(function(j){if(!r.ok||j.error)throw Error(j.error||('请求失败 '+r.status));return j})}).finally(function(){clearTimeout(t)})}
+function idx(l){var o={};(l||[]).forEach(function(a){o[a.raw]=a});return o}
+function apply(d){if(!Array.isArray(d.bindings)||!Array.isArray(d.defaults)||!Array.isArray(d.effective))throw Error('按键数据不完整');
+S.b=idx(d.bindings);S.d=idx(d.defaults);S.e=idx(d.effective);S.ok=true;render()}
+function render(){var n=0;KEYS.forEach(function(k){var r=k[0],c=$('k'+r),b=S.b[r];if(b)n++;
+c.className='k'+(b?' cus':'')+(r===S.sel?' sel':'');c.querySelector('.tg').textContent=b?'自定义':'基础';
+c.querySelector('.act').textContent=fmt(cur(r))});
+Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('sel',+e.dataset.r===S.sel)});
+$('cnt').textContent=n;btns()}
+function stat(j){var rc=!!j.remoteConnected,h=!!j.hostConnected;
+var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
+function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
+pill('pR',rc,rc?'遥控器已连接':'遥控器未连接');pill('pH',h,h?'主机已连接':'主机未连接');pill('pB',bat!=='未知',bat==='未知'?'电量未知':'电量 '+bat);
+$('h1').textContent=(rc&&h)?'RC003 已就绪':(rc?'遥控器已连接，等待主机':'等待遥控器连接');
+$('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。')}
+function load(manual){if(S.load||S.busy||$('ed').open||$('rd').open)return;S.load=true;btns();
+return req('/api/bindings').then(apply).then(function(){return req('/api/status')}).then(function(j){stat(j);online(true);if(manual)toast('已刷新')})
+.catch(function(e){online(false);if(manual)toast(e.message==='Failed to fetch'?'连接失败，请确认已连接热点':e.message)}).finally(function(){S.load=false;btns()})}
+function openEd(r){if(!S.ok||!S.on||S.busy||S.load)return;S.sel=r;S.cur=r;var a=cur(r)||{kind:1,mod:0,key:40,cons:233};S.mods=a.mod|0;
+$('kind').value=String(a.kind||0);setSel('key',a.key||0);setSel('cons',a.cons||233);
+$('edT').textContent='编辑 '+pick(KEYS.map(function(k){return [k[0],k[1]]}),r,'按键');$('edC').textContent='RAW 0x'+hx(r);
+$('edE').hidden=true;draft();render();$('ed').showModal()}
+function draft(){var k=+$('kind').value;$('kb').hidden=k!==1;$('cs').hidden=k!==2;
+Array.prototype.forEach.call(document.querySelectorAll('.m'),function(e){e.setAttribute('aria-pressed',String(!!(S.mods&+e.dataset.bit)))});
+var a={raw:S.cur,kind:k,mod:k===1?S.mods:0,key:k===1?+$('key').value:0,cons:k===2?+$('cons').value:0};
+$('pv').textContent=k===0?'移除自定义，使用串口基础模式':fmt(a);
+$('edH').textContent=k===0?'仅移除此键的自定义绑定。返回、电源、语音键会使用现有串口模式，而非恢复出厂。':'按下与松开实时转发。Win 在 Apple 主机上对应 Command；语音键仅作普通按键，不传输麦克风音频。'}
+function err(e){return e.name==='AbortError'?'请求超时，结果未确认，请刷新核对':e.message==='Failed to fetch'?'连接中断，结果未确认，请刷新核对':e.message}
+function same(a,b){return !!a&&a.kind===b.kind&&a.mod===b.mod&&a.key===b.key&&a.cons===b.cons}
+function save(){if(S.busy||!S.on)return Promise.resolve();var k=+$('kind').value;
+var a={raw:hx(S.cur),kind:k,mod:k===1?S.mods:0,key:k===1?+$('key').value:0,cons:k===2?+$('cons').value:0};
+if(k===1&&!a.mod&&!a.key){$('edE').textContent='请至少选择一个修饰键或主键。';$('edE').hidden=false;return Promise.resolve()}
+S.busy=true;btns();$('edE').hidden=true;
+var q=Object.keys(a).map(function(x){return x+'='+a[x]}).join('&');
+return req('/api/set?'+q,'POST').then(function(j){if(j.ok!==true)throw Error('设备未确认保存');return req('/api/bindings')})
+.then(function(d){apply(d);var got=S.b[k===0?parseInt(a.raw,16):S.cur];
+if(k===0?!!got:!same(got,{kind:k,mod:a.mod,key:a.key,cons:a.cons}))throw Error('回读结果与提交不一致，保存未确认');
+$('ed').close();toast(k===0?'已恢复此键基础映射':'映射已保存并回读确认')})
+.catch(function(e){$('edE').textContent=err(e);$('edE').hidden=false}).finally(function(){S.busy=false;btns()})}
+function reset(){if(S.busy||!S.on)return Promise.resolve();S.busy=true;btns();$('rdE').hidden=true;
+return req('/api/reset','POST').then(function(j){if(j.ok!==true)throw Error('设备未确认恢复');return req('/api/bindings')})
+.then(function(d){apply(d);if(d.bindings.length)throw Error('仍存在自定义绑定，恢复未确认');$('rd').close();toast('已清除全部自定义绑定')})
+.catch(function(e){$('rdE').textContent=err(e);$('rdE').hidden=false}).finally(function(){S.busy=false;btns()})}
+document.addEventListener('click',function(e){var t=e.target.closest?e.target.closest('[data-r]'):null;if(t)openEd(+t.dataset.r)});
+$('edF').onsubmit=function(e){e.preventDefault();save()};
+$('kind').onchange=draft;$('key').onchange=draft;$('cons').onchange=draft;
+$('clr').onclick=function(){$('kind').value='0';draft()};
+$('edX').onclick=$('edC2').onclick=function(){if(!S.busy)$('ed').close()};
+$('ed').addEventListener('cancel',function(e){if(S.busy)e.preventDefault()});
+$('rd').addEventListener('cancel',function(e){if(S.busy)e.preventDefault()});
+$('resetAll').onclick=function(){$('rdE').hidden=true;$('rd').showModal()};
+$('rdC').onclick=function(){$('rd').close()};$('rdY').onclick=reset;
+$('refresh').onclick=$('refresh2').onclick=$('retry').onclick=function(){load(true)};
+$('goMap').onclick=function(){document.querySelector('.head').scrollIntoView({behavior:'smooth',block:'start'})};
+document.addEventListener('visibilitychange',function(){if(!document.hidden)load()});
+load();
+setInterval(function(){if(!document.hidden&&!$('ed').open&&!$('rd').open)load()},5000);
+</script></body></html>)rawliteral";

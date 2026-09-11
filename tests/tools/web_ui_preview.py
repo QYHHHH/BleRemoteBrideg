@@ -58,7 +58,7 @@ def demo_html():
     try { sessionStorage.setItem('mrb-ui-demo',JSON.stringify(bindings)); } catch (_) {}
     return json({ok:true});
   };
-  document.addEventListener('DOMContentLoaded',()=>document.getElementById('demoBanner').hidden=false);
+  document.addEventListener('DOMContentLoaded',()=>document.getElementById('demo').hidden=false);
 })();
 </script>
 '''.replace("FIXTURE", json.dumps(defaults, ensure_ascii=False))
