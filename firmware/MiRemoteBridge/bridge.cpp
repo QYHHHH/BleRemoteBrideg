@@ -38,6 +38,8 @@ uint8_t s_activeRaw = 0;
 bool s_activeDown = false;
 
 uint32_t s_eventsHandled = 0;
+uint32_t s_keyPresses = 0;   // forwarded key-downs, for the Web UI's live feedback
+uint8_t s_lastKeyRaw = 0;
 uint32_t s_reportsSent = 0;
 uint32_t s_unknownKeys = 0;
 uint32_t s_lastDropReportMs = 0;
@@ -100,6 +102,8 @@ void handleKeyEvent(uint8_t rawCode, bool pressed, uint32_t tsUs) {
     s_activeRaw = rawCode;
     s_activeDown = true;
     s_reportsSent++;
+    s_keyPresses++;
+    s_lastKeyRaw = rawCode;
     return;
   }
 
@@ -250,6 +254,9 @@ void releaseAllKeys() {
 }
 
 uint8_t activeRawCode() { return s_activeDown ? s_activeRaw : 0; }
+
+uint32_t keyPresses() { return s_keyPresses; }
+uint8_t lastKeyRaw() { return s_lastKeyRaw; }
 
 void printStatus() {
   BR_LOGI(kTag, "--------------- status ---------------");

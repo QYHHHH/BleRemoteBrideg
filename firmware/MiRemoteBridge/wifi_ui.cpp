@@ -111,6 +111,17 @@ class Json {
 
 const char *boolean(bool v) { return v ? "true" : "false"; }
 
+// Long-poll hold. The page parks one request here and the board answers the
+// instant a key is forwarded, or when the window expires. Deliberately not
+// SSE or WebSocket: this server serves ONE exchange at a time, so a streaming
+// socket held open for minutes would block every other request - including the
+// page's own saves. A parked request costs nothing extra and still gives
+// event-driven latency instead of polling.
+bool s_holding = false;
+uint32_t s_holdSince = 0;
+uint32_t s_holdDeadline = 0;
+constexpr uint32_t kHoldMs = 5000;
+
 void closeExchange(bool complete) {
   if (s_http.fd >= 0) {
     ::close(s_http.fd);
@@ -121,6 +132,7 @@ void closeExchange(bool complete) {
   s_http.body = nullptr;
   s_http.used = 0;
   s_http.sending = false;
+  s_holding = false;
 }
 
 void stopHttp() {
@@ -237,6 +249,10 @@ void handleStatus(bool head) {
   out.add(",\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u,\"activeKey\":%u",
       (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
       (unsigned)ESP.getMaxAllocHeap(), bridge::activeRawCode());
+  // keyPresses is a monotonic counter: the page flashes the key whenever it
+  // changes, so a press shorter than the poll interval is still shown.
+  out.add(",\"keyPresses\":%lu,\"lastKey\":%u", (unsigned long)bridge::keyPresses(),
+      bridge::lastKeyRaw());
   out.add(",\"notifications\":%lu,\"events\":%lu,\"queuePending\":%u,\"queueDropped\":%lu",
       (unsigned long)rc003_client::notifyCount(), (unsigned long)bridge::eventsHandled(),
       (unsigned)event_bus::pending(), (unsigned long)event_bus::dropped());
@@ -314,6 +330,34 @@ void handleReset() {
   respond(200, "OK", "application/json", "{\"ok\":true}", 11);
 }
 
+// The whole event payload: the key counter (so nothing is ever missed), the
+// last key for the flash, the live key for as long as it is held, plus the
+// link states so a disconnect shows up here too.
+void sendKeyEvent() {
+  Json out(s_http.io, sizeof(s_http.io));
+  out.add("{\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,\"remoteConnected\":%s,"
+          "\"hostConnected\":%s,\"battery\":%d}",
+      (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
+      boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
+      settings::batteryLevel());
+  jsonResult(out);
+}
+
+void handleEvents(char *query) {
+  uint32_t since = 0;
+  if (query) {
+    for (char *f = strtok(query, "&"); f; f = strtok(nullptr, "&")) {
+      if (strncmp(f, "since=", 6) == 0) since = strtoul(f + 6, nullptr, 10);
+    }
+  }
+  // An event is already waiting: answer immediately.
+  if (bridge::keyPresses() != since) { sendKeyEvent(); return; }
+  // Otherwise park the request until something happens or the window expires.
+  s_holding = true;
+  s_holdSince = since;
+  s_holdDeadline = millis() + kHoldMs;
+}
+
 void dispatch() {
   ++s_requests;
   // Save the small request target before reusing the input buffer for JSON.
@@ -358,6 +402,7 @@ void dispatch() {
     else if (strcmp(target, "/app.js") == 0) respond(200, "OK", "application/javascript; charset=utf-8", kIndexJsGz, kIndexJsGzLen, true, head);
     else if (strcmp(target, "/api/status") == 0) handleStatus(head);
     else if (strcmp(target, "/api/bindings") == 0) handleBindings(head);
+    else if (strcmp(target, "/api/events") == 0 && get) handleEvents(query);
     else if (strcmp(target, "/favicon.ico") == 0) respond(204, "No Content", "image/x-icon", "", 0);
     else if (strcmp(target, "/api/set") == 0 || strcmp(target, "/api/reset") == 0)
       errorResponse(405, "Method Not Allowed", "writes require POST");
@@ -397,6 +442,15 @@ void pollHttp() {
     s_http.started = s_http.progress = millis();
   }
   const uint32_t now = millis();
+  if (s_holding) {
+    if (bridge::keyPresses() != s_holdSince || (int32_t)(now - s_holdDeadline) >= 0) {
+      s_holding = false;
+      sendKeyEvent();  // sets s_http.sending; the normal send path takes it from here
+    } else {
+      s_http.progress = now;  // parked on purpose, not stalled
+      return;
+    }
+  }
   if (now - s_http.progress > kProgressTimeoutMs || now - s_http.started > kRequestTimeoutMs) {
     BR_LOGW(kTag, "HTTP timeout (header %u/%u, body %u/%u)", (unsigned)s_http.headerSent,
         (unsigned)s_http.headerLen, (unsigned)s_http.bodySent, (unsigned)s_http.bodyLen);

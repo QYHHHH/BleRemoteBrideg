@@ -28,6 +28,12 @@ void releaseAllKeys();
 // action), or "none".
 uint8_t activeRawCode();
 
+// Count of key-downs that were actually forwarded, and the last raw code.
+// The Web UI compares the counter between status polls, so a press shorter
+// than the poll interval still produces a visible flash instead of vanishing.
+uint32_t keyPresses();
+uint8_t lastKeyRaw();
+
 // Print the multi-line status block used by `status` and at boot.
 void printStatus();
 

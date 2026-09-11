@@ -47,6 +47,7 @@ main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
 .k.live,.rb.live{background:#d7ecff;border-color:#327ede;box-shadow:0 0 0 3px #327ede26}
 .k.live .act,.rb.live{color:#1257b5}
 .rb.live{color:#fff;background:#327ede}
+.rb.pulse{background:#5b83e0;box-shadow:0 0 0 3px #327ede59}
 .k:hover{border-color:#b2c9e6}
 .k button{display:block;width:100%;text-align:left;background:none;border:0;padding:9px 11px;min-height:62px}
 .k .r1{display:flex;align-items:center;gap:6px;font-size:12px;color:#67717d}
@@ -206,8 +207,30 @@ function highlight(raw){KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.cla
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('live',!!raw&&+e.dataset.r===raw)});
 Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)})}
 function pollStatus(){if(S.poll)return;S.poll=true;
-fetch('/api/status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){stat(j);highlight(j.activeKey)})
+fetch('/api/status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+stat(j);highlight(j.activeKey);
+if(!S.on)load()  /*the device answers again - recover from the greyed-out state without a manual refresh*/
+})
 .catch(function(){}).finally(function(){S.poll=false})}
+/* A key-down that happened between two polls still flashes: the firmware counts
+every forwarded press, so a changed counter means "this key was pressed".*/
+function pulse(raw){if(!raw)return;Array.prototype.forEach.call($('rmArt').children,function(e){
+if(+e.dataset.r===raw){e.classList.add('pulse');setTimeout(function(){e.classList.remove('pulse')},260)}})}
+/* Event channel: one request parked on the device, answered the instant a key
+is forwarded. Not a timer - nothing is polled, and the counter in 'since'
+means a press can never be missed, however short. */
+function startEvents(){if(S.evStopped)return;
+S.evCtl=('AbortController'in window)?new AbortController():null;
+var since=(typeof S.keyPress==='number')?S.keyPress:0;
+fetch('/api/events?since='+since,{cache:'no-store',signal:S.evCtl?S.evCtl.signal:undefined})
+.then(function(r){return r.json()}).then(function(j){
+if(typeof j.keyPresses==='number'){S.keyPress=j.keyPresses;pulse(j.lastKey)}
+if(typeof j.activeKey==='number')highlight(j.activeKey);
+if(typeof j.remoteConnected==='boolean')stat(j);
+startEvents()})
+.catch(function(){if(!S.evStopped)setTimeout(startEvents,1200)})}
+function stopEvents(){S.evStopped=true;if(S.evCtl){try{S.evCtl.abort()}catch(e){}S.evCtl=null}}
+function resumeEvents(){if(!S.evStopped)return;S.evStopped=false;startEvents()}
 function stat(j){var rc=!!j.remoteConnected,h=!!j.hostConnected;
 var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
 function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
@@ -231,17 +254,17 @@ function same(a,b){return !!a&&a.kind===b.kind&&a.mod===b.mod&&a.key===b.key&&a.
 function save(){if(S.busy||!S.on)return Promise.resolve();var k=+$('kind').value;
 var a={raw:hx(S.cur),kind:k,mod:k===1?S.mods:0,key:k===1?+$('key').value:0,cons:k===2?+$('cons').value:0};
 if(k===1&&!a.mod&&!a.key){$('edE').textContent='请至少选择一个修饰键或主键。';$('edE').hidden=false;return Promise.resolve()}
-S.busy=true;btns();$('edE').hidden=true;
+S.busy=true;btns();$('edE').hidden=true;stopEvents();
 var q=Object.keys(a).map(function(x){return x+'='+a[x]}).join('&');
 return req('/api/set?'+q,'POST').then(function(j){if(j.ok!==true)throw Error('设备未确认保存');return req('/api/bindings')})
 .then(function(d){apply(d);var got=S.b[k===0?parseInt(a.raw,16):S.cur];
 if(k===0?!!got:!same(got,{kind:k,mod:a.mod,key:a.key,cons:a.cons}))throw Error('回读结果与提交不一致，保存未确认');
 $('ed').close();toast(k===0?'已恢复此键基础映射':'映射已保存并回读确认')})
-.catch(function(e){$('edE').textContent=err(e);$('edE').hidden=false}).finally(function(){S.busy=false;btns()})}
-function reset(){if(S.busy||!S.on)return Promise.resolve();S.busy=true;btns();$('rdE').hidden=true;
+.catch(function(e){$('edE').textContent=err(e);$('edE').hidden=false}).finally(function(){S.busy=false;btns();resumeEvents()})}
+function reset(){if(S.busy||!S.on)return Promise.resolve();S.busy=true;btns();$('rdE').hidden=true;stopEvents();
 return req('/api/reset','POST').then(function(j){if(j.ok!==true)throw Error('设备未确认恢复');return req('/api/bindings')})
 .then(function(d){apply(d);if(d.bindings.length)throw Error('仍存在自定义绑定，恢复未确认');$('rd').close();toast('已清除全部自定义绑定')})
-.catch(function(e){$('rdE').textContent=err(e);$('rdE').hidden=false}).finally(function(){S.busy=false;btns()})}
+.catch(function(e){$('rdE').textContent=err(e);$('rdE').hidden=false}).finally(function(){S.busy=false;btns();resumeEvents()})}
 document.addEventListener('click',function(e){var t=e.target.closest?e.target.closest('[data-r]'):null;if(t)openEd(+t.dataset.r)});
 $('edF').onsubmit=function(e){e.preventDefault();save()};
 $('kind').onchange=draft;$('key').onchange=draft;$('cons').onchange=draft;
@@ -255,7 +278,7 @@ $('refresh').onclick=$('refresh2').onclick=$('retry').onclick=function(){load(tr
 $('goMap').onclick=function(){document.querySelector('.head').scrollIntoView({behavior:'smooth',block:'start'})};
 document.addEventListener('visibilitychange',function(){if(!document.hidden)load()});
 window.addEventListener('resize',drawWires);
-load();
-setInterval(function(){if(!document.hidden)pollStatus()},150);
-setInterval(function(){if(!document.hidden&&!$('ed').open&&!$('rd').open)load()},5000);
+load();startEvents();
+setInterval(function(){if(!document.hidden)pollStatus()},3000);
+setInterval(function(){if(!document.hidden&&!$('ed').open&&!$('rd').open)load()},30000);
 </script></body></html>)rawliteral";
