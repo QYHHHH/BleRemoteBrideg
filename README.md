@@ -1,95 +1,82 @@
 # MiRemoteBridge
 
-ESP32-C3 双角色 BLE 桥接固件：把**小米蓝牙遥控器 2 Pro（RC003）**的按键，转成 Windows 能直接
-使用的**标准蓝牙键盘 + 媒体控制设备**。
-
-> 只处理按键。不涉及遥控器麦克风与音频，不实现 USB HID / USB UAC、Windows 伴侣程序、
-> 虚拟声卡、内核驱动或注入。
+ESP32-C3 双角色 BLE 桥接固件：把**小米蓝牙遥控器 2 Pro（RC003）**变成一台**标准蓝牙键盘 + 媒体控制设备**，免驱、不改系统、不影响反作弊，Windows 与 iOS 均已实测可用。
 
 ```
-┌──────────────────────────┐   BLE 5.0 (HOGP + ATVV 控制通道)   ┌──────────────────────────┐
-│  小米蓝牙遥控器 2 Pro    │ ─────────────────────────────────► │   ESP32-C3               │
-│  (RC003)                 │ ◄───────────────────────────────── │   Central + Peripheral   │
-└──────────────────────────┘                                    └────────────┬─────────────┘
-                                                                             │ BLE 5.0
-                                                      固定容量事件队列        │ (HID Keyboard +
-                                                      + 键码转换             │  Consumer Control)
-                                                                             ▼
-                                                                ┌──────────────────────────┐
-                                                                │   Windows                │
-                                                                │   · 标准蓝牙键盘          │
-                                                                │   · 标准媒体控制设备      │
-                                                                │   免驱，无需任何软件      │
-                                                                └──────────────────────────┘
+┌──────────────────────────┐   BLE (HOGP + ATVV 控制通道)   ┌──────────────────────────┐
+│  小米蓝牙遥控器 2 Pro    │ ─────────────────────────────► │   ESP32-C3               │
+│  (RC003)                 │ ◄───────────────────────────── │   Central + Peripheral   │
+└──────────────────────────┘                                └────────────┬─────────────┘
+                                                                         │ BLE (HID Keyboard +
+                                                  固定容量事件队列        │  Consumer Control)
+                                                  + 键码转换              ▼
+                                                              ┌──────────────────────────┐
+                                                              │  Windows / iOS / …       │
+                                                              │  · 标准蓝牙键盘           │
+                                                              │  · 标准媒体控制设备       │
+                                                              │  免驱，无需任何软件       │
+                                                              └──────────────────────────┘
 ```
+
+> 项目边界：只处理按键。不涉及遥控器麦克风与音频，不实现 USB HID / USB UAC、
+> Windows 伴侣程序、虚拟声卡、内核驱动、注入或 Wi-Fi/Web 后台。
+
+---
+
+## 功能特性（全部真机实测）
+
+- **13 键全转发**，含 4 个媒体键（音量± / 返回 / 语音）。RC003 的私有键码在空口被
+  完整接收并转换为标准 HID 报告。原始码逐键实测确认，纠正过第三方资料的 4 处错误。
+- **电量透传**：桥接器把遥控器电池服务的真实电量（实测 97–98%）发布为自己的
+  Battery Level，并持久化——主机在任何时刻连接读到的都是真实值，而不是占位的 100%。
+- **快速重连**：重启到按键生效 **3.3 秒**（含 ESP32 启动、上游重连、服务发现、
+  订阅、Windows 重连）。达到普通蓝牙键盘断电重连的水平。
+- **多主机**：可配对多台主机（Windows / iOS 实测），自动切换、自动重连；
+  配对记录有保护策略，遥控器的 bond 永远不会被新主机挤掉。
+- **运行时键位自定义**：返回 / 电源 / 语音三个键可通过串口命令换绑（键盘组合键、
+  媒体键或关闭），保存在 NVS，重启不变。
+- **串口控制台**：状态查询、扫描、手动连接、bond 管理、合成按键注入、延迟测量、
+  设备端自检——所有功能不接主机也能诊断。
+- **防卡键**：幂等按下/松开 + 报告全量重建 + 任一侧断线立即清零，三层保证
+  Windows 上永远不会有键卡住。
+- **测试基建**：宿主端模型检查（11096 项断言，含 4000 步随机不变量测试）+
+  设备端自检（137 项向量 + 44 项分发仿真），宿主与设备消费同一份期望值向量。
+
+---
+
+## 兼容性
+
+| 角色 | 设备 | 状态 |
+| --- | --- | --- |
+| 遥控器（上游） | 小米蓝牙遥控器 2 Pro（RC003） | ✅ 实测（13 键 + 电量） |
+| 主机（下游） | Windows 10 / 11 | ✅ 实测（键盘 + 媒体键 + 蓝牙关开重连 + 多主机切换） |
+| 主机（下游） | iPhone / iPad（iOS BLE HID） | ✅ 实测（音量键、方向键） |
+| 主机（下游） | Linux / macOS / Android | 未验证。标准 BLE HID，理论上可用，欢迎反馈 |
+| 遥控器（上游） | 其他小米/通用 BLE 遥控器 | 未验证。串口 `raw on` 核对原始码后按 [`docs/KEYMAP.md`](docs/KEYMAP.md) 加表即可 |
+
+---
 
 ## 为什么需要它
 
-RC003 把私有键码塞在 HID 报告的按键槽里：音量是 `0x80` / `0x81`，返回是 `0xF1`。
-这些不是合法 HID Usage，Windows 的 `kbdhid.sys` 会在内核层直接丢弃，应用层
-（全局 Hook、RawInput、AutoHotkey）都拿不到。本固件在空口完整收到这些码，转换成标准
-HID 报告后再以蓝牙键盘的身份发出去，因此**免驱、不改系统、不影响反作弊**。
+RC003 的音量、返回等键把**私有键码**塞在 HID 报文的按键槽里（如 `0x80`/`0x81`/`0xF1`）。
+这些不是合法的 HID Usage，Windows 的 `kbdhid.sys` 会在内核层直接丢弃，应用层手段
+（全局 Hook、RawInput、AutoHotkey）同样拿不到。本固件以 Central 身份连接遥控器，
+在空口完整收到这些码，转换成标准 HID 报告后再以蓝牙键盘的身份发给主机——
+所以主机侧完全免驱。
 
 ---
 
-## 当前状态（重要）
+## 硬件与准备
 
-| 层级 | 状态 |
+| 项 | 要求 |
 | --- | --- |
-| L1 编译验证 | ✅ 通过（0 warning，flash 52% / RAM 6%） |
-| L2 宿主端模型验证 | ✅ 通过（11095 项断言，含 4000 步随机不变量测试） |
-| L3 设备端自检（`selftest`） | ✅ **真机通过**：`137 passed / 0 failed` + 分发仿真 `44 passed / 0 failed` |
-| L4 上游 RC003 → C3 | ✅ **真机通过**：13/13 键识别，**0 未知码 / 0 WARN**；固件内延迟 min 190 / median 215 / max 361 µs |
-| L4 下游 C3 → Windows | ✅ **键盘 + 媒体键均已真机验证可用**（用户实测按键通过）；Windows 蓝牙关→开可自动重连 |
-| L4 边界与恢复（长按/连按/休眠/两侧重启/卡键） | 🔄 部分：蓝牙关开重连已验证；其余待做 |
+| 主控 | ESP32-C3 开发板（实测：CH343 USB 转串口款） |
+| 遥控器 | 小米蓝牙遥控器 2 Pro（RC003），已充电 |
+| 工具链 | Arduino CLI 1.5.1 + arduino-esp32 3.3.11（见下方目录说明） |
 
-**电量**：桥接器 C3 本身没有电池可测，所以它把自己电池服务（0x180F）里的数字
-**透传遥控器的真实电量**，而不是固定报 100%。实测：RC003 上报 98%，主机侧随之更新。
-
-- 电量持久化在 NVS，冷启动后 Windows 第一次连接读到的就是真实值（修复过"读到占位 100%"的顺序竞争）；
-- Windows 重连时会重读电池服务：实测关开蓝牙后 134 ms 内完成读取，UI 随之显示 98%；
-- **诚实说明**：98% 是遥控器固件自己上报的——BLE 电量的标准来源就是设备本身，
-  任何主机（电视/手机/本桥接器）都拿不到独立于它之外的测量值。粒度与精度取决于
-  遥控器固件，长期使用中观察它是否随使用下降即可。
-
-**13 个按键的原始码已在本机 C3 + 真实 RC003 上逐键实测确认**，并纠正了 4 个第三方记录里写错的码
-（详见 [`docs/KEYMAP.md`](docs/KEYMAP.md) §1）。完整的 24 项验收清单在
-[`docs/TESTING.md`](docs/TESTING.md) §5。
-
-**固件已在真实 ESP32-C3 上烧录并运行**（MAC `60:55:f9:xx:xx:xx`，bootloader → app 正常启动，
-串口控制台可用）。端到端（RC003 ↔ C3 ↔ Windows）的按键验收还没做，清单在
-[`docs/TESTING.md`](docs/TESTING.md) §5。
-
-### 这块板子必须用 `FlashMode=dio`
-
-默认 FQBN 会构建成"镜像头写 DIO、驱动用 QIO"，**本板卡在这种配置下无法启动**：
-bootloader 读分区表返回全 `0xFF`，报 `partition 0 invalid magic number` 并复位循环。
-实机对比确认：
-
-| 配置 | 结果 |
-| --- | --- |
-| 80MHz + QIO（FQBN 默认） | ❌ 复位循环 |
-| 40MHz + QIO | ❌ 复位循环（读回 `0xFFFF`）|
-| 80MHz + **DIO** | ✅ 正常启动 |
-
-所以 `scripts/_common.ps1` 里的 FQBN 固定为 `esp32:esp32:esp32c3:FlashMode=dio`。
-手工编译时也要带上这个选项，细节与取证过程见 [`docs/TESTING.md`](docs/TESTING.md) §4。
-
----
-
-## 硬件与工具链
-
-| 项 | 值 |
-| --- | --- |
-| 目标芯片 | ESP32-C3 rev v0.3，4MB Macronix flash（`esp32:esp32:esp32c3:FlashMode=dio`）|
-| 已验证硬件 | COM3 / CH343 USB 转串口，MAC `60:55:f9:xx:xx:xx` |
-| Arduino CLI | 1.5.1，`C:\code\MiRemoteBridge\.tools\arduino-cli-1.5.1`（不入 Git） |
-| Arduino-ESP32 | 3.3.11，数据目录 `C:\code\arduino-c3-data`（不入 Git） |
-| BLE 主机栈 | **NimBLE**（该核心为 C3 默认且唯一构建的栈：`CONFIG_BT_NIMBLE_ENABLED=y`，Bluedroid 未编译） |
-
-> 工具链刻意放在**无中文路径** `C:\code\arduino-c3-data`：乐鑫的 Windows RISC-V
-> 链接器不能可靠处理中文路径。不要把工具链移回本仓库。仓库已改名为
-> `C:\code\MiRemoteBridge`，配置里的外部路径保持不变。
+**工具链不在仓库内**：Arduino CLI 位于 `.tools/`（不入 Git），arduino-esp32 数据目录
+在 `C:\code\arduino-c3-data`（不入 Git，**必须纯 ASCII 路径**——乐鑫 RISC-V 链接器
+处理中文路径不可靠）。首次使用请按 [`docs/TESTING.md`](docs/TESTING.md) 的指引安装。
 
 ---
 
@@ -99,47 +86,106 @@ bootloader 读分区表返回全 `0xFF`，报 `partition 0 invalid magic number`
 # 1. 编译
 .\scripts\build.ps1
 
-# 2. 看看接了哪些串口（不给 -Port 时只检测，绝不会烧录）
+# 2. 查看接了哪些串口（不给 -Port 时只检测，绝不烧录）
 .\scripts\flash.ps1
 
-# 3. 用显式端口确认并烧录（会先只读探测芯片，不是 ESP32-C3 就中止）
+# 3. 显式确认端口并烧录（先只读探测芯片，不是 ESP32-C3 就中止）
 .\scripts\flash.ps1 -Port COM3
 
 # 4. 打开串口控制台
 .\scripts\monitor.ps1 -Port COM3
 ```
 
-板子如果只有原生 USB 口、没有 USB 转串口芯片：加 `-CdcOnBoot`。
-
-不需要硬件也能跑的全部检查：
+不需要硬件就能跑的全部检查：
 
 ```powershell
-.\scripts\test.ps1
+.\scripts\test.ps1        # 重新生成测试向量 + 宿主端模型检查 + 编译
 ```
 
-如果脚本在你的机器上"什么都不做"，先看 `docs/TESTING.md` 的排查小节：
-PowerShell 5.1 在环境里同时存在 `http_proxy` 与 `HTTP_PROXY` 时无法启动子进程。
-`scripts/_common.ps1` 已经自动处理这种情况。
+> 如果脚本"什么都不做"：PowerShell 5.1 在同时存在 `http_proxy` 与 `HTTP_PROXY`
+> 环境变量时无法启动子进程，`scripts/_common.ps1` 已自动处理。
+
+**配对流程**（两步，顺序随意）：
+
+1. **配对遥控器**：串口敲 `scan`（带序号列出附近设备）→ `connect <序号>`；
+   或直接 `connect <mac>`。连上即自动配对、绑定、发现服务、订阅。
+2. **配对主机**：Windows/iPhone 的蓝牙设置里添加 `Mi Remote Bridge`，
+   无需在桥接器上做任何操作——它无主机连接时永远处于可配对广播状态。
+
+详细步骤、日志样例与排查表见 [`docs/PAIRING.md`](docs/PAIRING.md)。
 
 ---
 
-## 控制台命令
+## 按键映射（实测值）
 
-在串口里输入 `help`。常用：
+| 物理键 | 原始码（实测） | 默认输出 | 备注 |
+| --- | --- | --- | --- |
+| 音量 + / − | `0x80` / `0x81` | Consumer Vol Up / Down | Consumer 报告，不抢焦点 |
+| 返回 | `0xF1` | Consumer AC Back | 可改 `kb_esc` / `kb_alt_left` |
+| 上 / 下 / 左 / 右 | `0x52` / `0x51` / `0x50` / `0x4F` | ↑ ↓ ← → | 标准键盘 Usage |
+| 确定 | `0x28` | Enter | |
+| 主页 | `0x4A` | Win + D | 第三方写的 `0x24` 作为同义词保留 |
+| 菜单 | `0x65` | 空格 | 同义词 `0x5D` |
+| 电视 | `0x35` | F8 | 同义词 `0xC0` |
+| 电源 | `0x66` | Alt + F4 | 可改 Sleep / Power / Esc |
+| 语音 | `0x3E` | **左 Ctrl + 左 Win**（和弦） | 可改右 Alt+, / Mute / 关闭 |
+
+- **未知键码宁可漏发**：不在表内的码丢并记 WARN，绝不盲发。
+- **运行时换绑**：`map back|power|voice <模式>`，NVS 持久化；`map` 查看当前值。
+- 完整说明、同义词与 HID 描述符设计见 [`docs/KEYMAP.md`](docs/KEYMAP.md)。
+
+---
+
+## 日常行为说明
+
+### 重连速度
+
+重启（ESP32 或主机）到按键生效约 **3.3 秒**。关键在三处：服务发现按"HID 优先"
+两遍扫描、连接参数在加密后立即协商、链路监督超时缩短为 1 秒（硬复位无法发断开包，
+遥控器要等监督超时才重新广播——库默认 4 秒是这个延迟的真凶）。详见
+[`docs/TESTING.md`](docs/TESTING.md) §4.8。
+
+### 电量
+
+桥接器没有自己的电池，它把遥控器电池服务的真实值透传给主机并持久化在 NVS。
+BLE 电量永远是外设自报的（任何主机都没有独立测量手段），粒度取决于遥控器固件。
+
+### 多主机
+
+- 可配对多台主机（每台一条 bond 记录），同时只能连接一台，断开后其他已配对
+  主机自动接管（实测 iPhone ↔ Windows 切换 <0.1 秒）。
+- Bond 槽位共 3 个（预编译库上限）：遥控器恒占 1 个 + 主机侧 2 个。
+- **配对保护**：新主机配对前固件会主动腾位，且**永远不删遥控器的 bond**——
+  被保护的是"当前绑定的遥控器"这个角色，换遥控器后自动跟随。
+- 清除：`forget win` 清所有主机 bond（保留遥控器），`forget rc` 清遥控器侧，
+  `factory` 全清。**清配对必须两侧同时清**（桥接器 + 主机蓝牙里删除设备），
+  单侧清会导致密钥不一致、每 6–7 秒断开重连一次。
+
+### NFC 的结论（实测）
+
+RC003 上的 NFC 是一张 **ISO 14443-4 智能卡**（复旦微芯片，小米私有 APDU 应用）：
+碰触只发生在手机与卡之间（小米手机读私有配对令牌触发投屏；iPhone 可按卡片
+**UID** 触发快捷指令），**蓝牙侧零交互**——实测碰触期间桥接器无任何数据。
+"通过 NFC 给蓝牙传数据"在本硬件上不可行，桥接器也未实现 NFC。
+
+---
+
+## 串口控制台
+
+115200 波特率，输入 `help` 看全表。常用：
 
 | 命令 | 作用 |
 | --- | --- |
-| `status` | 全量状态：两侧连接、绑定、通知计数、队列、当前按键、延迟开关 |
+| `status` | 全量状态：两侧连接、bond、电量、队列、当前按键、内存 |
 | `scan` / `scan now` | 查看扫描器缓存 / 开始新一轮扫描 |
-| `connect <mac> [public\|random]` | 手动连接指定设备 |
-| `reconnect` | 断开并重连 RC003 |
-| `forget rc` / `forget win` | 清除遥控器侧 / Windows 侧的配对 |
+| `connect <序号\|mac> [public\|random]` | 手动连接 |
+| `reconnect` | 断开并重连遥控器 |
+| `forget rc` / `forget win` | 清除遥控器侧 / 主机侧配对（见 RECOVERY.md 的双侧清规则） |
 | `bond list` | 列出所有配对记录 |
-| `key <hex> press\|release` | 注入合成按键（验证下游 HID 通道） |
-| `channel consumer <hex>` | 直接发一个 Consumer Usage |
-| `raw on\|off` / `lat on\|off` / `log <0-4>` | 日志控制 |
-| `map back\|power\|voice <模式>` | 改运行时键位，保存在 NVS |
-| `selftest` / `sim` | 设备端自检（含分发仿真） |
+| `key <hex> press\|release` | 注入合成按键（不接遥控器即可验证主机侧） |
+| `raw on\|off` / `lat on\|off` / `log <0-4>` | 原始报文 / 延迟 / 日志级别 |
+| `map back\|power\|voice <模式>` | 运行时键位，NVS 持久化 |
+| `selftest` / `sim` | 设备端自检（向量 + 分发仿真） |
 | `factory` | 清除全部配对与设置并重启 |
 
 ---
@@ -149,7 +195,7 @@ PowerShell 5.1 在环境里同时存在 `http_proxy` 与 `HTTP_PROXY` 时无法�
 ```
 firmware/MiRemoteBridge/
 ├── MiRemoteBridge.ino   入口：setup / loop
-├── config.h             所有编译期开关与时机参数
+├── config.h             编译期开关与时机参数
 ├── key_definitions.h    RC003 原始键码 + 标准 HID Usage（纯 C，无依赖）
 ├── keymap.{h,cpp}       键码 → HID 动作映射 + 运行时可选模式（纯 C，无依赖）
 ├── rc003_report.{h,cpp} 报文解析 + 按下/松开状态机（纯 C，无依赖）
@@ -157,74 +203,80 @@ firmware/MiRemoteBridge/
 ├── bridge_events.h      事件类型定义
 ├── event_bus.{h,cpp}    全局事件队列实例
 ├── ble_core.{h,cpp}     唯一的 BLE 栈初始化点
-├── ble_bonds.{h,cpp}    Bond 查询/删除（补齐封装层缺口）
-├── hid_server.{h,cpp}   下游：HID 外设（键盘 + Consumer），防卡键
+├── ble_bonds.{h,cpp}    Bond 查询/删除/腾位保护
+├── hid_gatt.{h,cpp}     下游 HID 服务：直接用 NimBLE ble_gatt_svc_def 构建
+│                        （两条 0x2A4D 特征——封装层做不到，见 docs/KEYMAP.md §5）
+├── hid_report_map.h     HID 报告描述符 + 报告布局常量
+├── hid_server.{h,cpp}   下游 HID 外设封装（防卡键、订阅、电量）
 ├── rc003_client.{h,cpp} 上游：扫描/连接/服务发现/订阅，独立 FreeRTOS 任务
-├── bridge.{h,cpp}       事件分发、按键状态、延迟测量
-├── log.{h,cpp}          分级日志 + 令牌桶限速
+├── bridge.{h,cpp}       事件分发、按键状态、延迟测量、status
+├── log.{h,cpp}          分级日志 + 令牌桶限速 + 不限流通道
 ├── cli.{h,cpp}          串口控制台
 └── selftest.{h,cpp}     设备端向量测试 + 分发仿真
 ```
 
 ### 关键设计决定
 
-**单一 NimBLE 主机栈，双角色并存。** Arduino-ESP32 3.3.11 的 ESP32-C3 构建里
-`CONFIG_BT_NIMBLE_ENABLED=y` 且 Bluedroid 根本没编译，所以核心自带的 `BLE` 封装库
-天然只走 NimBLE。`ble_core::begin()` 是**唯一**调用 `BLEDevice::init()` 的地方，
-防止重复初始化并把两套栈混在一起。
-
-**BLE 回调只入队，不发 HID 报告。** 上游通知回调运行在 NimBLE host 任务里；
-它只做「解析 → 归一化 → 推入 SPSC 队列」。HID 报告全部由 Arduino `loop()` 发送，
-两条角色不会在 host 任务里互相重入。
-
-**阻塞操作放在独立任务里。** 扫描、连接（最长 8 秒）、服务发现、订阅都会阻塞，
-因此全部由 `rc003` FreeRTOS 任务承担，`loop()` 保持随时能处理按键。
-
-**连接策略。** 优先用保存的身份地址 + Bond 直连（试 2 次），失败才回退扫描；
-扫描是占空比的（连续 20 秒 → 停顿 3 秒），给同时存在的 Windows 链路留出空口时间，
-也让串口日志保持可读。**每次重连后都重新做服务发现并重新订阅。**
-
-**防卡键。** 三个层面：`pressAction`/`releaseAction` 幂等；HID 报告每次从"当前按下的集合"
-重建；任一侧断线（含配对失败、主机刚连上、遥控器刚就绪）都立即 `releaseAll()` 把
-键盘与 Consumer 报告同时清零。详见 [`docs/RECOVERY.md`](docs/RECOVERY.md) §3。
-
-**未知键码宁可漏发。** 不在表内的码直接丢并记 WARN，不会当成 HID Usage 发出去。
+- **单一 NimBLE 主机栈，双角色并存。** Arduino-ESP32 3.3.11 的 C3 构建里
+  `CONFIG_BT_NIMBLE_ENABLED=y`，核心自带 `BLE` 封装底层就是 NimBLE；
+  `ble_core::begin()` 是唯一调用 `BLEDevice::init()` 的地方。
+- **BLE 回调只入队。** 上游通知回调运行在 NimBLE host 任务，只做"解析 → 归一化 →
+  入 SPSC 队列"；HID 报告全部由 `loop()` 发送，两角色不重入。
+- **阻塞操作放独立任务。** 扫描、连接、发现、订阅由 `rc003` FreeRTOS 任务承担。
+- **直连优先。** 保存的身份地址 + Bond 直连，失败才回退扫描；扫描占空比运行
+  （20 秒扫描 / 3 秒停顿），给并存的下游链路留空口时间。
+- **HID 服务绕过 `BLEHIDDevice` 直接建在 NimBLE 上。** HOGP 要求"每个报告 ID 一条
+  Report 特征"，两条 `0x2A4D` 是必须的；Arduino 封装层按 UUID 去重注册不了第二条
+  （详见 [`docs/KEYMAP.md`](docs/KEYMAP.md) §5），NimBLE 原生 `ble_gatt_svc_def`
+  没有这个限制。
+- **未知键码宁可漏发。** 不在表内的码丢并记 WARN，绝不盲发。
 
 ---
 
-## 按键表（13 键，摘要）
+## 踩坑实录（开源最值钱的部分）
 
-| 物理键 | 原始码 | 默认输出 |
-| --- | --- | --- |
-| 音量 + / − | `0x80` / `0x81` | Consumer Vol Up / Down |
-| 返回 | `0xF1` | Consumer AC Back（可改 Esc / Alt+←） |
-| 上 / 下 / 左 / 右 | `0x52` / `0x51` / `0x50` / `0x4F` | 方向键 |
-| 确定 | `0x28` | Enter |
-| 主页 | `0x24` | Win + D |
-| 菜单 | `0x5D` | 空格 |
-| 电视 | `0xC0` | F8 |
-| 电源 | `0x66` | Alt + F4（可改 Sleep / Power / Esc） |
-| 语音 | `0x04` / `0x3E` | 右 Alt + 逗号（可关） |
+以下问题全部在真机上复现过，完整取证在 [`docs/TESTING.md`](docs/TESTING.md) §4：
 
-完整说明、别名码与未知码处理见 [`docs/KEYMAP.md`](docs/KEYMAP.md)。
-**注意：这些码来自第三方记录，尚未在本机实机逐个核对** —— 核对步骤见
-[`docs/TESTING.md`](docs/TESTING.md) §5.2。
+1. **板子必须 `FlashMode=dio`。** FQBN 默认 `qio` 把 flash 驱动配成 QIO（镜像头仍是
+   DIO），部分板子的 Macronix flash 在 QIO 下不回应，bootloader 读到全 0xFF →
+   `invalid magic number` 复位循环。实测 80M+QIO ❌ / 40M+QIO ❌ / 80M+DIO ✅。
+2. **两个顶层集合共用一条 Report 特征 = Windows 拒绝启动 HID**（`Code 10`，
+   问题状态 `0xC0110002` = `HIDP_STATUS_INVALID_REPORT_TYPE`）。合法 HID ≠ Windows
+   接受；必须"每个集合自己的报告 ID + 各自的 Report 特征"。
+3. **Arduino BLE 封装层注册不了两条同 UUID 特征**，第二条被静默丢弃且其 `m_pService`
+   永不赋值 → `notify()` 读野指针、芯片崩溃。这是把 HID 服务下沉到 `ble_gatt_svc_def`
+   的原因。
+4. **`BLEClient::connect()` 的 timeout 参数被库忽略**；**`BLEAddress` 内部字节逆序**，
+   用 `getNative()` 拼字符串再喂回去会得到反序地址——地址一律用 `toString()` 的
+   规范文本形式。
+5. **链路监督超时是硬复位恢复速度的旋钮**：库默认 4 秒，硬复位无法发断开包，
+   遥控器会陪一个不存在的主机干等 4 秒。缩短到 1 秒后重启恢复快了 3 倍，
+   代价为零。
+6. **惰性发现与遍历顺序**：`getCharacteristics()` 首次访问才做 ATT 发现，
+   且服务 map 按 UUID 字符串排序（电池排在 HID 前）。"先按键后电池"必须把
+   过滤放在惰性调用**之前**。
+7. **清配对必须两侧同时清**：只清桥接器侧，主机还留着旧密钥 → 每 6–7 秒
+   断开重连一次（MTU 从 256 掉到 23），期间按键丢失。
 
 ---
 
-## 文档
+## 验证状态与诚实边界
 
-| 文件 | 内容 |
+| 层级 | 状态 |
 | --- | --- |
-| [`docs/PAIRING.md`](docs/PAIRING.md) | 上游/下游配对步骤、日志样例、排查表、命令速查 |
-| [`docs/KEYMAP.md`](docs/KEYMAP.md) | 13 键完整表、可配置模式、HID 描述符、重复报文处理 |
-| [`docs/RECOVERY.md`](docs/RECOVERY.md) | Bond 清除、故障恢复矩阵、防卡键设计 |
-| [`docs/TESTING.md`](docs/TESTING.md) | 四层验证的真实状态、实机联调记录（3 个只在真机暴露的问题）、24 项验收清单、延迟测量 |
-| [`docs/THIRD_PARTY_NOTICES.md`](docs/THIRD_PARTY_NOTICES.md) | 第三方引用核查与许可证结论 |
+| L1 编译 | ✅ 0 warning（flash 52% / RAM 6%） |
+| L2 宿主端模型验证 | ✅ 11096 项断言（含 HID 描述符真实解析、4000 步随机不变量） |
+| L3 设备端自检 | ✅ 真机：`137 passed / 0 failed` + 分发仿真 `44 passed / 0 failed` |
+| L4 上游 RC003 → C3 | ✅ 真机：13/13 键、0 未知码；延迟 min 190 / median 215 / max 361 µs |
+| L4 下游 C3 → Windows | ✅ 真机：键盘 + 媒体键；多主机切换（Windows ↔ iPhone） |
+| L4 边界项 | 🔄 长按、连按、两侧同时重启、卡键等清单在 [`docs/TESTING.md`](docs/TESTING.md) §5 |
+
+**没有声称的**：Linux/macOS/Android 主机、非 RC003 遥控器、第 4 台设备触发
+bond 腾位的完整流程——这些未实测。所有"编译验证"与"真机验证"在文档中严格区分。
 
 ---
 
-## 测试目录
+## 项目结构与测试
 
 ```
 tests/
@@ -233,13 +285,23 @@ tests/
 └── model/check_vectors.py      宿主端模型检查 + HID 描述符解析 + 随机不变量测试
 ```
 
-设备端 `selftest` 用的是从同一份 JSON 生成的 C 头文件，因此**设备与宿主不会对期望值产生分歧**。
+设备端 `selftest` 消费同一份 JSON 生成的 C 头文件，**设备与宿主不会对期望值分歧**。
+
+---
+
+## 文档
+
+| 文件 | 内容 |
+| --- | --- |
+| [`docs/PAIRING.md`](docs/PAIRING.md) | 上游/下游配对步骤、日志样例、排查表 |
+| [`docs/KEYMAP.md`](docs/KEYMAP.md) | 13 键完整表、可配置模式、HID 描述符与服务结构 |
+| [`docs/RECOVERY.md`](docs/RECOVERY.md) | Bond 清除、故障恢复矩阵、防卡键设计 |
+| [`docs/TESTING.md`](docs/TESTING.md) | 四层验证状态、实机联调记录、验收清单、延迟测量 |
+| [`docs/THIRD_PARTY_NOTICES.md`](docs/THIRD_PARTY_NOTICES.md) | 第三方引用核查与许可证结论 |
 
 ---
 
 ## 许可证
 
-本项目源码：MIT，见 [`LICENSE`](LICENSE)。
-第三方引用核查结论见 [`docs/THIRD_PARTY_NOTICES.md`](docs/THIRD_PARTY_NOTICES.md)
-（参考项目声明 MIT 但仓库内没有 `LICENSE` 文件，因此本项目只引用协议事实与常量数值，
-未复制其源码）。
+本项目源码：MIT，见 [`LICENSE`](LICENSE)。第三方引用核查结论见
+[`docs/THIRD_PARTY_NOTICES.md`](docs/THIRD_PARTY_NOTICES.md)。

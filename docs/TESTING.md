@@ -8,21 +8,28 @@
 
 | 层级 | 内容 | 状态 | 证据 |
 | --- | --- | --- | --- |
-| L1 编译验证 | 对 `esp32:esp32:esp32c3:FlashMode=dio` 干净编译 | **通过** | 0 error / 0 warning，flash 691895 B (52%)，RAM 19780 B (6%) |
-| L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11095, failed: 0` |
+| L1 编译验证 | 对 `esp32:esp32:esp32c3:FlashMode=dio` 干净编译 | **通过** | 0 error / 0 warning，flash 691045 B (52%)，RAM 20332 B (6%) |
+| L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11096, failed: 0` |
 | L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `137 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
 | L4 上游（RC003 → C3） | 扫描、直连、配对加密、服务发现、订阅通知、逐键解析 | **通过** | 13/13 键识别，0 未知码；延迟 min 190 / median 215 / max 361 µs（§5.1、§5.2）|
-| L4 下游（C3 → Windows） | 键盘 + 媒体键 | 键盘**已通过**（`Status=OK`、`kbdhid`）；媒体键结构已改为两报告 ID，**未上机复验** | 见 §4.6（根因）与 §4.7（自建服务层）|
-| L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **未验证** | §5.3 |
+| L4 下游（C3 → Windows） | 键盘 + 媒体键 | **通过**（用户实测 13 键全部可用） | 两集合两报告 ID + 自建服务层（§4.6、§4.7）；蓝牙关→开自动重连 |
+| L4 下游（C3 → iPhone） | iOS BLE HID | **通过**（音量键、方向键实测；iOS 订阅了键盘/Consumer/电池全部三条通知） | §4.9 |
+| L4 多主机 | Windows ↔ iPhone 轮换 | **通过**（切换间隔 <0.1 s；bond 保护策略就位，第 4 台设备触发的腾位待实测） | §4.9 |
+| L4 重连速度 | 重启到按键生效 | **优化至 3.3 s**（原始 9.5 s；根因与修复见 §4.8） | `build/reconnect-timing*.log` |
+| L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **部分**：蓝牙关→开重连、长静置首按即时已验证；其余 §5.3 |
 
 已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`；
 RC003 `c0:5d:39:xx:xx:xx`（公开地址），广播名「小米蓝牙语音遥控器」。
 
-**三个只在真机上才会暴露的问题已经定位并修复**，取证与根因写在 §4：
+**四个只在真机上才会暴露的问题已经定位并修复**，取证与根因写在 §4：
 
 1. 板子无法启动（默认 QIO 下 flash 读回全 0xFF）；
 2. 按媒体键崩溃（BLE 封装层注册不了两个同 UUID 的特征）；
-3. `BLEClient::connect()` 的 timeout 参数被库忽略，导致连接失败要等 60 s（§4.4）。
+3. `BLEClient::connect()` 的 timeout 参数被库忽略，导致连接失败要等 60 s（§4.4）；
+4. 重启后按键 9.5 秒才生效（订阅顺序 + 连接参数时机 + 监督超时，§4.8）。
+
+另有两项**机制调研结论**（§4.10）：NFC 卡是 ISO 14443-4 智能卡、碰触蓝牙零交互；
+BLE 侧无任何"写 NFC 卡"的服务。
 
 ## 1. L1 编译验证（已通过）
 
@@ -445,6 +452,76 @@ Windows 内核 PnP（hidbthle.inf 正常启动，无 Code 10）：
 `forget win`，Windows 侧仍保留配对记录 → 两侧密钥不一致 → Windows **每 6～7 秒断开重连一次**
 （MTU 也从 256 掉到 23），期间按下的键落入断开窗口而丢失。Windows 后来自行完成重新配对
 （`bonds` 由 1 变回 2）后才稳定。**结论：清配对必须两边同时清**，已写进 `docs/RECOVERY.md`。
+
+### 4.8 重连慢：9.5 s → 3.3 s（订阅顺序 + 连接参数 + 监督超时）
+
+用户报告重启后十几秒按键才生效。实测时间线（`build/reconnect-timing*.log`）：
+
+```
+优化前                                    优化后
+2.9 s  Windows 重连+订阅                  3.7 s  Windows 重连+订阅（并行）
+3.0 s  RC003 建链                          4.0 s  RC003 建链
+4.0 s  服务发现完成                        4.9 s  服务发现完成
+5.9 s  电池读+订阅      <-- 按键仍死       6.0 s  HID 订阅完成
+9.3 s  HID 订阅完成（3.4 s）               3.2 s  READY（两订阅齐）
+9.5 s  READY
+```
+
+三个根因与修复：
+
+1. **服务 map 按 UUID 字符串排序**，`0x180F`（电池）排在 `0x1812`（HID）前 →
+   先花 ~2 s 读电池+订阅。改两遍扫描：pass 0 只处理 HID（按键路径），pass 1 其余。
+2. **第一版修复的 filter 放错位置**：`getCharacteristics()` 是惰性调用（首次访问才做
+   ATT 特征发现），filter 在它之后时 pass 0 仍为每个跳过的服务付 ~3.2 s 发现成本。
+   filter 必须在惰性调用**之前**。
+3. **`updateConnParams(12,12,0,400)` 在函数末尾**才发——发现与订阅全部跑在旧连接
+   间隔上。提前到加密完成后立即请求。
+
+修复后仍余 ~3 s 建链等待。深挖发现真正原因是**链路监督超时**：硬复位无法发 BLE
+断开包，遥控器要等 `BLE_GAP_INITIAL_SUPERVISION_TIMEOUT = 400×10ms = 4 s` 才发现
+主机消失、开始广播——与实测 3.5–4 s 建链精确吻合。库里扫描参数本已是 10ms/10ms
+（100% 占空比），无优化空间。修复：`updateConnParams(12,12,0,100)`（1 s），加密后
+立即发 + 周期刷新重申。副作用全为正：真实断链 1 s 内检测（清按键更快）；1 s 超时
+在 15 ms 间隔下容忍连续丢 60+ 个连接事件，不会误断。
+
+最终实测（第二次重启起，新参数已生效）：建链 **1.03 s**、HID 订阅 **2.9 s**、
+**READY 3.2 s**（两订阅齐）——9.5 s → 7.0 s → **3.3 s**，达到普通蓝牙键盘
+断电重连水平（1–3 s）。
+
+### 4.9 iOS 主机与多主机轮换（已验证）
+
+iPhone 配对后（bond `xx:xx:xx:xx:xx:xx`），BLE HID 在 iOS 上完整工作。实测：
+
+```
+[847809] host connected (id 1 addr xx:xx:xx:xx:xx:xx mtu 23)
+[848439] report 1 (keyboard) notifications ENABLED
+[848439] report 2 (consumer) notifications ENABLED
+[848451] battery level notifications ENABLED          ← iOS 连电池也订阅
+[850209] host READ battery -> 97%                     ← 并主动读电量
+```
+
+- 音量键（Consumer）与方向键（键盘）在 iPhone 上实测可用；
+- 组合键在 iOS 上按 Apple 语义解释（Win=⌘、Alt=Option），属正常差异；
+- 多主机轮换：iPhone 断开后 **0.1 s** Windows 自动接管，双向成立；
+- 两集合两报告 ID 的结构在 Windows 与 iOS 上均被接受。
+
+### 4.10 NFC 的机制结论（与桥接器无关，已实测排除）
+
+用户实测（iPhone NFC Tools 读卡 + 碰触抓取）：
+
+- 标签是 **ISO 14443-4 智能卡**（Type A / IsoDep，复旦微芯片），UID
+  `1D:3D:BA:xx:xx:xx:xx`，**无任何可读 NDEF 内容**；
+- 碰触期间蓝牙侧**零数据**（除用户物理按键外无断链、无重连、无报告）；
+- 小米手机的投屏走 **IsoDep APDU 私有协议 + 小米账号云**（这就是只有小米手机
+  能投屏、iPhone 读不出内容的原因）；iPhone 快捷指令触发绑定的是**卡片 UID**；
+- BLE 侧 9 个服务 25 个特征中没有任何"写 NFC 卡"的通道（可写点均为 HID/ATVV
+  功能接口）。
+
+结论：NFC 与蓝牙是两条独立通道，桥接器无 NFC 硬件、也不参与。"碰一碰 →
+Windows 动作"如需实现，唯一现实路径是给 C3 加 NFC 读卡模块（如 PN532），
+未排期。
+
+---
 
 ## 5. L4 实机验收清单（部分完成）
 

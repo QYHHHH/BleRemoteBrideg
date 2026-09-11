@@ -160,6 +160,28 @@ connect c0:5d:39:xx:xx:xx random
 
 ---
 
+## 2.5 下游：在 iPhone / iPad 上配对（已实测）
+
+1. iPhone：**设置 → 蓝牙**，等列表出现 `Mi Remote Bridge` 后点击配对
+   （Just Works，无需输入码）。
+2. 串口应看到三条订阅——iOS 比 Windows 还多订一个电池通知：
+
+   ```
+   [  xx][WIN    ] report 1 (keyboard) notifications ENABLED
+   [  xx][WIN    ] report 2 (consumer) notifications ENABLED
+   [  xx][HIDG   ] battery level notifications ENABLED
+   ```
+
+3. 按键效果要**在有输入焦点的地方看**（备忘录、任何文本框）：方向键移动光标、
+   确定回车、菜单打空格、音量键调音量。组合键（Win+D、Alt+F4）在 iOS 上按
+   Apple 的方式解释（Win=⌘，Alt=Option），语义与 Windows 不同，属正常。
+4. **多主机切换**：iPhone 与 Windows 同时配对后，谁先连上谁用；断开一方，
+   另一方 1 秒内自动接管（实测切换间隔 <0.1 秒）。配对记录按主机独立保存，
+   互不挤占——只有第 3 台**新**主机配对时才会腾位，且遥控器的 bond 永不参与
+   淘汰（见 `ble_bonds::makeRoomForPeer`）。
+
+---
+
 ## 3. 排查
 
 ### 上游不上报按键
