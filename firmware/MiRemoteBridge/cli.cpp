@@ -449,10 +449,34 @@ void execute(char *line) {
     return;
   }
 
+  if (!strcasecmp(cmd, "heap")) {
+    // Observe allocation and stack headroom; do not infer a universal HTTP
+    // or DHCP threshold from a free-heap reading alone. ESP-IDF reports stack
+    // high-water marks in BYTES, not the words used by upstream FreeRTOS.
+    Serial.printf("heap free : %u B (min %u, largest block %u)\n", (unsigned)ESP.getFreeHeap(),
+                  (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+    const UBaseType_t count = uxTaskGetNumberOfTasks();
+    TaskStatus_t *table = (TaskStatus_t *)malloc(count * sizeof(TaskStatus_t));
+    if (!table) {
+      Serial.println("heap      : cannot allocate the task table");
+      return;
+    }
+    const UBaseType_t got = uxTaskGetSystemState(table, count, nullptr);
+    Serial.printf("tasks     : %u\n", (unsigned)got);
+    for (UBaseType_t i = 0; i < got; i++) {
+      Serial.printf("  %-10s prio %-2u stack free %u bytes (min)\n", table[i].pcTaskName,
+                    (unsigned)table[i].uxCurrentPriority,
+                    (unsigned)table[i].usStackHighWaterMark);
+    }
+    free(table);
+    return;
+  }
+
   if (!strcasecmp(cmd, "wifi")) {
     if (argc < 2 || !strcasecmp(argv[1], "status")) {
       if (wifi_ui::enabled()) {
-        Serial.printf("config UI : ON (%s) - open http://%s/\n", wifi_ui::mode(), wifi_ui::ip());
+        if (wifi_ui::ready()) Serial.printf("config UI : READY (%s) - open http://%s/\n", wifi_ui::mode(), wifi_ui::ip());
+        else Serial.printf("config UI : CONNECTING (%s) - Bluetooth remains active\n", wifi_ui::mode());
         if (!strcasecmp(wifi_ui::mode(), "ap")) {
           // Associated clients is the fastest way to tell "cannot connect"
           // apart from "connected but never got a DHCP lease".
@@ -480,14 +504,15 @@ void execute(char *line) {
     }
     if (!strcasecmp(argv[1], "on")) {
       if (wifi_ui::enable()) {
-        Serial.printf("config UI up - open http://%s/\n", wifi_ui::ip());
+        if (wifi_ui::ready()) Serial.printf("config UI ready - open http://%s/\n", wifi_ui::ip());
+        else Serial.println("Wi-Fi connection requested; address will be logged when ready");
       } else {
         Serial.println("could not start the config UI (see the log above)");
       }
       return;
     }
     if (!strcasecmp(argv[1], "off")) {
-      Serial.println(wifi_ui::disable() ? "config UI stopped" : "config UI stop failed");
+      Serial.println("config UI is always on - Wi-Fi cannot be turned off");
       return;
     }
     if (!strcasecmp(argv[1], "ap")) {
@@ -498,7 +523,7 @@ void execute(char *line) {
         return;
       }
       if (argc >= 3 && !strcasecmp(argv[2], "off")) {
-        Serial.println(wifi_ui::disable() ? "config UI stopped" : "config UI stop failed");
+        Serial.println("config UI is always on - Wi-Fi cannot be turned off");
         return;
       }
       Serial.println("usage: wifi ap on | wifi ap off");

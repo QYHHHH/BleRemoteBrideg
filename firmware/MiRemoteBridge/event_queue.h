@@ -3,10 +3,10 @@
  *
  * event_queue.h - fixed-capacity lock-free SPSC ring buffer
  *
- * Exactly one producer (the NimBLE host task, i.e. the GATT notification and
- * connection callbacks) and exactly one consumer (the Arduino loop task) touch
- * this queue. That is the classic single-producer/single-consumer case, which
- * a ring buffer with release/acquire index updates handles without any lock.
+ * Requires one serialized producer and one consumer. event_bus.cpp serializes
+ * NimBLE, central-worker and console pushes with a short critical section;
+ * release/acquire index updates then keep the Arduino-loop consumer safe.
+ * Do not use the raw ring concurrently from multiple producer tasks.
  *
  * The whole point of this file is requirement #5: a BLE callback must never
  * call into the GATT server directly. It parses the notification and pushes an

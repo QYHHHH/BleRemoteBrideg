@@ -42,41 +42,6 @@ uint32_t s_reportsSent = 0;
 uint32_t s_unknownKeys = 0;
 uint32_t s_lastDropReportMs = 0;
 
-#if BRIDGE_STATUS_LED_ENABLE
-void ledWrite(bool on) {
-#if BRIDGE_STATUS_LED_ACTIVE_LOW
-  digitalWrite(BRIDGE_STATUS_LED_PIN, on ? LOW : HIGH);
-#else
-  digitalWrite(BRIDGE_STATUS_LED_PIN, on ? HIGH : LOW);
-#endif
-}
-#endif
-
-void ledInit() {
-#if BRIDGE_STATUS_LED_ENABLE
-  pinMode(BRIDGE_STATUS_LED_PIN, OUTPUT);
-  ledWrite(false);
-#endif
-}
-
-void ledUpdate() {
-#if BRIDGE_STATUS_LED_ENABLE
-  static uint32_t last = 0;
-  static bool state = false;
-  const uint32_t period = rc003_client::connected() ? 0 : 500;
-  if (period == 0) {
-    state = (hid_server::hostConnected());
-    ledWrite(state);
-    return;
-  }
-  if (millis() - last >= period) {
-    last = millis();
-    state = !state;
-    ledWrite(state);
-  }
-#endif
-}
-
 // ---------------------------------------------------------------------------
 // Key dispatch
 // ---------------------------------------------------------------------------
@@ -230,7 +195,6 @@ bool begin() {
   BR_LOGI(kTag, "keymap: back=%s power=%s voice=%s", keymap_back_mode_name(back), keymap_power_mode_name(power),
           keymap_voice_mode_name(voice));
 
-  ledInit();
 
   if (!ble_core::begin(BRIDGE_HID_DEVICE_NAME)) {
     BR_LOGE(kTag, "BLE stack failed to start");
@@ -276,7 +240,6 @@ void loop() {
     BR_LOGW(kTag, "event queue dropped %lu event(s) in total", (unsigned long)dropped);
   }
 
-  ledUpdate();
 }
 
 void releaseAllKeys() {

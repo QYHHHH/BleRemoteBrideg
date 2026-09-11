@@ -123,11 +123,16 @@
 // every key event. `lat on` / `lat off`.
 #define BRIDGE_LATENCY_LOG_DEFAULT 1
 
-// Optional status LED. Disabled by default because GPIO8 is wired to different
-// things on different C3 boards. Set to 1 and adjust the pin if you want it.
-#define BRIDGE_STATUS_LED_ENABLE  0
-#define BRIDGE_STATUS_LED_PIN     8
-#define BRIDGE_STATUS_LED_ACTIVE_LOW 1
+// Status LEDs (status_led.cpp). Two on-board LEDs report the two links:
+//   D5 = link to the computer   breathing = waiting, fast blink = linked but
+//                               HID not ready, solid = subscribed
+//   D4 = link to the remote     same three rhythms, plus dark while a remote
+//                               key is held
+// Hezhou CORE-ESP32 wiring: D4 = GPIO12, D5 = GPIO13, both active HIGH. They
+// are free only because this board runs its flash in DIO mode (see the
+// FlashMode note above) - in QIO they double as SPIHD/SPIWP.
+#define BRIDGE_LED_HOST_PIN       13   // D5
+#define BRIDGE_LED_REMOTE_PIN     12   // D4
 
 // ---------------------------------------------------------------------------
 // Console

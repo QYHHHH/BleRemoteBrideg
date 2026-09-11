@@ -167,7 +167,11 @@ static size_t s_bindingCount = 0;
 
 bool keymap_set_binding(uint8_t raw_code, uint8_t kind, uint8_t modifier, uint8_t keycode,
                         uint16_t consumer) {
-  if (raw_code == 0x00) return false;  // the all-zero frame is "no key", never a code
+  if (raw_code == 0x00 || kind > KEYMAP_BIND_KIND_CONS) return false;
+  if (kind == KEYMAP_BIND_KIND_KB && modifier == 0 && keycode == 0) return false;
+  if (kind == KEYMAP_BIND_KIND_CONS && consumer == 0) return false;
+  if (kind != KEYMAP_BIND_KIND_KB) modifier = keycode = 0;
+  if (kind != KEYMAP_BIND_KIND_CONS) consumer = 0;
 
   // Replace an existing binding for this code in place.
   for (size_t i = 0; i < s_bindingCount; i++) {

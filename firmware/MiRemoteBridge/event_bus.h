@@ -14,7 +14,8 @@
 
 namespace event_bus {
 
-// Called from BLE callback context (NimBLE host task). Never blocks.
+// Called from NimBLE, the central task, or console. Producer writes are
+// serialized with a short critical section; no waiting for queue space.
 bool post(uint8_t type, uint8_t code = 0, bool pressed = false);
 
 // Called from the Arduino loop task only.

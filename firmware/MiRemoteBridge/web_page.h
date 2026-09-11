@@ -1,11 +1,10 @@
 /*
  * MiRemoteBridge - Web UI page, served from PROGMEM.
  *
- * SIZE IS A HARD CONSTRAINT. The ESP32-C3 runs BLE and Wi-Fi on one radio; with
- * the config AP up the free heap is only ~13-20 KB. A 47.8 KB page could not be
- * sent at all (docs/TESTING.md 4.13). Keep this file around 13-16 KB: compact
- * CSS/JS and Unicode glyphs instead of inline SVG. Check with:
- *   python tests/tools/web_ui_preview.py   (prints the page size)
+ * Authoring source for the offline preview and generated HTML/CSS/JS assets.
+ * gen_web_page.py splits and gzips it; firmware streams the flash-resident
+ * arrays without a whole-page allocation. CSS responsive layouts cost flash,
+ * not extra MCU heap. Status polling continues while an editor is open.
  *
  * One physical key maps to exactly one HID action; presses and releases are
  * forwarded live. No gestures, macros or audio.
@@ -38,10 +37,16 @@ main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
 .btn:hover{background:#f8fafc}.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}.btn.p:hover{background:#0966d9}
 .btn.d{color:#b45345}
 .head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr) 190px minmax(0,1fr);gap:12px;align-items:center}
-.col{display:flex;flex-direction:column;gap:8px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 190px minmax(0,1fr);gap:12px;align-items:center;position:relative}
+.col{display:flex;flex-direction:column;gap:8px;position:relative;z-index:1}
+#wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+#wires path{fill:none;stroke:#cbd8e6;stroke-width:1.5;transition:stroke .1s}
+#wires path.live{stroke:#327ede;stroke-width:2.5}
 .k{border:1px solid #e7e9ed;background:#f9fafb;border-radius:9px;overflow:hidden;transition:.15s}
 .k.sel{background:var(--soft);border-color:#9bc5fb}
+.k.live,.rb.live{background:#d7ecff;border-color:#327ede;box-shadow:0 0 0 3px #327ede26}
+.k.live .act,.rb.live{color:#1257b5}
+.rb.live{color:#fff;background:#327ede}
 .k:hover{border-color:#b2c9e6}
 .k button{display:block;width:100%;text-align:left;background:none;border:0;padding:9px 11px;min-height:62px}
 .k .r1{display:flex;align-items:center;gap:6px;font-size:12px;color:#67717d}
@@ -51,21 +56,37 @@ main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
 .k .r2{display:flex;justify-content:space-between;gap:8px;align-items:center;padding-top:5px}
 .k .act{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .k .ed{font-size:10px;color:#9aa3af}
-.rm{display:flex;flex-direction:column;align-items:center;gap:12px}
+.rm{display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;z-index:1}
 .rm .body{width:132px;height:410px;border:1px solid #bfc4c7;border-radius:15px 15px 18px 18px;background:linear-gradient(90deg,#c6c9cb,#e4e5e4 8%,#f2f2f0 45%,#e5e5e3 92%,#b9bdbf);position:relative;box-shadow:7px 11px 18px #27344210;flex:none}
 .rm .body:after{content:"RC003";position:absolute;bottom:26px;width:100%;text-align:center;font:10px ui-monospace,Consolas,monospace;letter-spacing:3px;color:#a3a7a9}
 .rb{position:absolute;display:grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid #61666a;border-radius:50%;background:#53595d;color:#f4f5f5;font-size:13px}
 .rb:hover{background:#606d7a}.rb.sel{background:#327ede;border-color:#286eca;color:#fff}
 .rb.top{top:16px;width:25px;height:25px;background:#e9eae8;color:#646b71;border-color:#a4aaae}
 .rb.top.sel{background:#ecf4ff;color:var(--blue);border-color:var(--blue)}
-.p1{left:19px}.p2{right:19px}.p3{left:23px;top:172px}.p4{left:23px;top:214px}.p5{left:23px;top:256px}
-.p6{right:23px;top:172px}.p7{right:23px;top:210px}.p8{right:23px;top:256px}
-.dp{position:absolute;left:13px;top:55px;width:106px;height:106px;border-radius:50%;background:#4c5255;border:1px solid #353b3e}
-.dp .rb{width:30px;height:26px;border:0;background:none;color:#b7bfc5;font-size:11px}
-.dp .rb.sel{background:#327ede;color:#fff}
-.du{left:38px;top:0}.dd{left:38px;bottom:0}.dl{left:0;top:40px;width:26px}.dr{right:0;top:40px;width:26px}
-.do{left:27px;top:27px;width:50px;height:50px;font-size:9px;background:#555c61;color:#dfe4e6;border-color:#363d40}
-.do.sel{background:#327ede}
+.p1{left:26px}.p2{left:86px}
+/* Positions measured off the remote itself, expressed as proportions so the
+   drawing survives any body size:
+     top row     centre y 9%   - x 29% (power) and 74% (voice)
+     disc        centre y 22%  - diameter 80% of the body width
+     columns     centre y 37% / 47% / 57%, x 29% (left) and 74% (right)
+   The two columns line up horizontally: volume + and - sit at the same heights
+   as back and home, TV at the same height as menu. Everything below the TV row
+   is empty body, exactly like the real remote.
+   Every key stays a DIRECT child of .body (the selection/live highlight walks
+   rmArt.children), so all coordinates are relative to the body and the disc
+   itself is painted by ::before underneath them. */
+.p3{left:22px;top:138px}.p4{left:22px;top:176px}.p5{left:22px;top:217px}
+.p6{left:82px;top:137px;height:34px;border-radius:17px 17px 6px 6px}
+.p7{left:82px;top:173px;height:34px;border-radius:6px 6px 17px 17px}
+.p8{left:82px;top:217px}
+.rm .body:before{content:"";position:absolute;left:13px;top:37px;width:106px;height:106px;border-radius:50%;background:radial-gradient(circle at 42% 34%,#3f454a,#22262a 72%);box-shadow:inset 0 3px 7px #0000004d,0 4px 11px #1c2a3a2b}
+.rb.du,.rb.dd,.rb.dl,.rb.dr{width:34px;height:34px;border:0;background:none;color:#c9d0d5;font-size:13px}
+.rb.du{left:49px;top:40px}.rb.dd{left:49px;top:106px}
+.rb.dl{left:16px;top:73px}.rb.dr{left:82px;top:73px}
+.rb.du:hover,.rb.dd:hover,.rb.dl:hover,.rb.dr:hover{background:#ffffff1c}
+.rb.du.sel,.rb.dd.sel,.rb.dl.sel,.rb.dr.sel{background:#327ede;color:#fff}
+.rb.do{left:43px;top:67px;width:47px;height:47px;font-size:10px;background:#343a3f;color:#e6ebee;border-color:#23282c}
+.rb.do.sel{background:#327ede;border-color:#286eca}
 .cap{text-align:center;font-size:9px;color:#97a0aa;line-height:1.8}.cap b{display:block;color:#6d7781;font-size:10px;letter-spacing:2px;font-weight:500}
 .foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 18px;margin-top:14px;flex-wrap:wrap}
 .foot p{font-size:11px;color:var(--mut)}.foot .bs{display:flex;gap:8px}
@@ -96,10 +117,11 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 <main>
 <div class="warn demo" id="demo" hidden><span>设计预览 · 数据为模拟，不会操作真实设备。</span></div>
 <div class="warn" id="off" hidden><span>无法连接桥接器，显示的是上次读取的数据，编辑已暂停。</span><button id="retry">重新连接</button></div>
-<div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">连接 MiRemoteBridge 热点后打开本页。</p></div>
+<div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">与桥接器连接同一路由器，即可配置。</p><p id="diag" aria-live="polite"></p></div>
 <button class="btn p" id="goMap">编辑按键映射</button><button class="btn" id="refresh">刷新</button></div>
 <div class="head"><h2>按键映射</h2><span class="mut" style="font-size:11px"><span id="cnt">—</span> 项自定义 · 点卡片或遥控器按键编辑</span></div>
 <div class="card" style="padding:14px 16px"><div class="grid" id="grid">
+<svg id="wires" aria-hidden="true"></svg>
 <div class="col" id="colL"></div>
 <div class="rm"><div class="body" id="rmArt"></div><div class="cap"><b>RC003</b>13 键 · 标准蓝牙 HID<br>蓝色为正在编辑的按键</div></div>
 <div class="col" id="colR"></div>
@@ -116,7 +138,7 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 <label class="f">主键<select id="key"></select></label></div>
 <div id="cs" hidden><label class="f">媒体 / 系统动作<select id="cons"></select></label></div>
 <div class="pv"><small>保存后输出</small><span id="pv">—</span></div>
-<p class="hint" id="edH"></p><div class="err" id="edE" hidden></div>
+<p class="hint" id="edH"></p><p class="hint" id="edLink" aria-live="polite"></p><div class="err" id="edE" hidden></div>
 </div>
 <div class="da"><button type="button" class="rs" id="clr">恢复此键默认</button><button type="button" class="btn" id="edC2">取消</button><button type="submit" class="btn p" id="sv">保存映射</button></div>
 </form></dialog>
@@ -128,15 +150,15 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 'use strict';
 var $=function(i){return document.getElementById(i)};
 var KEYS=[[0x66,'电源键','⏻','L','p1'],[0x52,'上键','↑','L','du'],[0x50,'左键','←','L','dl'],[0xF1,'返回键','↩','L','p3'],[0x4A,'主页键','⌂','L','p4'],[0x65,'菜单键','☰','L','p5'],
-[0x3E,'语音键','🎤','R','p2'],[0x4F,'右键','→','R','dr'],[0x28,'确定键','OK','R','do'],[0x51,'下键','↓','R','dd'],[0x80,'音量 +','＋','R','p6'],[0x81,'音量 −','－','R','p7'],[0x35,'TV 键','TV','R','p8']];
+[0x3E,'语音键','MIC','R','p2'],[0x4F,'右键','→','R','dr'],[0x28,'确定键','OK','R','do'],[0x51,'下键','↓','R','dd'],[0x80,'音量 +','＋','R','p6'],[0x81,'音量 −','－','R','p7'],[0x35,'TV 键','TV','R','p8']];
 var KB=[[0,'无主键（仅修饰键）'],[40,'Enter'],[41,'Esc'],[42,'Backspace'],[43,'Tab'],[44,'Space'],[79,'→'],[80,'←'],[81,'↓'],[82,'↑'],[54,','],[55,'.'],[56,'/'],[45,'-'],[46,'='],[47,'['],[48,']'],[51,';'],[52,"'"],[53,'`'],[57,'Caps Lock'],[73,'Insert'],[74,'Home'],[75,'Page Up'],[76,'Delete'],[77,'End'],[78,'Page Down']];
 for(var i=0;i<26;i++)KB.push([4+i,String.fromCharCode(65+i)]);
 for(i=0;i<10;i++)KB.push([30+i,String((i+1)%10)]);
 for(i=0;i<12;i++)KB.push([58+i,'F'+(i+1)]);
 var CS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
 var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
-var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,busy2:false,load:false,t:null};
-function hx(v){return ('0'+v.toString(16).toUpperCase()).slice(-2)}
+var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null};
+function hx(v){return v.toString(16).toUpperCase().padStart(2,'0')}
 function pick(l,v,d){for(var i=0;i<l.length;i++)if(l[i][0]===v)return l[i][1];return d}
 function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return pick(CS,a.cons,'媒体 0x'+hx(a.cons));
 var p=[],i;for(i=0;i<MD.length;i++)if(a.mod&MD[i][0])p.push(MD[i][1]);
@@ -167,7 +189,25 @@ function render(){var n=0;KEYS.forEach(function(k){var r=k[0],c=$('k'+r),b=S.b[r
 c.className='k'+(b?' cus':'')+(r===S.sel?' sel':'');c.querySelector('.tg').textContent=b?'自定义':'基础';
 c.querySelector('.act').textContent=fmt(cur(r))});
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('sel',+e.dataset.r===S.sel)});
-$('cnt').textContent=n;btns()}
+$('cnt').textContent=n;btns();drawWires()}
+// Curve from each physical button to its mapping slot, measured from the live
+// layout so it survives resize and any font/label change.
+function drawWires(){var g=$('grid'),svg=$('wires');if(!g||!svg)return;
+var gb=g.getBoundingClientRect(),out='';
+KEYS.forEach(function(k){var card=$('k'+k[0]),btn=document.querySelector('#rmArt [data-r="'+k[0]+'"]');
+if(!card||!btn)return;
+var cb=card.getBoundingClientRect(),bb=btn.getBoundingClientRect();
+var x1=(k[3]==='L'?bb.left:bb.right)-gb.left,y1=bb.top+bb.height/2-gb.top;
+var x2=(k[3]==='L'?cb.right:cb.left)-gb.left,y2=cb.top+cb.height/2-gb.top;
+var dx=(x2-x1)*0.45;
+out+='<path data-r="'+k[0]+'" d="M'+x1.toFixed(1)+','+y1.toFixed(1)+' C'+(x1+dx).toFixed(1)+','+y1.toFixed(1)+' '+(x2-dx).toFixed(1)+','+y2.toFixed(1)+' '+x2.toFixed(1)+','+y2.toFixed(1)+'"/>';});
+svg.innerHTML=out}
+function highlight(raw){KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.classList.toggle('live',!!raw&&k[0]===raw)});
+Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('live',!!raw&&+e.dataset.r===raw)});
+Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)})}
+function pollStatus(){if(S.poll)return;S.poll=true;
+fetch('/api/status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){stat(j);highlight(j.activeKey)})
+.catch(function(){}).finally(function(){S.poll=false})}
 function stat(j){var rc=!!j.remoteConnected,h=!!j.hostConnected;
 var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
 function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
@@ -214,6 +254,8 @@ $('rdC').onclick=function(){$('rd').close()};$('rdY').onclick=reset;
 $('refresh').onclick=$('refresh2').onclick=$('retry').onclick=function(){load(true)};
 $('goMap').onclick=function(){document.querySelector('.head').scrollIntoView({behavior:'smooth',block:'start'})};
 document.addEventListener('visibilitychange',function(){if(!document.hidden)load()});
+window.addEventListener('resize',drawWires);
 load();
+setInterval(function(){if(!document.hidden)pollStatus()},150);
 setInterval(function(){if(!document.hidden&&!$('ed').open&&!$('rd').open)load()},5000);
 </script></body></html>)rawliteral";

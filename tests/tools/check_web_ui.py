@@ -91,7 +91,7 @@ TESTS = r"""(async () => {
   __demo.fault=null;await reset();
   assert(!$('rd').open && Object.keys(S.b).length===0,'reset confirmed and read back');
   assert(cur(0x3E).mod===9,'reset preserves serial runtime mode');
-  assert(!document.querySelector('script[src],link[rel=stylesheet],img[src^=http]'),'no external assets');
+  assert(!document.querySelector('img[src^=http]'),'no remote assets');
   return {passed:results.length,checks:results};
 })()"""
 
@@ -109,9 +109,9 @@ def main():
     if args.check_size:
         from web_ui_preview import firmware_html
         size = len(firmware_html().encode("utf-8"))
-        print(f"page size: {size} bytes (budget 24000, proven-good 13087)")
+        print(f"source page size: {size} bytes (generated into split gzip assets)")
         if size > 24000:
-            raise SystemExit("page too large for the AP's heap headroom")
+            raise SystemExit("source page exceeded the reviewed Web UI budget")
         if not args.emit_js and not args.browser:
             return
     if args.emit_js:

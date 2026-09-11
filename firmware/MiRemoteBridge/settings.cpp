@@ -32,7 +32,8 @@ const char *kKeyMapPower = "map_pow";
 const char *kKeyMapVoice = "map_voice";
 const char *kKeyBattery = "rc_batt";
 const char *kKeyBatteryValid = "rc_batt_v";
-const char *kKeyBindKeys = "bd_keys";
+const char *kKeyBindKeys = "bd_keys";  // legacy manifest, read for migration only
+const char *kKeyBindingsV2 = "bd_v2";  // one atomic, versioned snapshot
 const char *kKeyWifiSsid = "wf_ssid";
 const char *kKeyWifiPass = "wf_pass";
 
@@ -132,12 +133,35 @@ void setBatteryLevel(uint8_t percent) {
 }
 
 // --- programmable key bindings -------------------------------------------
-// One NVS blob per bound raw code (`bd_XX` holding kind/modifier/keycode and
-// the 16-bit consumer usage), plus a manifest key (`bd_keys`) listing the
-// bound raw codes so loading does not have to scan all 256 possibilities.
+// Snapshot: version byte, count byte, then {raw, kind, mod, key, consLo,
+// consHi} records. One checked NVS commit avoids a torn record/manifest pair.
+// Legacy bd_keys/bd_XX remain readable until the first successful v2 write.
 
 void loadBindings() {
   if (!s_ready) return;
+  if (s_prefs.isKey(kKeyBindingsV2)) {
+    uint8_t snapshot[2 + KEYMAP_MAX_BINDINGS * 6];
+    const size_t size = s_prefs.getBytesLength(kKeyBindingsV2);
+    if (size < 2 || size > sizeof(snapshot) ||
+        s_prefs.getBytes(kKeyBindingsV2, snapshot, sizeof(snapshot)) != size ||
+        snapshot[0] != 1 || snapshot[1] > KEYMAP_MAX_BINDINGS ||
+        size != 2u + 6u * snapshot[1]) {
+      BR_LOGE(kTag, "invalid binding snapshot, not loading stale legacy records");
+      return;
+    }
+    for (size_t i = 0; i < snapshot[1]; ++i) {
+      const uint8_t *r = snapshot + 2 + 6 * i;
+      bool valid = r[0] && (r[1] == 1 ? (r[2] || r[3]) : (r[1] == 2 && (r[4] || r[5])));
+      for (size_t j = 0; j < i; ++j) if (snapshot[2 + 6 * j] == r[0]) valid = false;
+      if (!valid) { BR_LOGE(kTag, "invalid binding record; snapshot not applied"); return; }
+    }
+    for (size_t i = 0; i < snapshot[1]; ++i) {
+      const uint8_t *r = snapshot + 2 + 6 * i;
+      keymap_set_binding(r[0], r[1], r[2], r[3], (uint16_t)(r[4] | ((uint16_t)r[5] << 8)));
+    }
+    BR_LOGI(kTag, "loaded %u persisted binding(s)", (unsigned)snapshot[1]);
+    return;
+  }
   const size_t len = s_prefs.getBytesLength(kKeyBindKeys);
   if (len == 0) return;
 
@@ -160,28 +184,43 @@ void loadBindings() {
   BR_LOGI(kTag, "loaded %u programmable binding(s)", (unsigned)got);
 }
 
-void setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, uint16_t consumer) {
-  if (!s_ready) return;
+bool setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, uint16_t consumer) {
+  if (!s_ready || raw == 0 || kind > 2 ||
+      (kind == 1 && modifier == 0 && keycode == 0) || (kind == 2 && consumer == 0)) return false;
+  if (kind != 1) modifier = keycode = 0;
+  if (kind != 2) consumer = 0;
 
-  // Apply to the live keymap first; it also validates (unknown raw codes such
-  // as 0x00 are rejected there and we must not persist what the map refused).
-  if (!keymap_set_binding(raw, kind, modifier, keycode, consumer)) return;
-
-  char key[8];
-  snprintf(key, sizeof(key), "bd_%02x", raw);
-  if (kind == 0) {
-    s_prefs.remove(key);
-  } else {
-    const uint8_t rec[5] = {kind, modifier, keycode, (uint8_t)(consumer & 0xFF),
-                            (uint8_t)((consumer >> 8) & 0xFF)};
-    s_prefs.putBytes(key, rec, sizeof(rec));
-  }
-
-  // Rebuild the manifest from the live table so it always matches.
+  // Stage without touching the live map. The Arduino loop owns both mapping
+  // changes and HID dispatch, so the final memory-only apply cannot race it.
   uint8_t raws[KEYMAP_MAX_BINDINGS];
   hid_action_t acts[KEYMAP_MAX_BINDINGS];
-  const size_t n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
-  s_prefs.putBytes(kKeyBindKeys, raws, n);
+  size_t count = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
+  size_t index = 0;
+  while (index < count && raws[index] != raw) ++index;
+  if (kind == 0) {
+    if (index < count) { --count; raws[index] = raws[count]; acts[index] = acts[count]; }
+  } else {
+    if (index == count) {
+      if (count == KEYMAP_MAX_BINDINGS) return false;
+      ++count;
+    }
+    raws[index] = raw;
+    acts[index] = {kind == 1 ? HID_ACT_KEYBOARD : HID_ACT_CONSUMER, modifier, keycode, consumer};
+  }
+  uint8_t snapshot[2 + KEYMAP_MAX_BINDINGS * 6] = {1, (uint8_t)count};
+  for (size_t i = 0; i < count; ++i) {
+    uint8_t *r = snapshot + 2 + 6 * i;
+    r[0] = raws[i]; r[1] = (uint8_t)acts[i].kind; r[2] = acts[i].modifier;
+    r[3] = acts[i].keycode; r[4] = (uint8_t)acts[i].consumer; r[5] = (uint8_t)(acts[i].consumer >> 8);
+  }
+  const size_t size = 2 + 6 * count;
+  // Preferences::putBytes includes nvs_commit. A failure is never reported as
+  // success, and never updates the runtime binding ahead of persistence.
+  if (s_prefs.putBytes(kKeyBindingsV2, snapshot, size) != size) {
+    BR_LOGE(kTag, "binding snapshot commit failed; live map unchanged");
+    return false;
+  }
+  return keymap_set_binding(raw, kind, modifier, keycode, consumer);
 }
 
 String wifiSsid() { return s_ready ? s_prefs.getString(kKeyWifiSsid, "") : String(""); }

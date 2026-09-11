@@ -16,6 +16,10 @@
 namespace {
 
 SpscRing<bridge_event_t, BRIDGE_EVENT_QUEUE_SIZE> s_queue;
+// There are THREE producer contexts: NimBLE callbacks, the central worker
+// (READY/battery/failure), and CLI test injection. Serialize their small push
+// operations; an SPSC ring alone is not safe when these tasks preempt each other.
+portMUX_TYPE s_producerMux = portMUX_INITIALIZER_UNLOCKED;
 
 }  // namespace
 
@@ -42,8 +46,11 @@ bool post(uint8_t type, uint8_t code, bool pressed) {
   ev.code = code;
   ev.pressed = pressed;
   ev.ts_us = micros();
-  ev.ts_ms = (uint32_t)(ev.ts_us / 1000u);
-  return s_queue.push(ev);
+  ev.ts_ms = millis();
+  portENTER_CRITICAL(&s_producerMux);
+  const bool queued = s_queue.push(ev);
+  portEXIT_CRITICAL(&s_producerMux);
+  return queued;
 }
 
 bool pop(bridge_event_t &out) {

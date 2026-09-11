@@ -62,6 +62,9 @@ def demo_html():
 })();
 </script>
 '''.replace("FIXTURE", json.dumps(defaults, ensure_ascii=False))
+    # The firmware generator splits these into local /app.css and /app.js
+    # endpoints. The standalone preview keeps them inline so it remains one
+    # file that browsers can open without a server.
     return firmware_html().replace("<script>\n'use strict';", adapter + "<script>\n'use strict';", 1)
 
 

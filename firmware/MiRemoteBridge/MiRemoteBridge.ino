@@ -25,6 +25,7 @@
 #include "config.h"
 #include "log.h"
 #include "reset_button.h"
+#include "status_led.h"
 #include "wifi_ui.h"
 
 void setup() {
@@ -33,18 +34,25 @@ void setup() {
 
   cli::begin();
   reset_button::begin();
+  status_led::begin();
 
   if (!bridge::begin()) {
     BR_LOGE("MAIN", "bridge failed to start; console still available for diagnosis");
   } else {
     bridge::printStatus();
   }
+
+  // After the bridge: wifi_ui::begin() reads the saved network out of NVS,
+  // and it is settings::begin() (inside bridge::begin) that loads it. Calling
+  // this earlier would always see an empty SSID and never arm the auto-start.
+  wifi_ui::begin();
 }
 
 void loop() {
   cli::poll();
   reset_button::poll();
+  status_led::loop();
+  bridge::loop();  // drain key releases before each bounded HTTP step
   wifi_ui::loop();
-  bridge::loop();
   delay(1);
 }

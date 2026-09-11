@@ -52,7 +52,8 @@ void setBatteryLevel(uint8_t percent);
 // 1 = keyboard (modifier + keycode), 2 = consumer (usage). Setting with
 // kind = 0 clears.
 void loadBindings();
-void setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, uint16_t consumer);
+// Returns true only after the complete binding snapshot is committed to NVS.
+bool setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, uint16_t consumer);
 
 // ---- Wi-Fi credentials for the config UI ---------------------------------
 // The config page is served over the local network: the bridge joins the

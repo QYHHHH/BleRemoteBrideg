@@ -60,6 +60,7 @@ constexpr uint16_t kHidServiceUuid = 0x1812;
 
 BLEServer *s_server = nullptr;
 BLEAdvertising *s_adv = nullptr;
+
 String s_deviceName = BRIDGE_HID_DEVICE_NAME;
 
 struct DownKey {
@@ -72,8 +73,6 @@ size_t s_downCount = 0;
 
 bool s_consumerDown = false;
 uint16_t s_consumerUsage = 0;
-
-volatile uint8_t s_hostCount = 0;
 
 // ---------------------------------------------------------------------------
 // Report builder
@@ -129,10 +128,12 @@ class BridgeServerCallbacks : public BLEServerCallbacks {
  public:
 #if defined(CONFIG_NIMBLE_ENABLED)
   void onConnect(BLEServer *pServer, ble_gap_conn_desc *desc) override {
-    s_hostCount = (uint8_t)pServer->getConnectedCount();
+    // Arduino 3.3.11 invokes this callback BEFORE incrementing its count.
+    // Never cache getConnectedCount() here: it would report zero forever for
+    // the first host, even with both HID reports subscribed and working.
     BR_LOGI(kTagHost, "host connected (id %u addr %s mtu %u total %u)", (unsigned)desc->conn_handle,
             BLEAddress(desc->peer_id_addr).toString().c_str(), (unsigned)ble_att_mtu(desc->conn_handle),
-            (unsigned)s_hostCount);
+            (unsigned)pServer->getConnectedCount() + 1);
     // Bond housekeeping BEFORE the new peer pairs (see ble_bonds::makeRoomForPeer):
     // when the store is full a genuinely new host gets a slot by retiring the
     // oldest non-remote bond, so the stack's own blind oldest-record eviction
@@ -142,12 +143,11 @@ class BridgeServerCallbacks : public BLEServerCallbacks {
   }
 
   void onDisconnect(BLEServer *pServer, ble_gap_conn_desc *desc) override {
-    s_hostCount = (uint8_t)pServer->getConnectedCount();
     // An abrupt disconnect does not always produce a final unsubscribe event, so
     // the cached subscription state is cleared here rather than trusted.
     hid_gatt::resetSubscriptions();
     BR_LOGW(kTagHost, "host disconnected (handle %u, remaining %u)", (unsigned)desc->conn_handle,
-            (unsigned)s_hostCount);
+            (unsigned)pServer->getConnectedCount());
     // The loop reacts by clearing every key and re-arming advertising. Doing
     // either from inside this GAP callback would re-enter the host task.
     event_bus::post(BR_EV_WIN_LINK_DOWN);
@@ -325,9 +325,9 @@ void releaseAll() {
   }
 }
 
-bool hostConnected() { return s_hostCount > 0; }
+bool hostConnected() { return s_server && s_server->getConnectedCount() > 0; }
 
-uint8_t hostCount() { return s_hostCount; }
+uint8_t hostCount() { return s_server ? (uint8_t)s_server->getConnectedCount() : 0; }
 
 void forceReAdvertise() {
   if (!s_adv) return;

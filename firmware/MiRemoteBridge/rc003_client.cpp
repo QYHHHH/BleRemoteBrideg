@@ -505,7 +505,8 @@ bool discoverAndSubscribe() {
     BR_LOGE(kTagGatt, "service discovery returned nothing");
     return false;
   }
-  BR_LOGI(kTagGatt, "discovered %u service(s)", (unsigned)services->size());
+  BR_LOGI(kTagGatt, "discovered %u service(s), heap before characteristics %u B",
+          (unsigned)services->size(), (unsigned)ESP.getFreeHeap());
 
   int subscribed = 0;
 
@@ -527,15 +528,21 @@ bool discoverAndSubscribe() {
       // lazy and performs the ATT discovery of the service's characteristics
       // on first touch. Filtering after it would still pay the discovery cost
       // for every service pass 0 skips - measured at ~3.2 s on this remote.
-      const bool isHidService = svcUuid.indexOf("1812") >= 0;
-      if ((pass == 0) != isHidService) continue;  // pass 0: HID only; pass 1: the rest
+      const bool isHidService = svc->getUUID().equals(BLEUUID(RC003_HOGP_SVC_UUID));
+      const bool isAtvvService = BRIDGE_ATVV_CTL_ENABLE &&
+          svc->getUUID().equals(BLEUUID(RC003_ATVV_SVC_UUID));
+      const bool isBatteryService = BRIDGE_BATTERY_PASSTHROUGH &&
+          svc->getUUID().equals(BLEUUID(RC003_BATTERY_SVC_UUID));
+      if ((pass == 0) != isHidService) continue;
+      // Do NOT discover characteristics of Device Information, vendor OTA,
+      // GAP, etc. The BLE wrapper retains a heap object and semaphores for
+      // every discovered characteristic, although we never use these services.
+      // Filtering must precede the lazy getCharacteristics() call.
+      if (!isHidService && !isAtvvService && !isBatteryService) continue;
 
       BR_LOGI(kTagGatt, "service %s", svcUuid.c_str());
       std::map<std::string, BLERemoteCharacteristic *> *chars = svc->getCharacteristics();
       if (!chars) continue;
-
-      const bool isAtvvService = svcUuid.indexOf("ab5e0001") >= 0;
-      const bool isBatteryService = svcUuid.indexOf(RC003_BATTERY_SVC_UUID) >= 0;
 
       for (auto &kc : *chars) {
         BLERemoteCharacteristic *ch = kc.second;
@@ -638,7 +645,8 @@ bool discoverAndSubscribe() {
 
   s_subscribed = true;
   s_notifyCount = 0;
-  BR_LOGI(kTagGatt, "ready: %d subscription(s), notifications live", subscribed);
+  BR_LOGI(kTagGatt, "ready: %d subscription(s), notifications live, heap %u B", subscribed,
+          (unsigned)ESP.getFreeHeap());
   return true;
 }
 

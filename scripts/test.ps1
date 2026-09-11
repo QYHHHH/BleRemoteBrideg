@@ -28,17 +28,26 @@ try {
     $failures = 0
 
     Write-Host ''
-    Write-Host '=== 1/3 regenerate test vectors ===' -ForegroundColor Cyan
+    Write-Host '=== 1/4 regenerate firmware assets ===' -ForegroundColor Cyan
     & $python (Join-Path $paths.Root 'tests\tools\gen_vectors.py')
+    if ($LASTEXITCODE -ne 0) { $failures++ }
+    & $python (Join-Path $paths.Root 'tests\tools\gen_web_page.py')
+    if ($LASTEXITCODE -ne 0) { $failures++ }
+    & $python (Join-Path $paths.Root 'tests\tools\gen_web_page.py') --check
     if ($LASTEXITCODE -ne 0) { $failures++ }
 
     Write-Host ''
-    Write-Host '=== 2/3 host-side model check ===' -ForegroundColor Cyan
+    Write-Host '=== 2/4 host-side model check ===' -ForegroundColor Cyan
     & $python (Join-Path $paths.Root 'tests\model\check_vectors.py')
     if ($LASTEXITCODE -ne 0) { $failures++ }
 
     Write-Host ''
-    Write-Host '=== 3/3 compile the firmware ===' -ForegroundColor Cyan
+    Write-Host '=== 3/4 Web UI source budget ===' -ForegroundColor Cyan
+    & $python (Join-Path $paths.Root 'tests\tools\check_web_ui.py') --check-size
+    if ($LASTEXITCODE -ne 0) { $failures++ }
+
+    Write-Host ''
+    Write-Host '=== 4/4 compile the firmware ===' -ForegroundColor Cyan
     $code = Invoke-BridgeBuild -Paths $paths
     if ($code -ne 0) { $failures++ }
 
