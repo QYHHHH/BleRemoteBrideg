@@ -488,7 +488,17 @@ bool discoverAndSubscribe() {
   // traffic that runs at the current connection interval, so the earlier the
   // interval shrinks the earlier the whole sequence finishes. This used to
   // happen at the very end of the function, after all the slow work.
-  s_client->updateConnParams(12, 12, 0, 400);
+  //
+  // supervision_timeout = 100 (1 s), not the library default 400 (4 s). This
+  // is what makes reboot recovery fast: a hard reset cannot send BLE's
+  // disconnect, so the remote only learns the host vanished when the
+  // supervision timeout expires - at 4 s it sits silent for exactly that long
+  // before it starts advertising again, which measured as the entire gap
+  // between "C3 rebooted" and "link re-established". At 1 s the remote is
+  // back on air within the second and the reconnection starts immediately.
+  // 1 s tolerates losing 60+ consecutive connection events at a 15 ms
+  // interval, so ordinary packet loss can never trip it.
+  s_client->updateConnParams(12, 12, 0, 100);
 
   std::map<std::string, BLERemoteService *> *services = s_client->getServices();
   if (!services || services->empty()) {
@@ -948,11 +958,13 @@ void taskLoop() {
         break;
       }
       // Keep the link parameters favourable for latency without hammering the
-      // remote with requests.
+      // remote with requests. Timeout stays at 1 s (see discoverAndSubscribe):
+      // the short supervision timeout is what makes the next hard reboot
+      // recover quickly, so it must be re-asserted here too.
       static uint32_t s_lastParamUpdate = 0;
       if ((nowMs() - s_lastParamUpdate) > 30000) {
         s_lastParamUpdate = nowMs();
-        s_client->updateConnParams(12, 12, 0, 400);
+        s_client->updateConnParams(12, 12, 0, 100);
         s_lastRssi = s_client->getRssi();
       }
       vTaskDelay(pdMS_TO_TICKS(200));
