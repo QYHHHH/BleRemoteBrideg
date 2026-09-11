@@ -31,6 +31,19 @@ int list(BLEAddress *out, int max_out);
 // nothing matched, -1 on error.
 int removePeer(BLEAddress peer);
 
+// Bond housekeeping for a newly connected peer, run BEFORE that peer pairs.
+//
+// If `incoming` is already bonded it is a returning friend - a reconnect
+// writes nothing new and no slot is freed. If the store is full and `incoming`
+// is genuinely new, the oldest stored bond whose address differs from
+// `protected_addr` is deleted to make room. Making room here matters: left
+// alone, the stack's own overflow handler deletes the absolute oldest record
+// with no idea what it is for, and if that happens to be the upstream
+// remote's bond the bridge silently loses its keys until it is re-paired.
+//
+// Returns the number of records deleted.
+int makeRoomForPeer(const BLEAddress &incoming, const BLEAddress &protected_addr);
+
 // Forget everything. Used by the factory-reset console command.
 int removeAll();
 

@@ -133,6 +133,11 @@ class BridgeServerCallbacks : public BLEServerCallbacks {
     BR_LOGI(kTagHost, "host connected (id %u addr %s mtu %u total %u)", (unsigned)desc->conn_handle,
             BLEAddress(desc->peer_id_addr).toString().c_str(), (unsigned)ble_att_mtu(desc->conn_handle),
             (unsigned)s_hostCount);
+    // Bond housekeeping BEFORE the new peer pairs (see ble_bonds::makeRoomForPeer):
+    // when the store is full a genuinely new host gets a slot by retiring the
+    // oldest non-remote bond, so the stack's own blind oldest-record eviction
+    // can never land on the upstream remote's keys.
+    ble_bonds::makeRoomForPeer(BLEAddress(desc->peer_id_addr), BLEAddress(settings::rc003Address()));
     event_bus::post(BR_EV_WIN_LINK_UP);
   }
 

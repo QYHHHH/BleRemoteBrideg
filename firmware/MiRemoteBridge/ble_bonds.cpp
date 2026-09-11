@@ -57,6 +57,42 @@ int removePeer(BLEAddress peer) {
   return rc == 0 ? 1 : 0;
 }
 
+int makeRoomForPeer(const BLEAddress &incoming, const BLEAddress &protected_addr) {
+  BLEAddress peers[16];
+  const int n = list(peers, 16);
+  if (n < 0) return 0;
+
+  const String incoming_text = incoming.toString();
+  const String protected_text = protected_addr.toString();
+
+  bool incoming_known = false;
+  int victim = -1;
+  for (int i = 0; i < n; i++) {
+    const String addr = peers[i].toString();
+    if (addr.equalsIgnoreCase(incoming_text)) incoming_known = true;
+    // The store iterates in insertion order, so the first entry that is not
+    // the protected remote is the oldest bond we are willing to give up.
+    if (victim < 0 && !addr.equalsIgnoreCase(protected_text)) victim = i;
+  }
+
+  // A returning friend re-authenticates from its existing bond and writes
+  // nothing new: no slot needed, nothing to delete.
+  if (incoming_known) return 0;
+  // Store not full yet - the incoming pairing will simply take a free slot.
+  if (n < MYNEWT_VAL(BLE_STORE_MAX_BONDS)) return 0;
+  // Only the protected remote is stored; refuse to touch it.
+  if (victim < 0) {
+    BR_LOGW(kTag, "store full but only the remote's bond exists - new peer %s cannot be paired",
+            incoming_text.c_str());
+    return 0;
+  }
+
+  BR_LOGI(kTag, "store full (%d/%u), freeing oldest non-remote bond %s for incoming %s", n,
+          (unsigned)MYNEWT_VAL(BLE_STORE_MAX_BONDS), peers[victim].toString().c_str(),
+          incoming_text.c_str());
+  return removePeer(peers[victim]);
+}
+
 int removeAll() {
   const int rc = ble_store_clear();
   BR_LOGI(kTag, "ble_store_clear() -> %d", rc);
