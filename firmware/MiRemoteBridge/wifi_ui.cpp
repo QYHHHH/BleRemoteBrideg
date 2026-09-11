@@ -179,9 +179,60 @@ void handleReset() {
   sendJson(200, "{\"ok\":true}");
 }
 
-void handleRoot() { s_server->send_P(200, "text/html", kIndexHtml); }
+// GET / - the page is ~48 KB of PROGMEM.
+//
+// It must NOT go out through a single send_P(): that hands the whole buffer to
+// lwIP at once, which needs a large contiguous block. With the AP up the free
+// heap is only ~20 KB and the largest block ~7 KB, so the transfer dies half
+// way and the server stops answering afterwards (measured on hardware
+// 2026-09-11: page served 0 bytes, /api/bindings then silent, heap min 472 B).
+// Stream it in 1 KB chunks with chunked transfer encoding instead, so the peak
+// allocation is one chunk regardless of page size.
+void handleRoot() {
+  static const size_t kChunk = 1024;
+  const size_t total = strlen_P(kIndexHtml);
+
+  s_server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  s_server->send(200, "text/html", "");
+
+  char buf[kChunk];
+  for (size_t off = 0; off < total; off += kChunk) {
+    if (!s_server->client().connected()) break;
+    const size_t n = (total - off < kChunk) ? (total - off) : kChunk;
+    memcpy_P(buf, kIndexHtml + off, n);
+    s_server->sendContent(buf, n);
+    // Give lwIP a chance to drain between chunks; without this the send queue
+    // grows faster than the link and the heap goes with it.
+    yield();
+  }
+  s_server->sendContent("", 0);  // terminating chunk
+  // The library does not restore this itself (_finalizeResponse only closes
+  // chunking), and leaving it UNKNOWN would make every later JSON response
+  // chunked too.
+  s_server->setContentLength(CONTENT_LENGTH_NOT_SET);
+}
 
 void handleNotFound() { s_server->send(404, "text/plain", "not found"); }
+
+// AP-side visibility: without these lines "the phone cannot connect" is
+// indistinguishable from "it associated but never got a lease". The IPASSIGNED
+// event only fires when the AP's DHCP server actually hands out an address.
+void onApEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+  switch (event) {
+    case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+      BR_LOGI(kTag, "station joined (aid %u)", (unsigned)info.wifi_ap_staconnected.aid);
+      break;
+    case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
+      BR_LOGW(kTag, "station left (aid %u, reason %u)",
+              (unsigned)info.wifi_ap_stadisconnected.aid, (unsigned)info.wifi_ap_stadisconnected.reason);
+      break;
+    case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:
+      BR_LOGI(kTag, "station got an IP from the AP's DHCP server");
+      break;
+    default:
+      break;
+  }
+}
 
 void startServer() {
   s_server = new WebServer(80);
@@ -204,12 +255,18 @@ bool enable() {
   if (s_enabled) return true;
 
   BR_LOGI(kTag, "starting AP \"%s\" - config page at http://192.168.4.1/", kApSsid);
-  // The BLE links may glitch for a moment while the radio gains a coexistence
-  // schedule; connections re-establish themselves if that happens.
-  if (!WiFi.softAP(kApSsid)) {
+  // max_connection = 1: the page is used by one client at a time, and every
+  // extra station slot costs RAM. With the AP up the free heap is only ~13 KB
+  // (BLE has the rest), so keep the AP's own footprint as small as possible.
+  // Register before softAP() so the association events are not missed. This
+  // core's onEvent() takes no event base; the callback filters by id.
+  WiFi.onEvent(onApEvent);
+  if (!WiFi.softAP(kApSsid, nullptr, 1, /*ssid_hidden=*/0, /*max_connection=*/1)) {
     BR_LOGE(kTag, "softAP failed");
     return false;
   }
+  BR_LOGI(kTag, "AP up, heap free %u B, AP IP %s", (unsigned)ESP.getFreeHeap(),
+          WiFi.softAPIP().toString().c_str());
 
   startServer();
   s_enabled = true;
@@ -234,6 +291,16 @@ bool disable() {
 }
 
 bool enabled() { return s_enabled; }
+
+unsigned stationCount() { return s_enabled ? (unsigned)WiFi.softAPgetStationNum() : 0; }
+
+const char *apIp() {
+  static char buf[16];
+  if (!s_enabled) return "-";
+  const IPAddress ip = WiFi.softAPIP();
+  snprintf(buf, sizeof(buf), "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+  return buf;
+}
 
 void loop() {
   if (s_enabled && s_server) s_server->handleClient();

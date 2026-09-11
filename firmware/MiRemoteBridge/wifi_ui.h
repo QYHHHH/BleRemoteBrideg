@@ -30,6 +30,12 @@ bool enable();
 bool disable();
 bool enabled();
 
+// Diagnostics for `wifi status`. Associated clients is the quickest way to
+// tell "the phone cannot connect" apart from "it associated but the AP's DHCP
+// server never handed out a lease". Both return harmless values when off.
+unsigned stationCount();
+const char *apIp();
+
 // Feed the HTTP server. No-op while disabled; call from loop().
 void loop();
 

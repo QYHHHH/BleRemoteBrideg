@@ -449,9 +449,16 @@ void execute(char *line) {
 
   if (!strcasecmp(cmd, "wifi")) {
     if (argc < 2 || !strcasecmp(argv[1], "status")) {
-      Serial.printf("config AP: %s\n", wifi_ui::enabled()
-        ? "ON - connect to Wi-Fi \"MiRemoteBridge\", open http://192.168.4.1/"
-        : "off (wifi on to enable)");
+      if (wifi_ui::enabled()) {
+        Serial.printf("config AP: ON - connect to Wi-Fi \"MiRemoteBridge\", open http://192.168.4.1/\n");
+        // Associated clients is the fastest way to tell "cannot connect" apart
+        // from "connected but never got a DHCP lease".
+        Serial.printf("stations  : %u associated\n", (unsigned)wifi_ui::stationCount());
+        Serial.printf("AP IP     : %s\n", wifi_ui::apIp());
+        Serial.printf("heap free : %u B\n", (unsigned)ESP.getFreeHeap());
+      } else {
+        Serial.println("config AP: off (wifi on to enable)");
+      }
       return;
     }
     if (!strcasecmp(argv[1], "on")) {
