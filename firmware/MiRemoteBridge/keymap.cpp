@@ -150,9 +150,72 @@ static hid_action_t none_action(void) {
   return a;
 }
 
+// ---------------------------------------------------------------------------
+// Programmable bindings: one raw code -> one action, set from the Web UI or
+// the `bind` console command. Memory-only here; persistence lives in the
+// settings module (NVS), which replays the saved records into
+// keymap_set_binding() at boot. Lookups scan this table first - an explicit
+// user binding outranks both the runtime modes and the default table.
+// ---------------------------------------------------------------------------
+struct BindingRecord {
+  uint8_t      raw_code;
+  hid_action_t press;
+};
+
+static BindingRecord s_bindings[KEYMAP_MAX_BINDINGS];
+static size_t s_bindingCount = 0;
+
+bool keymap_set_binding(uint8_t raw_code, uint8_t kind, uint8_t modifier, uint8_t keycode,
+                        uint16_t consumer) {
+  if (raw_code == 0x00) return false;  // the all-zero frame is "no key", never a code
+
+  // Replace an existing binding for this code in place.
+  for (size_t i = 0; i < s_bindingCount; i++) {
+    if (s_bindings[i].raw_code != raw_code) continue;
+    if (kind == KEYMAP_BIND_KIND_NONE) {
+      s_bindings[i] = s_bindings[s_bindingCount - 1];
+      s_bindingCount--;
+      return true;
+    }
+    s_bindings[i].press.kind = (kind == KEYMAP_BIND_KIND_CONS) ? HID_ACT_CONSUMER : HID_ACT_KEYBOARD;
+    s_bindings[i].press.modifier = modifier;
+    s_bindings[i].press.keycode = keycode;
+    s_bindings[i].press.consumer = consumer;
+    return true;
+  }
+
+  if (kind == KEYMAP_BIND_KIND_NONE) return true;  // clearing an absent binding: done
+  if (s_bindingCount >= KEYMAP_MAX_BINDINGS) return false;
+
+  BindingRecord &r = s_bindings[s_bindingCount++];
+  r.raw_code = raw_code;
+  r.press.kind = (kind == KEYMAP_BIND_KIND_CONS) ? HID_ACT_CONSUMER : HID_ACT_KEYBOARD;
+  r.press.modifier = modifier;
+  r.press.keycode = keycode;
+  r.press.consumer = consumer;
+  return true;
+}
+
+bool keymap_has_binding(uint8_t raw_code) {
+  for (size_t i = 0; i < s_bindingCount; i++) {
+    if (s_bindings[i].raw_code == raw_code) return true;
+  }
+  return false;
+}
+
+size_t keymap_binding_count(void) { return s_bindingCount; }
+
+size_t keymap_get_bindings(uint8_t *raw_out, hid_action_t *actions_out, size_t max_out) {
+  const size_t n = (s_bindingCount < max_out) ? s_bindingCount : max_out;
+  for (size_t i = 0; i < n; i++) {
+    raw_out[i] = s_bindings[i].raw_code;
+    actions_out[i] = s_bindings[i].press;
+  }
+  return n;
+}
+
 // Resolve the three runtime-selectable keys.
-static hid_action_t resolve_dynamic(uint8_t raw_code) {
-  hid_action_t a = none_action();
+static hid_action_t resolve_dynamic(uint8_t raw_code) {  hid_action_t a = none_action();
 
   if (raw_code == MI_KEY_BACK) {
     switch (s_back_mode) {
@@ -244,6 +307,12 @@ static bool is_dynamic_key(uint8_t raw_code) {
 }
 
 hid_action_t keymap_lookup_ex(const keymap_entry_t *table, size_t count, uint8_t raw_code) {
+  // Explicit user bindings (Web UI / `bind` command) win over everything: they
+  // are the user's most deliberate statement about what a key should do.
+  for (size_t i = 0; i < s_bindingCount; i++) {
+    if (s_bindings[i].raw_code == raw_code) return s_bindings[i].press;
+  }
+
   // Runtime-selectable keys must NOT fall through to the static table when the
   // runtime answer is NONE: that NONE means "the user turned this button off"
   // (e.g. `map voice disabled`), and falling through would silently ignore the

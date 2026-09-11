@@ -32,6 +32,7 @@ const char *kKeyMapPower = "map_pow";
 const char *kKeyMapVoice = "map_voice";
 const char *kKeyBattery = "rc_batt";
 const char *kKeyBatteryValid = "rc_batt_v";
+const char *kKeyBindKeys = "bd_keys";
 
 bool s_ready = false;
 
@@ -126,6 +127,59 @@ void setBatteryLevel(uint8_t percent) {
   if (percent > 100) percent = 100;
   s_prefs.putUChar(kKeyBattery, percent);
   s_prefs.putBool(kKeyBatteryValid, true);
+}
+
+// --- programmable key bindings -------------------------------------------
+// One NVS blob per bound raw code (`bd_XX` holding kind/modifier/keycode and
+// the 16-bit consumer usage), plus a manifest key (`bd_keys`) listing the
+// bound raw codes so loading does not have to scan all 256 possibilities.
+
+void loadBindings() {
+  if (!s_ready) return;
+  const size_t len = s_prefs.getBytesLength(kKeyBindKeys);
+  if (len == 0) return;
+
+  uint8_t raws[KEYMAP_MAX_BINDINGS];
+  const size_t got = s_prefs.getBytes(kKeyBindKeys, raws, sizeof(raws));
+  if (got == 0 || got > sizeof(raws)) {
+    BR_LOGW(kTag, "binding manifest unreadable (%u bytes), ignoring", (unsigned)got);
+    return;
+  }
+
+  for (size_t i = 0; i < got; i++) {
+    char key[8];
+    snprintf(key, sizeof(key), "bd_%02x", raws[i]);
+    uint8_t rec[5] = {0};
+    if (s_prefs.getBytes(key, rec, sizeof(rec)) != sizeof(rec)) continue;
+    if (rec[0] == 0) continue;
+    const uint16_t consumer = (uint16_t)(rec[3] | ((uint16_t)rec[4] << 8));
+    keymap_set_binding(raws[i], rec[0], rec[1], rec[2], consumer);
+  }
+  BR_LOGI(kTag, "loaded %u programmable binding(s)", (unsigned)got);
+}
+
+void setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, uint16_t consumer) {
+  if (!s_ready) return;
+
+  // Apply to the live keymap first; it also validates (unknown raw codes such
+  // as 0x00 are rejected there and we must not persist what the map refused).
+  if (!keymap_set_binding(raw, kind, modifier, keycode, consumer)) return;
+
+  char key[8];
+  snprintf(key, sizeof(key), "bd_%02x", raw);
+  if (kind == 0) {
+    s_prefs.remove(key);
+  } else {
+    const uint8_t rec[5] = {kind, modifier, keycode, (uint8_t)(consumer & 0xFF),
+                            (uint8_t)((consumer >> 8) & 0xFF)};
+    s_prefs.putBytes(key, rec, sizeof(rec));
+  }
+
+  // Rebuild the manifest from the live table so it always matches.
+  uint8_t raws[KEYMAP_MAX_BINDINGS];
+  hid_action_t acts[KEYMAP_MAX_BINDINGS];
+  const size_t n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
+  s_prefs.putBytes(kKeyBindKeys, raws, n);
 }
 
 void clearAll() {

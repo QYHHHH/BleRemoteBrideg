@@ -219,6 +219,7 @@ bool begin() {
 
   settings::begin();
   settings::loadKeymapModes();
+  settings::loadBindings();
   brlog::setRawEnabled(settings::rawLog());
   brlog::setLatencyEnabled(settings::latencyLog());
   brlog::setLevel(settings::logLevel());

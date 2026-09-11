@@ -37,7 +37,9 @@ function Get-BridgePaths {
         # with "partition 0 invalid magic number". Verified on hardware:
         # 80MHz+QIO fails, 40MHz+QIO fails, 80MHz+DIO boots.
         # See docs/TESTING.md section 4.
-        Fqbn      = 'esp32:esp32:esp32c3:FlashMode=dio'
+        # PartitionScheme=huge_app: the Wi-Fi config stack does not fit the
+        # default 1.2 MB app partition (docs/TESTING.md section 4.11).
+        Fqbn      = 'esp32:esp32:esp32c3:FlashMode=dio,PartitionScheme=huge_app'
     }
 }
 

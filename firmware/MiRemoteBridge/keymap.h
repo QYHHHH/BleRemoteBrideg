@@ -116,6 +116,35 @@ keymap_back_mode_t  keymap_get_back_mode(void);
 keymap_power_mode_t keymap_get_power_mode(void);
 keymap_voice_mode_t keymap_get_voice_mode(void);
 
+// ---------------------------------------------------------------------------
+// Programmable bindings (Web UI / console)
+//
+// A binding remaps one raw code to any single action - a keyboard chord or a
+// consumer usage - and takes precedence over both the runtime modes and the
+// default table. One key maps to one action; presses and releases are
+// forwarded in real time exactly like the built-in map (no click/double/long
+// differentiation, no macros).
+//
+// This layer is deliberately memory-only: persistence lives in the settings
+// module (NVS), which calls keymap_set_binding() at boot and on every change.
+// ---------------------------------------------------------------------------
+#define KEYMAP_BIND_KIND_NONE 0      // remove a binding (fall back to defaults)
+#define KEYMAP_BIND_KIND_KB   1      // keyboard: modifier + keycode
+#define KEYMAP_BIND_KIND_CONS 2      // consumer: 16-bit usage
+
+#define KEYMAP_MAX_BINDINGS 16
+
+// Set (or with kind == KEYMAP_BIND_KIND_NONE, clear) the binding for one raw
+// code. Returns false when the table is full or the arguments are invalid.
+bool keymap_set_binding(uint8_t raw_code, uint8_t kind, uint8_t modifier, uint8_t keycode,
+                        uint16_t consumer);
+// True when this raw code has an explicit user binding.
+bool keymap_has_binding(uint8_t raw_code);
+// Number of explicit bindings currently held.
+size_t keymap_binding_count(void);
+// Copy all bindings out (for `bind list` and the Web UI). Returns the count.
+size_t keymap_get_bindings(uint8_t *raw_out, hid_action_t *actions_out, size_t max_out);
+
 #ifdef __cplusplus
 }
 #endif

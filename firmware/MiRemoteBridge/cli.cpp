@@ -18,6 +18,7 @@
 
 #include "ble_bonds.h"
 #include "reset_button.h"
+#include "wifi_ui.h"
 #include "bridge.h"
 #include "config.h"
 #include "event_bus.h"
@@ -93,6 +94,7 @@ void printHelp() {
   Serial.println("  log <0-4>                    log level (0 off .. 4 debug)");
   Serial.println("  selftest                     run the on-device vector + dispatch tests");
   Serial.println("  sim                          run only the dispatch simulation");
+  Serial.println("  wifi on | off | status       start/stop the Wi-Fi config AP (Web UI)");
   Serial.println("  reboot | factory             restart / wipe bonds and settings");
   Serial.println();
 }
@@ -167,6 +169,34 @@ void doChannel(const char *which, const char *hex) {
   delay(20);
   hid_server::releaseAction(a);
   Serial.printf("keyboard 0x%02X tapped\n", (unsigned)a.keycode);
+}
+
+// Parse a raw code byte. Always hexadecimal (with or without the 0x prefix) -
+// that is how every raw code is written in the docs and on the keymap printouts.
+// Rejects 0x00: the all-zero frame is the release sentinel, never a key code.
+bool parseRawCode(const char *s, uint8_t *out) {
+  if (!s || !*s) return false;
+  char *end = nullptr;
+  const long v = strtol(s, &end, 16);
+  if (end == s || *end != '\0' || v <= 0 || v > 255) return false;
+  *out = (uint8_t)v;
+  return true;
+}
+
+void printBindings() {
+  uint8_t raws[KEYMAP_MAX_BINDINGS];
+  hid_action_t acts[KEYMAP_MAX_BINDINGS];
+  const size_t n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
+  if (n == 0) {
+    Serial.println("no programmable bindings (keys fall back to the built-in map)");
+    return;
+  }
+  Serial.printf("%u programmable binding(s):\n", (unsigned)n);
+  for (size_t i = 0; i < n; i++) {
+    char desc[48];
+    keymap_describe(&acts[i], desc, sizeof(desc));
+    Serial.printf("  0x%02X (%s) -> %s\n", raws[i], keymap_raw_name(raws[i]), desc);
+  }
 }
 
 void execute(char *line) {
@@ -369,6 +399,72 @@ void execute(char *line) {
 
   if (!strcasecmp(cmd, "sim")) {
     selftest::runSimulation();
+    return;
+  }
+
+  if (!strcasecmp(cmd, "bind")) {
+    if (argc >= 2 && !strcasecmp(argv[1], "list")) {
+      printBindings();
+      return;
+    }
+    uint8_t raw = 0;
+    if (argc < 3 || !parseRawCode(argv[1], &raw)) {
+      Serial.println("usage: bind <raw> kb <mod> <key> | bind <raw> cons <usage> | bind <raw> none | bind list");
+      return;
+    }
+    const char *kind = argv[2];
+    if (!strcasecmp(kind, "kb")) {
+      if (argc < 5) {
+        Serial.println("usage: bind <raw> kb <modifier_hex> <keycode_hex>");
+        return;
+      }
+      const uint8_t mod = (uint8_t)strtol(argv[3], nullptr, 0);
+      const uint8_t key = (uint8_t)strtol(argv[4], nullptr, 0);
+      settings::setBinding(raw, KEYMAP_BIND_KIND_KB, mod, key, 0);
+      Serial.printf("bound 0x%02X -> keyboard (mod 0x%02X, key 0x%02X)\n", raw, mod, key);
+      return;
+    }
+    if (!strcasecmp(kind, "cons")) {
+      if (argc < 4) {
+        Serial.println("usage: bind <raw> cons <usage_hex>");
+        return;
+      }
+      const uint16_t usage = (uint16_t)strtol(argv[3], nullptr, 0);
+      if (usage == 0) {
+        Serial.println("usage 0 means nothing; pick a real Consumer Usage");
+        return;
+      }
+      settings::setBinding(raw, KEYMAP_BIND_KIND_CONS, 0, 0, usage);
+      Serial.printf("bound 0x%02X -> consumer 0x%04X\n", raw, usage);
+      return;
+    }
+    if (!strcasecmp(kind, "none")) {
+      settings::setBinding(raw, 0, 0, 0, 0);
+      Serial.printf("binding for 0x%02X removed (falls back to the built-in map)\n", raw);
+      return;
+    }
+    Serial.println("unknown kind; use kb / cons / none");
+    return;
+  }
+
+  if (!strcasecmp(cmd, "wifi")) {
+    if (argc < 2 || !strcasecmp(argv[1], "status")) {
+      Serial.printf("config AP: %s\n", wifi_ui::enabled()
+        ? "ON - connect to Wi-Fi \"MiRemoteBridge\", open http://192.168.4.1/"
+        : "off (wifi on to enable)");
+      return;
+    }
+    if (!strcasecmp(argv[1], "on")) {
+      Serial.println(wifi_ui::enable()
+        ? "AP starting - connect to Wi-Fi \"MiRemoteBridge\", open http://192.168.4.1/"
+        : "failed to start AP");
+      return;
+    }
+    if (!strcasecmp(argv[1], "off")) {
+      Serial.println(wifi_ui::disable() ? "AP stopped" : "AP stop failed");
+      return;
+    }
+    Serial.println("usage: wifi on | wifi off | wifi status");
     return;
   }
 

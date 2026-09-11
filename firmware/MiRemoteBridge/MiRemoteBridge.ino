@@ -25,6 +25,7 @@
 #include "config.h"
 #include "log.h"
 #include "reset_button.h"
+#include "wifi_ui.h"
 
 void setup() {
   brlog::begin(BRIDGE_SERIAL_BAUD);
@@ -43,6 +44,7 @@ void setup() {
 void loop() {
   cli::poll();
   reset_button::poll();
+  wifi_ui::loop();
   bridge::loop();
   delay(1);
 }

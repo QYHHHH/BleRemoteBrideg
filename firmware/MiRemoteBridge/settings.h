@@ -47,6 +47,13 @@ void setLogLevel(uint8_t level);
 int batteryLevel();
 void setBatteryLevel(uint8_t percent);
 
+// Programmable key bindings (Web UI / `bind` console command), persisted in
+// NVS and replayed into the keymap at boot. kind: 0 = remove the binding,
+// 1 = keyboard (modifier + keycode), 2 = consumer (usage). Setting with
+// kind = 0 clears.
+void loadBindings();
+void setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, uint16_t consumer);
+
 // Wipe every key this module owns. Used by `factory`.
 void clearAll();
 
