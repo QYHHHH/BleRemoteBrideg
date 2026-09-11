@@ -27,9 +27,20 @@ STYLE_RE = re.compile(r"<style>(.*?)</style>", re.DOTALL)
 SCRIPT_RE = re.compile(r"<script>(.*?)</script>", re.DOTALL)
 
 
+def stamp_build_time(html):
+    """Stamp __BUILDTIME__ with the build time.
+
+    The page shows this in its header, so it is immediately obvious which
+    build the browser is actually running - no more guessing about caches.
+    """
+    import datetime
+    stamp = datetime.datetime.now().strftime('build %Y-%m-%d %H:%M')
+    return html.replace('__BUILDTIME__', stamp)
+
+
 def firmware_html():
     source = SOURCE.read_text(encoding="utf-8")
-    return source.split('R"rawliteral(', 1)[1].split(')rawliteral";', 1)[0]
+    return stamp_build_time(source.split('R"rawliteral(', 1)[1].split(')rawliteral";', 1)[0])
 
 
 def compress(text: str) -> bytes:

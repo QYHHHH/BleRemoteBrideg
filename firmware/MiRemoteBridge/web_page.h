@@ -98,7 +98,7 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 @media(max-width:860px){.grid{grid-template-columns:minmax(0,1fr) 240px minmax(0,1fr);gap:9px}main{padding:14px 14px 20px}.hero{flex-direction:column;align-items:stretch}.rm .body{transform:scale(.9)}}
 @media(max-width:620px){.bar{padding:11px 14px}.grid{grid-template-columns:1fr 1fr;gap:8px}.rm{grid-column:1/-1;flex-direction:row;justify-content:center;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:4px}.rm .body{transform:scale(.34);margin:-128px -40px}.cap{text-align:left}.k button{min-height:70px;padding:9px}.k .ed{display:none}.foot{flex-direction:column;align-items:stretch}.foot .bs .btn{flex:1}.hero{padding:15px 16px}}
 </style></head><body>
-<div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span><span class="grow"></span>
+<div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver">__BUILDTIME__</span><span class="grow"></span>
 <span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
 <main>
 <div class="warn" id="off" hidden><span>无法连接桥接器，显示的是上次读取的数据，编辑已暂停。</span><button id="retry">重新连接</button></div>
@@ -203,9 +203,13 @@ S.wsTimer=setTimeout(connectWS,d)}
 function connectWS(){
 /* the socket cannot carry an Authorization header, so fetch the token first
 over an authenticated request and hand it over in the URL */
-fetch('/api/token',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+fetch('/api/token',{cache:'no-store'}).then(function(r){
+if(r.status===401){var e=new Error('relogin');e.relogin=true;throw e}
+return r.json()}).then(function(j){
 if(!j||typeof j.token!=='string'||!j.token)throw Error('no token');
-openSocket(j.token)}).catch(function(){
+openSocket(j.token)}).catch(function(e){
+if(e&&e.relogin){location.href='/login';return}   /* session gone: sign in again */
+online(false,'登录会话无效，请重新登录');
 if(S.wsTimer)clearTimeout(S.wsTimer);
 S.wsTimer=setTimeout(connectWS,2500)})}
 function openSocket(token){

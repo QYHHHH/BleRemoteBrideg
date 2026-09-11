@@ -970,6 +970,13 @@ void dispatch() {
     }
   } else if (settings::hasWebPassword()) {
     if (!hasSession || !sessionMatches(session)) {
+      if (strcmp(target, "/api/token") == 0) {
+        // A JSON 401 rather than a redirect: the page checks for exactly this
+        // and sends the user to /login. A 302 would look like valid HTML to
+        // fetch(), which is what kept the websocket retrying forever.
+        errorResponse(401, "Unauthorized", "session expired - sign in again");
+        return;
+      }
         BR_LOGI(kTag, "no/bad session for %s -> /login", target);
       if (!isLogin && !isLogout && !isSetup) {
         const int n = snprintf(s_http.header, sizeof(s_http.header),
@@ -1231,7 +1238,11 @@ void pollHttp() {
     const size_t chunk = remain < kIoPerLoop ? remain : kIoPerLoop;
     const int n = send(s_http.fd, chunkSrc, chunk, MSG_DONTWAIT);
     if (n < 0) {
-      if (retryable(errno)) { ++s_backPressure; break; }   // window full: finish next pass
+      if (retryable(errno)) {
+        ++s_backPressure;
+        s_http.progress = millis();   // waiting on the peer window is progress, not a stall
+        break;
+      }
       BR_LOGW(kTag, "HTTP send failed, errno %d", errno);
       closeExchange(false);
       return;
