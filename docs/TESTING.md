@@ -630,6 +630,42 @@ AP 事件打印 station joined / left(reason) / **got an IP**。
 真机确认过 `station left (aid 1, reason 2)` 与 `AP stopped, heap back to 49484 B`。
 `STAIPASSIGNED` 只在 DHCP 真的发出地址时触发，是区分"连不上"与"连上但无租约"的关键。
 
+#### 4.13.1 真正的根因之一：WebServer 默认不收集请求头
+
+用 `curl -v` 抓响应头，看到服务器回的是 **`Content-Length: 21578`** —— 也就是
+gzip 分支根本没进，走的是明文回退路径。原因在库层：
+
+```cpp
+// WebServer.h
+int _headerKeysCount = 0;          // 默认 0，只有前两个标准头会被记录
+void collectHeaders(const char *headerKeys[], const size_t headerKeysCount);
+```
+
+**必须显式声明要收集的请求头**，否则 `header("Accept-Encoding")` 永远返回空字符串。
+修复：`s_server->collectHeaders(kCollectedHeaders, 1)`（`wifi_ui.cpp` 的 `startServer()`）。
+
+这条同样是"改了没效果"却看不出原因的典型：**分支静默走错，日志里什么都不会出现。**
+诊断手段是看响应头里的 `Content-Length`，而不是只看状态码。
+
+#### 4.13.2 真正的阻塞点：低堆水位下 AP 的 DHCP 服务起不来
+
+页面体积解决后，暴露出更前置的问题。多次实测：
+
+| AP 启动时的 free heap | DHCP |
+| --- | --- |
+| ~20744 B | ✅ 客户端立刻拿到 `192.168.4.2` |
+| ~12944–13568 B | ❌ 客户端关联成功但退化成 `169.254.x.x` |
+
+堆水位取决于 `wifi on` 那一刻的 BLE 状态，因此**同一份固件时而可用、时而不可用**。
+`wifi off` 后堆回到 ~49640 B，桥接器恢复正常。
+
+**这意味着：只要 BLE 链路把堆压到 13 KB 量级，配置界面就无法访问 —— 与页面大小无关。**
+在解决这个之前，Web UI 的可用性取决于运气，不能对外声称可用。
+
+**gzip 方案的状态**：已实现（`tests/tools/gen_web_page.py` 生成 `web_page_gz.h`，
+21578 → 8257 字节；`handleRoot()` 按 `Accept-Encoding` 分流，明文页作回退），
+编译烧录通过，**但因 DHCP 失效未能完成真机验证**。
+
 ---
 
 ## 5. L4 实机验收清单（部分完成）

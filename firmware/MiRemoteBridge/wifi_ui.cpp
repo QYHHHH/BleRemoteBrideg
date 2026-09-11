@@ -20,6 +20,7 @@
 #include "rc003_client.h"
 #include "settings.h"
 #include "web_page.h"
+#include "web_page_gz.h"
 
 namespace {
 
@@ -181,17 +182,26 @@ void handleReset() {
 
 // GET / - the page lives in PROGMEM.
 //
-// IMPORTANT - page size is a hard budget, see docs/TESTING.md 4.13:
-//   * 13087 B served fine (the original page);
-//   * 47845 B did NOT: send_P() hands the whole buffer to the socket in one
-//     call, NetworkClient::write() gives up after WIFI_CLIENT_MAX_WRITE_RETRY
-//     and returns a PARTIAL count, the rest is silently dropped, and the HTTP
-//     server stops answering afterwards.
-// A hand-rolled flow-controlled loop (retry on partial writes, wait while the
-// send buffer is full) was tried as well and still failed on hardware, so it
-// was removed rather than shipped unverified. Keep this file small and re-test
-// on the board before claiming the page works.
-void handleRoot() { s_server->send_P(200, "text/html", kIndexHtml); }
+// Size matters, see docs/TESTING.md 4.13. The ESP32-C3 cannot push the plain
+// ~21 KB page out while BLE holds the heap (measured ceiling ~13 KB: at 21 KB
+// the response comes back 200 with 0 bytes and the server stops answering
+// afterwards, because NetworkClient::write() gives up after
+// WIFI_CLIENT_MAX_WRITE_RETRY and returns a PARTIAL count that send_P ignores).
+//
+// So serve the gzip-compressed copy (web_page_gz.h, ~8 KB) and keep the plain
+// page as a fallback for clients that do not advertise gzip. Browsers always
+// do. Regenerate the compressed copy with tests/tools/gen_web_page.py.
+void handleRoot() {
+  const bool wantsGzip = s_server->hasHeader("Accept-Encoding") &&
+                         s_server->header("Accept-Encoding").indexOf("gzip") >= 0;
+  if (wantsGzip) {
+    s_server->sendHeader("Content-Encoding", "gzip");
+    s_server->sendHeader("Vary", "Accept-Encoding");
+    s_server->send_P(200, "text/html", kIndexHtmlGz, kIndexHtmlGzLen);
+    return;
+  }
+  s_server->send_P(200, "text/html", kIndexHtml);
+}
 
 void handleNotFound() { s_server->send(404, "text/plain", "not found"); }
 
@@ -217,6 +227,12 @@ void onApEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
 
 void startServer() {
   s_server = new WebServer(80);
+  // The WebServer only captures request headers that were declared here
+  // (its _headerKeysCount starts at 0 and nothing else is recorded). Without
+  // this, header("Accept-Encoding") always returns "" and the page silently
+  // falls back to the uncompressed copy, which is too big to send.
+  static const char *kCollectedHeaders[] = {"Accept-Encoding"};
+  s_server->collectHeaders(kCollectedHeaders, 1);
   s_server->on("/", HTTP_GET, handleRoot);
   s_server->on("/api/status", HTTP_GET, handleGetStatus);
   s_server->on("/api/bindings", HTTP_GET, handleGetBindings);
