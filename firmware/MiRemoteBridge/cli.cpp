@@ -533,6 +533,21 @@ void execute(char *line) {
     return;
   }
 
+  if (!strcasecmp(cmd, "pass")) {
+    if (argc < 2) {
+      Serial.printf("web console password: %s\n", settings::hasWebPassword() ? "set" : "NOT set (first visit defines it)");
+      return;
+    }
+    if (!strcasecmp(argv[1], "clear")) {
+      settings::clearWebPassword();
+      Serial.println("web console password cleared - the next visit will ask for a new one");
+      return;
+    }
+    settings::setWebPassword(argv[1]);
+    Serial.println("web console password set");
+    return;
+  }
+
   if (!strcasecmp(cmd, "factory")) {
     Serial.println("factory reset requested from console");
     reset_button::factoryResetAndReboot();  // wipes bonds + settings, reboots

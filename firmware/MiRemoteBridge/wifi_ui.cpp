@@ -12,6 +12,9 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+
+#include <mbedtls/base64.h>
+#include <mbedtls/sha1.h>
 #include <esp_netif.h>
 #include <lwip/sockets.h>
 #include <lwip/tcp.h>
@@ -117,10 +120,45 @@ const char *boolean(bool v) { return v ? "true" : "false"; }
 // socket held open for minutes would block every other request - including the
 // page's own saves. A parked request costs nothing extra and still gives
 // event-driven latency instead of polling.
-bool s_holding = false;
-uint32_t s_holdSince = 0;
-uint32_t s_holdDeadline = 0;
-constexpr uint32_t kHoldMs = 5000;
+
+// ---------------------------------------------------------------------------
+// WebSocket (RFC 6455, the small subset a browser needs)
+//
+// One long-lived connection replaces every polling experiment: the board
+// pushes a frame the instant a key is forwarded, and the page sends its
+// binding commands back over the same socket. Nothing asks "did anything
+// happen" any more, and - because the page's only connection is this one -
+// nothing can be blocked behind a parked request either.
+//
+// Supported: text frames (unfragmented), ping->pong, close. The browser always
+// masks its frames; we never mask ours.
+// ---------------------------------------------------------------------------
+constexpr size_t kWsIn = 512;
+constexpr size_t kWsOut = 768;
+constexpr uint32_t kWsStatusEveryMs = 5000;  // state heartbeat on the same socket
+
+bool s_ws = false;            // frame mode (101 already delivered)
+bool s_pendingUpgrade = false; // 101 still draining through the HTTP path
+uint8_t s_wsInBuf[kWsIn];
+size_t s_wsInLen = 0;
+uint8_t s_wsOutBuf[kWsOut];
+size_t s_wsOutLen = 0;
+size_t s_wsOutSent = 0;
+uint32_t s_wsLastKeyCount = 0;
+uint32_t s_wsLastStatusMs = 0;
+// Keepalive. The socket owns the single service slot, so a peer that vanishes
+// without a FIN (laptop sleeping, script killed, Wi-Fi drop) would otherwise
+// wedge the whole config server until lwip's own keepalive gives up hours
+// later. We ping every 10 s and drop the socket if nothing at all arrives -
+// a browser answers pings automatically - for 30 s.
+uint32_t s_wsLastRecvMs = 0;
+uint32_t s_wsLastPingMs = 0;
+constexpr uint32_t kWsPingEveryMs = 10000;
+constexpr uint32_t kWsDeadAfterMs = 30000;
+
+void wsQueue(const uint8_t *payload, size_t len);
+void wsConsume();
+void wsClose();
 
 void closeExchange(bool complete) {
   if (s_http.fd >= 0) {
@@ -132,7 +170,11 @@ void closeExchange(bool complete) {
   s_http.body = nullptr;
   s_http.used = 0;
   s_http.sending = false;
-  s_holding = false;
+  s_pendingUpgrade = false;
+  if (s_ws) {
+    BR_LOGI(kTag, "websocket closed, heap %u B", (unsigned)ESP.getFreeHeap());
+    wsClose();
+  }
 }
 
 void stopHttp() {
@@ -330,10 +372,286 @@ void handleReset() {
   respond(200, "OK", "application/json", "{\"ok\":true}", 11);
 }
 
+// --- Console authentication --------------------------------------------------
+//
+// HTTP gets HTTP Basic, so the browser shows its own dialog and offers to save
+// the password. The websocket cannot use Basic - a browser will not attach an
+// Authorization header to WebSocket() - so the page first fetches a derived
+// token over an authenticated request and passes it in the URL.
+//
+// With no password stored the device is in setup mode: the first visit is
+// challenged with a realm that says so, and whatever the user types becomes
+// the password. BOOT held for 5 s clears the namespace, which is the way back
+// in when the password is forgotten.
+
+bool authDecodeBasic(const char *header, String &pass) {
+  if (!header || strncasecmp(header, "Basic ", 6) != 0) return false;
+  unsigned char raw[160];
+  size_t rawLen = 0;
+  if (mbedtls_base64_decode(raw, sizeof(raw) - 1, &rawLen,
+                            (const unsigned char *)(header + 6), strlen(header + 6)) != 0) {
+    return false;
+  }
+  raw[rawLen] = 0;
+  const char *colon = strchr((const char *)raw, ':');
+  if (!colon) return false;
+  pass = String(colon + 1);  // the user name is ignored; only the password counts
+  return true;
+}
+
+void authChallenge(bool setupMode) {
+  const char *realm = setupMode ? "MiRemoteBridge setup - choose a console password"
+                                : "MiRemoteBridge web console";
+  const char *body = setupMode
+      ? "Setup mode: enter a user name (any) and the password you want to use.\n"
+        "It is stored hashed; hold BOOT for 5 seconds to wipe it again.\n"
+      : "Password required.\n";
+  const int n = snprintf(s_http.header, sizeof(s_http.header),
+      "HTTP/1.1 401 Unauthorized\r\n"
+      "WWW-Authenticate: Basic realm=\"%s\", charset=\"UTF-8\"\r\n"
+      "Content-Type: text/plain; charset=utf-8\r\n"
+      "Content-Length: %u\r\n"
+      "Cache-Control: no-store\r\n"
+      "Connection: close\r\n\r\n",
+      realm, (unsigned)strlen(body));
+  if (n < 0 || (size_t)n >= sizeof(s_http.header)) {
+    closeExchange(false);
+    return;
+  }
+  s_http.headerLen = (size_t)n;
+  s_http.headerSent = 0;
+  s_http.body = body;
+  s_http.bodyLen = strlen(body);
+  s_http.bodySent = 0;
+  s_http.sending = true;
+  s_http.progress = millis();
+}
+
+// --- WebSocket plumbing -----------------------------------------------------
+
+void wsClose() {
+  s_ws = false;
+  s_wsInLen = 0;
+  s_wsOutLen = s_wsOutSent = 0;
+}
+
+// Queue one unmasked text frame. Refuses while the previous frame is still
+// draining: callers are event handlers, not queues.
+bool wsQueueRaw(const uint8_t *payload, size_t len, uint8_t opcode) {
+  if (s_wsOutSent < s_wsOutLen) return false;
+  const size_t need = len + 10;
+  if (need > sizeof(s_wsOutBuf)) return false;
+  size_t n = 0;
+  s_wsOutBuf[n++] = (uint8_t)(0x80 | opcode);
+  if (len < 126) {
+    s_wsOutBuf[n++] = (uint8_t)len;
+  } else if (len < 65536) {
+    s_wsOutBuf[n++] = 126;
+    s_wsOutBuf[n++] = (uint8_t)(len >> 8);
+    s_wsOutBuf[n++] = (uint8_t)(len & 0xFF);
+  } else {
+    return false;  // nothing we send is that big
+  }
+  memcpy(s_wsOutBuf + n, payload, len);
+  n += len;
+  s_wsOutLen = n;
+  s_wsOutSent = 0;
+  return true;
+}
+
+void wsQueue(const char *payload) { wsQueueRaw((const uint8_t *)payload, strlen(payload), 0x1); }
+
+// Bindings as the page wants them (shared with the HTTP endpoint).
+size_t buildBindingsJson(char *buf, size_t cap) {
+  Json out(buf, cap);
+  uint8_t raws[KEYMAP_MAX_BINDINGS];
+  hid_action_t acts[KEYMAP_MAX_BINDINGS];
+  const size_t count = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
+  out.add("{\"bindings\":[");
+  for (size_t i = 0; i < count; ++i) {
+    if (i) out.add(",");
+    actionJson(out, raws[i], acts[i]);
+  }
+  out.add("],\"defaults\":[");
+  const keymap_entry_t *table = keymap_default_table();
+  const size_t dcount = keymap_default_count();
+  for (size_t i = 0; i < dcount; ++i) {
+    if (i) out.add(",");
+    actionJson(out, table[i].raw_code, table[i].press);
+  }
+  out.add("],\"effective\":[");
+  for (size_t i = 0; i < dcount; ++i) {
+    if (i) out.add(",");
+    actionJson(out, table[i].raw_code, keymap_lookup(table[i].raw_code));
+  }
+  out.add("]}");
+  return out.ok() ? out.size() : 0;
+}
+
+void wsSendBindings() {
+  char buf[1024];
+  const size_t n = buildBindingsJson(buf, sizeof(buf));
+  if (n) wsQueueRaw((const uint8_t *)buf, n, 0x1);
+}
+
+void wsSendStatus() {
+  char buf[320];
+  Json out(buf, sizeof(buf));
+  out.add("{\"type\":\"status\",\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,"
+          "\"remoteConnected\":%s,\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u}",
+      (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
+      boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
+      settings::batteryLevel(), (unsigned)keymap_binding_count());
+  if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);
+}
+
+// Console-style command arriving over the socket: "get", "set?raw=..&kind=..",
+// "reset" - the same query parsing the HTTP endpoints use.
+void wsCommand(char *msg) {
+  char *query = strchr(msg, '?');
+  if (query) *query++ = 0;
+  if (!strcmp(msg, "get")) {
+    wsSendBindings();
+    return;
+  }
+  if (!strcmp(msg, "status")) {
+    wsSendStatus();
+    return;
+  }
+  if (!strcmp(msg, "set") && query) {
+    uint8_t raw = 0, kind = 0, mod = 0, key = 0;
+    uint16_t cons = 0;
+    if (!bindingArgs(query, raw, kind, mod, key, cons)) {
+      wsQueue("{\"type\":\"error\",\"error\":\"invalid binding arguments\"}");
+      return;
+    }
+    settings::setBinding(raw, kind, mod, key, cons);
+    wsQueue("{\"type\":\"saved\"}");
+    wsSendBindings();
+    return;
+  }
+  if (!strcmp(msg, "reset")) {
+    uint8_t raws[KEYMAP_MAX_BINDINGS];
+    hid_action_t acts[KEYMAP_MAX_BINDINGS];
+    size_t n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
+    while (n > 0) {
+      settings::setBinding(raws[0], 0, 0, 0, 0);
+      n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
+    }
+    wsQueue("{\"type\":\"reset\"}");
+    wsSendBindings();
+    return;
+  }
+  wsQueue("{\"type\":\"error\",\"error\":\"unknown command\"}");
+}
+
+// Consume every complete frame sitting in s_wsInBuf.
+void wsConsume() {
+  size_t used = 0;
+  while (s_wsInLen - used >= 2) {
+    const uint8_t *f = s_wsInBuf + used;
+    const size_t avail = s_wsInLen - used;
+    const uint8_t opcode = (uint8_t)(f[0] & 0x0F);
+    const bool masked = (f[1] & 0x80) != 0;
+    size_t plen = (size_t)(f[1] & 0x7F);
+    size_t off = 2;
+    if (plen == 126) {
+      if (avail < 4) break;
+      plen = ((size_t)f[2] << 8) | f[3];
+      off = 4;
+    } else if (plen == 127) {
+      wsClose();  // not supported; a browser never sends one of these
+      return;
+    }
+    uint8_t mask[4] = {0, 0, 0, 0};
+    if (masked) {
+      if (avail < off + 4) break;
+      memcpy(mask, f + off, 4);
+      off += 4;
+    }
+    if (avail < off + plen) break;  // frame still arriving
+    uint8_t *payload = s_wsInBuf + used + off;
+    if (masked) {
+      for (size_t i = 0; i < plen; ++i) payload[i] ^= mask[i & 3];
+    }
+    used += off + plen;
+
+    if (opcode == 0x8) {  // close
+      wsQueueRaw(payload, plen, 0x8);
+      wsClose();
+      return;
+    }
+    if (opcode == 0x9) {  // ping -> pong
+      wsQueueRaw(payload, plen, 0xA);
+      continue;
+    }
+    if (opcode == 0x1 && plen > 0 && plen < (kWsIn - 1)) {
+      payload[plen] = 0;  // the command parser wants a C string
+      wsCommand((char *)payload);
+    }
+  }
+  if (used) {
+    memmove(s_wsInBuf, s_wsInBuf + used, s_wsInLen - used);
+    s_wsInLen -= used;
+  }
+}
+
+void wsHandshake(const char *key) {
+  // Sec-WebSocket-Accept = base64(sha1(key + GUID))
+  static const char *kGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+  char joined[128];
+  snprintf(joined, sizeof(joined), "%s%s", key, kGuid);
+  unsigned char digest[20];
+  mbedtls_sha1_context sha;
+  mbedtls_sha1_init(&sha);
+  const int shaRc = mbedtls_sha1_update(&sha, (const unsigned char *)joined, strlen(joined)) |
+                    mbedtls_sha1_finish(&sha, digest);
+  mbedtls_sha1_free(&sha);
+  if (shaRc != 0) {
+    errorResponse(500, "Internal Server Error", "sha1 failed");
+    return;
+  }
+  unsigned char accept[40];
+  size_t acceptLen = 0;
+  if (mbedtls_base64_encode(accept, sizeof(accept), &acceptLen, digest, sizeof(digest)) != 0) {
+    errorResponse(500, "Internal Server Error", "base64 failed");
+    return;
+  }
+  accept[acceptLen] = 0;
+
+  const int n = snprintf(s_http.header, sizeof(s_http.header),
+      "HTTP/1.1 101 Switching Protocols\r\n"
+      "Upgrade: websocket\r\n"
+      "Connection: Upgrade\r\n"
+      "Sec-WebSocket-Accept: %s\r\n\r\n",
+      (const char *)accept);
+  if (n < 0 || (size_t)n >= sizeof(s_http.header)) {
+    errorResponse(500, "Internal Server Error", "handshake header too large");
+    return;
+  }
+  s_http.headerLen = (size_t)n;
+  s_http.headerSent = 0;
+  s_http.body = nullptr;
+  s_http.bodyLen = 0;
+  s_http.bodySent = 0;
+  s_http.sending = true;
+  s_http.progress = millis();
+  // Not a websocket yet: the 101 has to drain through the normal HTTP send
+  // path first. Switching here would make the frame branch below swallow the
+  // response and the client would see the connection die instead of a 101.
+  s_pendingUpgrade = true;
+  s_ws = false;
+  s_wsInLen = s_wsOutLen = s_wsOutSent = 0;
+  s_wsLastKeyCount = bridge::keyPresses();
+  s_wsLastStatusMs = millis();
+  s_wsLastRecvMs = millis();
+  s_wsLastPingMs = s_wsLastRecvMs;
+}
+
 // The whole event payload: the key counter (so nothing is ever missed), the
 // last key for the flash, the live key for as long as it is held, plus the
 // link states so a disconnect shows up here too.
-void sendKeyEvent() {
+void wsSendKeyEvent() {
   Json out(s_http.io, sizeof(s_http.io));
   out.add("{\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,\"remoteConnected\":%s,"
           "\"hostConnected\":%s,\"battery\":%d}",
@@ -343,20 +661,7 @@ void sendKeyEvent() {
   jsonResult(out);
 }
 
-void handleEvents(char *query) {
-  uint32_t since = 0;
-  if (query) {
-    for (char *f = strtok(query, "&"); f; f = strtok(nullptr, "&")) {
-      if (strncmp(f, "since=", 6) == 0) since = strtoul(f + 6, nullptr, 10);
-    }
-  }
-  // An event is already waiting: answer immediately.
-  if (bridge::keyPresses() != since) { sendKeyEvent(); return; }
-  // Otherwise park the request until something happens or the window expires.
-  s_holding = true;
-  s_holdSince = since;
-  s_holdDeadline = millis() + kHoldMs;
-}
+
 
 void dispatch() {
   ++s_requests;
@@ -367,13 +672,20 @@ void dispatch() {
     errorResponse(400, "Bad Request", "invalid request line"); return;
   }
   bool crossSite = false, nonemptyBody = false;
-  char host[96] = {}, origin[128] = {};
+  char host[96] = {}, origin[128] = {}, auth[200] = {};
   for (char *line = strstr(s_http.io, "\r\n"); line && line[2];) {
     line += 2;
     char *end = strstr(line, "\r\n");
     if (!end || end == line) break;
     const char saved = *end; *end = 0;
     if (strncasecmp(line, "Host:", 5) == 0) sscanf(line + 5, "%95s", host);
+    if (strncasecmp(line, "Authorization:", 14) == 0) {
+      // Skip the space after the colon, then take the rest of the value:
+      // %s would stop at that space and hand us just "Basic".
+      const char *v = line + 14;
+      while (*v == ' ' || *v == '\t') ++v;
+      sscanf(v, "%199[^\r\n]", auth);
+    }
     if (strncasecmp(line, "Origin:", 7) == 0) sscanf(line + 7, "%127s", origin);
     if (strncasecmp(line, "Sec-Fetch-Site:", 15) == 0 && strstr(line + 15, "cross-site")) crossSite = true;
     if (strncasecmp(line, "Transfer-Encoding:", 18) == 0) nonemptyBody = true;
@@ -396,13 +708,61 @@ void dispatch() {
   }
   char *query = strchr(target, '?');
   if (query) *query++ = 0;
+
+  // Authentication. The websocket carries its token in the query string; every
+  // other endpoint uses HTTP Basic so browsers can save the credential.
+  const bool isWs = strcmp(target, "/ws") == 0;
+  if (isWs) {
+    if (settings::hasWebPassword()) {
+      const char *tok = query ? strstr(query, "token=") : nullptr;
+      const String expected = settings::webToken();
+      if (!tok || expected.length() == 0 || expected != String(tok + 6)) {
+        errorResponse(401, "Unauthorized", "websocket token required");
+        return;
+      }
+    }
+  } else {
+    String pass;
+    const bool haveCreds = authDecodeBasic(auth, pass);
+    if (!settings::hasWebPassword()) {
+      if (haveCreds && pass.length() > 0) {
+        settings::setWebPassword(pass);
+        BR_LOGI(kTag, "setup mode: console password stored from the first visit");
+      } else {
+        authChallenge(true);
+        return;
+      }
+    } else if (!haveCreds || pass.length() == 0 || !settings::checkWebPassword(pass)) {
+      authChallenge(false);
+      return;
+    }
+  }
+
   if (get || head) {
     if (strcmp(target, "/") == 0) respond(200, "OK", "text/html; charset=utf-8", kIndexHtmlGz, kIndexHtmlGzLen, true, head);
     else if (strcmp(target, "/app.css") == 0) respond(200, "OK", "text/css; charset=utf-8", kIndexCssGz, kIndexCssGzLen, true, head);
     else if (strcmp(target, "/app.js") == 0) respond(200, "OK", "application/javascript; charset=utf-8", kIndexJsGz, kIndexJsGzLen, true, head);
     else if (strcmp(target, "/api/status") == 0) handleStatus(head);
     else if (strcmp(target, "/api/bindings") == 0) handleBindings(head);
-    else if (strcmp(target, "/api/events") == 0 && get) handleEvents(query);
+    else if (strcmp(target, "/api/token") == 0) {
+      const int n = snprintf(s_http.io, sizeof(s_http.io), "{\"token\":\"%s\"}",
+                             settings::webToken().c_str());
+      respond(200, "OK", "application/json", s_http.io, n > 0 ? (size_t)n : 0);
+    }
+    else if (strcmp(target, "/ws") == 0 && get) {
+      // Upgrade only: a plain GET here is a mistake, not a page request.
+      char key[64] = {};
+      for (char *line = strstr(s_http.io, "\r\n"); line && line[2];) {
+        line += 2;
+        char *end = strstr(line, "\r\n");
+        if (!end || end == line) break;
+        const char saved = *end; *end = 0;
+        if (strncasecmp(line, "Sec-WebSocket-Key:", 18) == 0) sscanf(line + 18, "%63s", key);
+        *end = saved; line = end;
+      }
+      if (!key[0]) errorResponse(400, "Bad Request", "missing Sec-WebSocket-Key");
+      else wsHandshake(key);
+    }
     else if (strcmp(target, "/favicon.ico") == 0) respond(204, "No Content", "image/x-icon", "", 0);
     else if (strcmp(target, "/api/set") == 0 || strcmp(target, "/api/reset") == 0)
       errorResponse(405, "Method Not Allowed", "writes require POST");
@@ -442,14 +802,70 @@ void pollHttp() {
     s_http.started = s_http.progress = millis();
   }
   const uint32_t now = millis();
-  if (s_holding) {
-    if (bridge::keyPresses() != s_holdSince || (int32_t)(now - s_holdDeadline) >= 0) {
-      s_holding = false;
-      sendKeyEvent();  // sets s_http.sending; the normal send path takes it from here
-    } else {
-      s_http.progress = now;  // parked on purpose, not stalled
+  if (s_ws) {
+    // 1) Drain the frame being sent.
+    if (s_wsOutSent < s_wsOutLen) {
+      const int n = send(s_http.fd, s_wsOutBuf + s_wsOutSent, s_wsOutLen - s_wsOutSent, MSG_DONTWAIT);
+      if (n > 0) {
+        s_wsOutSent += (size_t)n;
+        s_http.progress = now;
+        return;
+      }
+      if (n < 0 && retryable(errno)) return;
+      wsClose();
+      closeExchange(false);
       return;
     }
+    // 2) Read whatever the page sent. Any byte counts as liveness, and the
+    //    browser answers our pings without the page doing anything.
+    if (s_wsInLen < sizeof(s_wsInBuf)) {
+      const int n = recv(s_http.fd, s_wsInBuf + s_wsInLen, sizeof(s_wsInBuf) - s_wsInLen, MSG_DONTWAIT);
+      if (n > 0) {
+        s_wsInLen += (size_t)n;
+        s_http.progress = now;
+        s_wsLastRecvMs = now;
+        wsConsume();
+      } else if (n == 0) {
+        wsClose();
+        closeExchange(false);
+        return;
+      } else if (!retryable(errno)) {
+        wsClose();
+        closeExchange(false);
+        return;
+      }
+    }
+    if (!s_ws) return;  // the frame above was a close
+    if (now - s_wsLastRecvMs > kWsDeadAfterMs) {
+      BR_LOGW(kTag, "websocket peer silent for %lu ms - dropping it so the server stays usable",
+              (unsigned long)(now - s_wsLastRecvMs));
+      wsClose();
+      closeExchange(false);
+      return;
+    }
+    if (now - s_wsLastPingMs >= kWsPingEveryMs) {
+      s_wsLastPingMs = now;
+      static const uint8_t kNoPayload[1] = {0};
+      wsQueueRaw(kNoPayload, 0, 0x9);  // ping; a live browser answers with pong
+    }
+    // 3) Push events: a key the instant it is forwarded, plus a slow status
+    //    heartbeat so the page sees link changes and knows we are alive.
+    if (s_wsOutSent >= s_wsOutLen) {
+      if (bridge::keyPresses() != s_wsLastKeyCount) {
+        s_wsLastKeyCount = bridge::keyPresses();
+        s_wsLastStatusMs = now;
+        char buf[256];
+        Json out(buf, sizeof(buf));
+        out.add("{\"type\":\"key\",\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u}",
+            (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode());
+        if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);
+      } else if (now - s_wsLastStatusMs >= kWsStatusEveryMs) {
+        s_wsLastStatusMs = now;
+        wsSendStatus();
+      }
+    }
+    s_http.progress = now;  // a live socket is not a stalled request
+    return;
   }
   if (now - s_http.progress > kProgressTimeoutMs || now - s_http.started > kRequestTimeoutMs) {
     BR_LOGW(kTag, "HTTP timeout (header %u/%u, body %u/%u)", (unsigned)s_http.headerSent,
@@ -471,7 +887,19 @@ void pollHttp() {
   const bool header = s_http.headerSent < s_http.headerLen;
   const char *src = header ? s_http.header + s_http.headerSent : s_http.body + s_http.bodySent;
   const size_t left = header ? s_http.headerLen - s_http.headerSent : s_http.bodyLen - s_http.bodySent;
-  if (!left) { closeExchange(true); return; }
+  if (!left) {
+    if (s_pendingUpgrade) {
+      s_pendingUpgrade = false;
+      s_ws = true;  // the 101 is out; from here on this socket speaks frames
+      s_http.sending = false;
+      s_http.headerLen = s_http.headerSent = 0;
+      s_http.bodyLen = s_http.bodySent = 0;
+      BR_LOGI(kTag, "websocket open, heap %u B", (unsigned)ESP.getFreeHeap());
+    } else {
+      closeExchange(true);
+    }
+    return;
+  }
   // Exactly one nonblocking send per loop. Never wait or retry here: returning
   // to loop delivers queued BLE key releases before the next network attempt.
   const int n = send(s_http.fd, src, left < kIoPerLoop ? left : kIoPerLoop, MSG_DONTWAIT);

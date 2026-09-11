@@ -9,6 +9,8 @@
 #include "settings.h"
 
 #include <Preferences.h>
+
+#include <mbedtls/sha1.h>
 #include <nimble/ble.h>
 
 #include "config.h"
@@ -32,7 +34,9 @@ const char *kKeyMapPower = "map_pow";
 const char *kKeyMapVoice = "map_voice";
 const char *kKeyBattery = "rc_batt";
 const char *kKeyBatteryValid = "rc_batt_v";
-const char *kKeyBindKeys = "bd_keys";  // legacy manifest, read for migration only
+const char *kKeyBindKeys = "bd_keys";
+const char *kKeyWebPass = "web_pass";   // SHA1 hex of the console password
+const char *kKeyWebToken = "web_tok";   // derived token for the websocket URL  // legacy manifest, read for migration only
 const char *kKeyBindingsV2 = "bd_v2";  // one atomic, versioned snapshot
 const char *kKeyWifiSsid = "wf_ssid";
 const char *kKeyWifiPass = "wf_pass";
@@ -238,6 +242,52 @@ void clearWifi() {
   if (!s_ready) return;
   s_prefs.remove(kKeyWifiSsid);
   s_prefs.remove(kKeyWifiPass);
+}
+
+// --- console password -----------------------------------------------------
+
+String sha1Hex(const String &in) {
+  unsigned char digest[20];
+  mbedtls_sha1_context ctx;
+  mbedtls_sha1_init(&ctx);
+  mbedtls_sha1_update(&ctx, (const unsigned char *)in.c_str(), in.length());
+  mbedtls_sha1_finish(&ctx, digest);
+  mbedtls_sha1_free(&ctx);
+  char out[41];
+  for (int i = 0; i < 20; ++i) snprintf(out + i * 2, 3, "%02x", digest[i]);
+  return String(out);
+}
+
+bool hasWebPassword() {
+  if (!s_ready) return false;
+  return s_prefs.getString(kKeyWebPass, "").length() > 0;
+}
+
+bool checkWebPassword(const String &plain) {
+  if (!s_ready) return false;
+  const String stored = s_prefs.getString(kKeyWebPass, "");
+  return stored.length() > 0 && stored == sha1Hex(plain);
+}
+
+void setWebPassword(const String &plain) {
+  if (!s_ready || plain.length() == 0) return;
+  s_prefs.putString(kKeyWebPass, sha1Hex(plain));
+  // The websocket token is derived, not the password itself: it travels in a
+  // URL, so it must not be the credential used for HTTP Basic auth.
+  s_prefs.putString(kKeyWebToken, sha1Hex(sha1Hex(plain) + "mrb-ws"));
+  BR_LOGI(kTag, "web console password set");
+}
+
+void clearWebPassword() {
+  if (!s_ready) return;
+  s_prefs.remove(kKeyWebPass);
+  s_prefs.remove(kKeyWebToken);
+  BR_LOGI(kTag, "web console password cleared");
+}
+
+String webToken() {
+  if (!s_ready) return String("");
+  return s_prefs.getString(kKeyWebToken, "");
 }
 
 void clearAll() {

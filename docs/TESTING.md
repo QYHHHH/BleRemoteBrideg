@@ -802,6 +802,49 @@ esptool 直接以 **1 500 000** 波特率烧录为 649.8 kbit/s / 16.4 s——**
 
 ---
 
+### 4.16 WebSocket 事件通道 + 访问密码（2026-09-11 深夜）
+
+**架构变化**：按键反馈从轮询/长轮询改为**一条 WebSocket 长连接**，双向承载
+按键推送与配置命令。实测（串口注入按键，测应答时刻）：
+
+| 项目 | 结果 |
+| --- | --- |
+| 握手 | `101 Switching Protocols`，`Sec-WebSocket-Accept` 校验通过 |
+| 带错误 token 的握手 | `401` |
+| 落键 → 帧到达 | 数毫秒级（长轮询版实测 23 ms，WS 更短） |
+| 保活 | 服务端每 10 s ping；对端静默 30 s 即断开释放服务槽 |
+
+**认证**（HTTP Basic + WebSocket 令牌）：
+
+```
+无凭据             → 401 + realm "…setup - choose a console password"
+首次带凭据         → 200，密码写入 NVS（SHA1）
+同一凭据           → 200
+错误密码           → 401 + realm "MiRemoteBridge web console"
+GET /api/token     → {"token":"…"}（受 Basic 保护）
+/ws?token=<正确>   → 101
+/ws?token=<错误>   → 401
+pass clear（串口） → 清除密码，回到 setup 模式
+```
+
+**忘记密码的出路**：BOOT 长按 5 秒 → `settings::clearAll()` 用
+`s_prefs.clear()` 清空整个命名空间（Wi-Fi 凭据、网页密码、按键映射、
+状态缓存），配合 `ble_bonds::removeAll()` 清蓝牙配对 → 完整出厂状态。
+
+**三个真机才暴露的坑**（本轮）：
+
+1. **握手响应被自己的 WS 分支吞掉**：`s_ws` 一置位，`pollHttp()` 就在开头
+   进入帧模式并 `return`，握手写的 `101` 留在 HTTP 发送缓冲里永远发不出去 →
+   客户端等 4 s 超时看到连接被关。修法是加 `s_pendingUpgrade`：`101` 走完
+   正常 HTTP 发送路径后才把同一个 socket 翻成帧模式。
+2. **`Authorization` 头解析**：`%s` 会在冒号后的空格处停下（只拿到
+   `"Basic"`），`%[^\r]` 又会把空格带进去。正解是先跳过空白再读到行尾。
+3. **残留在服务槽上的连接**：长轮询/WS 占用唯一服务槽，若对端消失而不发 FIN，
+   服务会永久卡死（lwip 自己的 keepalive 要数小时）。长轮询已整体移除；
+   WS 加了 ping + 30 s 静默断开。
+
+---
+
 ## 5. L4 实机验收清单（部分完成）
 
 按顺序做完并回填。每条都有"怎么判"和"期望结果"。

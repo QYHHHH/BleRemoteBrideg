@@ -1,21 +1,21 @@
 /*
- * MiRemoteBridge - Web UI page, served from PROGMEM.
+ * MiRemoteBridge - Web UI page (served from flash, gzipped by gen_web_page.py)
  *
- * Authoring source for the offline preview and generated HTML/CSS/JS assets.
- * gen_web_page.py splits and gzips it; firmware streams the flash-resident
- * arrays without a whole-page allocation. CSS responsive layouts cost flash,
- * not extra MCU heap. Status polling continues while an editor is open.
- *
- * One physical key maps to exactly one HID action; presses and releases are
- * forwarded live. No gestures, macros or audio.
+ * Layout and styling: the refined design, with SVG key icons and arrowed
+ * connector lines from the remote drawing to each key card. Transport: one
+ * websocket - the board pushes a key event the moment it forwards the key,
+ * and the page sends its binding commands back over the same socket.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 #pragma once
+
 #include <pgmspace.h>
 
 static const char kIndexHtml[] PROGMEM = R"rawliteral(<!DOCTYPE html>
-<html lang="zh-CN"><head>
+<html lang="zh">
+<head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light"><title>MiRemoteBridge 按键映射</title>
 <style>
@@ -37,19 +37,18 @@ main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
 .btn:hover{background:#f8fafc}.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}.btn.p:hover{background:#0966d9}
 .btn.d{color:#b45345}
 .head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr) 190px minmax(0,1fr);gap:12px;align-items:center;position:relative}
-.col{display:flex;flex-direction:column;gap:8px;position:relative;z-index:1}
-#wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
-#wires path{fill:none;stroke:#cbd8e6;stroke-width:1.5;transition:stroke .1s}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 300px minmax(0,1fr);gap:12px;align-items:center;position:relative}
+.col{display:flex;flex-direction:column;gap:14px;position:relative;z-index:1}
+#wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;overflow:visible}
+#wires path{fill:none;stroke:#aeb4bf;stroke-opacity:.75;stroke-width:1.2;transition:stroke .1s}
 #wires path.live{stroke:#327ede;stroke-width:2.5}
 .k{border:1px solid #e7e9ed;background:#f9fafb;border-radius:9px;overflow:hidden;transition:.15s}
 .k.sel{background:var(--soft);border-color:#9bc5fb}
 .k.live,.rb.live{background:#d7ecff;border-color:#327ede;box-shadow:0 0 0 3px #327ede26}
 .k.live .act,.rb.live{color:#1257b5}
 .rb.live{color:#fff;background:#327ede}
-.rb.pulse{background:#5b83e0;box-shadow:0 0 0 3px #327ede59}
 .k:hover{border-color:#b2c9e6}
-.k button{display:block;width:100%;text-align:left;background:none;border:0;padding:9px 11px;min-height:62px}
+.k button{display:block;width:100%;text-align:left;background:none;border:0;padding:9px 11px;min-height:96px}
 .k .r1{display:flex;align-items:center;gap:6px;font-size:12px;color:#67717d}
 .k .r1 b{color:var(--ink);font-weight:600}
 .k .tg{margin-left:auto;font-size:9px;color:#8d96a1}
@@ -58,36 +57,22 @@ main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
 .k .act{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .k .ed{font-size:10px;color:#9aa3af}
 .rm{display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;z-index:1}
-.rm .body{width:132px;height:410px;border:1px solid #bfc4c7;border-radius:15px 15px 18px 18px;background:linear-gradient(90deg,#c6c9cb,#e4e5e4 8%,#f2f2f0 45%,#e5e5e3 92%,#b9bdbf);position:relative;box-shadow:7px 11px 18px #27344210;flex:none}
-.rm .body:after{content:"RC003";position:absolute;bottom:26px;width:100%;text-align:center;font:10px ui-monospace,Consolas,monospace;letter-spacing:3px;color:#a3a7a9}
-.rb{position:absolute;display:grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid #61666a;border-radius:50%;background:#53595d;color:#f4f5f5;font-size:13px}
-.rb:hover{background:#606d7a}.rb.sel{background:#327ede;border-color:#286eca;color:#fff}
-.rb.top{top:16px;width:25px;height:25px;background:#e9eae8;color:#646b71;border-color:#a4aaae}
-.rb.top.sel{background:#ecf4ff;color:var(--blue);border-color:var(--blue)}
-.p1{left:26px}.p2{left:86px}
-/* Positions measured off the remote itself, expressed as proportions so the
-   drawing survives any body size:
-     top row     centre y 9%   - x 29% (power) and 74% (voice)
-     disc        centre y 22%  - diameter 80% of the body width
-     columns     centre y 37% / 47% / 57%, x 29% (left) and 74% (right)
-   The two columns line up horizontally: volume + and - sit at the same heights
-   as back and home, TV at the same height as menu. Everything below the TV row
-   is empty body, exactly like the real remote.
-   Every key stays a DIRECT child of .body (the selection/live highlight walks
-   rmArt.children), so all coordinates are relative to the body and the disc
-   itself is painted by ::before underneath them. */
-.p3{left:22px;top:138px}.p4{left:22px;top:176px}.p5{left:22px;top:217px}
-.p6{left:82px;top:137px;height:34px;border-radius:17px 17px 6px 6px}
-.p7{left:82px;top:173px;height:34px;border-radius:6px 6px 17px 17px}
-.p8{left:82px;top:217px}
-.rm .body:before{content:"";position:absolute;left:13px;top:37px;width:106px;height:106px;border-radius:50%;background:radial-gradient(circle at 42% 34%,#3f454a,#22262a 72%);box-shadow:inset 0 3px 7px #0000004d,0 4px 11px #1c2a3a2b}
-.rb.du,.rb.dd,.rb.dl,.rb.dr{width:34px;height:34px;border:0;background:none;color:#c9d0d5;font-size:13px}
-.rb.du{left:49px;top:40px}.rb.dd{left:49px;top:106px}
-.rb.dl{left:16px;top:73px}.rb.dr{left:82px;top:73px}
-.rb.du:hover,.rb.dd:hover,.rb.dl:hover,.rb.dr:hover{background:#ffffff1c}
-.rb.du.sel,.rb.dd.sel,.rb.dl.sel,.rb.dr.sel{background:#327ede;color:#fff}
-.rb.do{left:43px;top:67px;width:47px;height:47px;font-size:10px;background:#343a3f;color:#e6ebee;border-color:#23282c}
-.rb.do.sel{background:#327ede;border-color:#286eca}
+.rm .body{width:132px;height:540px;border:1px solid #969898;border-radius:12px / 5px;background:linear-gradient(90deg,#575b5c,#d4d5d3 4%,#a8aaa9 8%,#cfd0ce 14%,#bdbfbd 70%,#f0f1ef 94%,#8c908f 98%,#b4b8b8);position:relative;box-shadow:inset 0 1px 2px #fff9;flex:none}
+.rm .body:before{content:"";position:absolute;left:10px;top:58px;width:110px;height:110px;border:1px solid #111;border-radius:50%;background:linear-gradient(135deg,#353636,#242525);box-shadow:inset 0 0 0 2px #ffffff18}
+.rb{position:absolute;display:grid;place-items:center;width:43px;height:43px;padding:0;border:1px solid #101010;border-radius:50%;background:linear-gradient(135deg,#414242,#202121);box-shadow:inset 0 0 0 1px #ffffff25;color:#eee;font-size:13px}
+.rb:hover{filter:brightness(1.2)}.rb.sel{box-shadow:inset 0 0 0 2px #327ede;color:#9dc7ff}
+.rb.p1,.rb.p2{top:16px;width:30px;height:30px;background:linear-gradient(135deg,#d0d2d1,#b8bbba);color:#222;border-color:#4d5051}
+.p1{left:15px}.p2{left:85px}
+.p3{left:15px;top:174px}.p4{left:15px;top:224px}.p5{left:15px;top:274px}
+.p6{left:71px;top:174px;height:47px;border-radius:24px 24px 0 0;border-bottom:0;box-shadow:inset 1px 1px #ffffff25}
+.p7{left:71px;top:221px;height:47px;border-radius:0 0 24px 24px;border-top:0;box-shadow:inset 1px -1px #ffffff25}
+.p8{left:71px;top:274px}
+.rb.du,.rb.dd,.rb.dl,.rb.dr{width:32px;height:32px;border:0;background:none;box-shadow:none;color:transparent}
+.rb.du{left:49px;top:59px}.rb.dd{left:49px;top:135px}.rb.dl{left:11px;top:97px}.rb.dr{left:87px;top:97px}
+.rb.du:hover,.rb.dd:hover,.rb.dl:hover,.rb.dr:hover{background:#ffffff16}
+.rb.do{left:38px;top:85px;width:56px;height:56px;background:linear-gradient(135deg,#343535,#292a2b);color:transparent}
+.rb.do.sel{color:transparent}.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.k .ico{color:#625be3}.rb .ico{width:19px;height:19px}
 .cap{text-align:center;font-size:9px;color:#97a0aa;line-height:1.8}.cap b{display:block;color:#6d7781;font-size:10px;letter-spacing:2px;font-weight:500}
 .foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 18px;margin-top:14px;flex-wrap:wrap}
 .foot p{font-size:11px;color:var(--mut)}.foot .bs{display:flex;gap:8px}
@@ -110,13 +95,12 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 .warn{background:#fff8ee;border:1px solid #f1dfc4;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#906b34;display:flex;gap:10px;align-items:center;justify-content:space-between}
 .warn button{border:0;background:none;text-decoration:underline;font-size:12px}
 .demo{background:#edf4fc;border-color:#d4e3f6;color:#567898}
-@media(max-width:860px){.grid{grid-template-columns:minmax(0,1fr) 150px minmax(0,1fr);gap:9px}main{padding:14px 14px 20px}.hero{flex-direction:column;align-items:stretch}.rm .body{transform:scale(.9)}}
+@media(max-width:860px){.grid{grid-template-columns:minmax(0,1fr) 240px minmax(0,1fr);gap:9px}main{padding:14px 14px 20px}.hero{flex-direction:column;align-items:stretch}.rm .body{transform:scale(.9)}}
 @media(max-width:620px){.bar{padding:11px 14px}.grid{grid-template-columns:1fr 1fr;gap:8px}.rm{grid-column:1/-1;flex-direction:row;justify-content:center;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:4px}.rm .body{transform:scale(.34);margin:-128px -40px}.cap{text-align:left}.k button{min-height:70px;padding:9px}.k .ed{display:none}.foot{flex-direction:column;align-items:stretch}.foot .bs .btn{flex:1}.hero{padding:15px 16px}}
 </style></head><body>
 <div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span><span class="grow"></span>
 <span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
 <main>
-<div class="warn demo" id="demo" hidden><span>设计预览 · 数据为模拟，不会操作真实设备。</span></div>
 <div class="warn" id="off" hidden><span>无法连接桥接器，显示的是上次读取的数据，编辑已暂停。</span><button id="retry">重新连接</button></div>
 <div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">与桥接器连接同一路由器，即可配置。</p><p id="diag" aria-live="polite"></p></div>
 <button class="btn p" id="goMap">编辑按键映射</button><button class="btn" id="refresh">刷新</button></div>
@@ -148,17 +132,19 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 <div class="da"><button class="btn" id="rdC">取消</button><button class="btn d" id="rdY">确认恢复</button></div></dialog>
 <div id="toast" role="status" hidden></div>
 <script>
+
 'use strict';
 var $=function(i){return document.getElementById(i)};
 var KEYS=[[0x66,'电源键','⏻','L','p1'],[0x52,'上键','↑','L','du'],[0x50,'左键','←','L','dl'],[0xF1,'返回键','↩','L','p3'],[0x4A,'主页键','⌂','L','p4'],[0x65,'菜单键','☰','L','p5'],
 [0x3E,'语音键','MIC','R','p2'],[0x4F,'右键','→','R','dr'],[0x28,'确定键','OK','R','do'],[0x51,'下键','↓','R','dd'],[0x80,'音量 +','＋','R','p6'],[0x81,'音量 −','－','R','p7'],[0x35,'TV 键','TV','R','p8']];
+function icon(k){var p={p1:'M12 3v9 M6 5a9 9 0 1 0 12 0',p2:'M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0z M5 10v2a7 7 0 0 0 14 0v-2 M12 19v3',du:'m5 15 7-7 7 7',dd:'m5 9 7 7 7-7',dl:'m15 5-7 7 7 7',dr:'m9 5 7 7-7 7',do:'M20 12a8 8 0 1 0-16 0 8 8 0 0 0 16 0 M14 12a2 2 0 1 0-4 0 2 2 0 0 0 4 0',p3:'m14 5-7 7 7 7',p4:'m4 10 8-7 8 7v11H4z M9 21v-8h6v8',p5:'M4 6h16 M4 12h16 M4 18h16',p6:'M5 12h14 M12 5v14',p7:'M5 12h14',p8:'M5 6h14a2 2 0 0 1 2 2v11H3V8a2 2 0 0 1 2-2 M8 2l4 4 4-4'};return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="'+p[k[4]]+'"/></svg>'}
 var KB=[[0,'无主键（仅修饰键）'],[40,'Enter'],[41,'Esc'],[42,'Backspace'],[43,'Tab'],[44,'Space'],[79,'→'],[80,'←'],[81,'↓'],[82,'↑'],[54,','],[55,'.'],[56,'/'],[45,'-'],[46,'='],[47,'['],[48,']'],[51,';'],[52,"'"],[53,'`'],[57,'Caps Lock'],[73,'Insert'],[74,'Home'],[75,'Page Up'],[76,'Delete'],[77,'End'],[78,'Page Down']];
 for(var i=0;i<26;i++)KB.push([4+i,String.fromCharCode(65+i)]);
 for(i=0;i<10;i++)KB.push([30+i,String((i+1)%10)]);
 for(i=0;i<12;i++)KB.push([58+i,'F'+(i+1)]);
 var CS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
 var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
-var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null};
+var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null};
 function hx(v){return v.toString(16).toUpperCase().padStart(2,'0')}
 function pick(l,v,d){for(var i=0;i<l.length;i++)if(l[i][0]===v)return l[i][1];return d}
 function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return pick(CS,a.cons,'媒体 0x'+hx(a.cons));
@@ -167,10 +153,10 @@ if(a.key)p.push(pick(KB,a.key,'HID 0x'+hx(a.key)));return p.join(' + ')||'未指
 function cur(r){return S.e[r]||S.b[r]||S.d[r]}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function toast(m){clearTimeout(S.t);$('toast').textContent=m;$('toast').hidden=false;S.t=setTimeout(function(){$('toast').hidden=true},3500)}
-function rmMark(inter){return KEYS.map(function(k){return '<'+(inter?'button type="button"':'span')+' class="rb '+k[4]+'"'+(inter?' data-r="'+k[0]+'" aria-label="编辑'+k[1]+'"':'')+'>'+esc(k[2])+'</'+(inter?'button':'span')+'>'}).join('')}
+function rmMark(inter){return KEYS.map(function(k){return '<'+(inter?'button type="button"':'span')+' class="rb '+k[4]+'"'+(inter?' data-r="'+k[0]+'" aria-label="编辑'+k[1]+'"':'')+'>'+icon(k)+'</'+(inter?'button':'span')+'>'}).join('')}
 $('rmArt').innerHTML=rmMark(true);
 KEYS.forEach(function(k){var d=document.createElement('div');d.className='k';d.id='k'+k[0];
-d.innerHTML='<button type="button" data-r="'+k[0]+'" aria-label="编辑'+k[1]+'" disabled><span class="r1">'+esc(k[2])+' <b>'+esc(k[1])+'</b><span class="tg">基础</span></span><span class="r2"><span class="act">等待读取</span><span class="ed">编辑 ›</span></span></button>';
+d.innerHTML='<button type="button" data-r="'+k[0]+'" aria-label="编辑'+k[1]+'" disabled><span class="r1">'+icon(k)+' <b>'+esc(k[1])+'</b><span class="tg">基础</span></span><span class="r2"><span class="act">等待读取</span><span class="ed">编辑 ›</span></span></button>';
 $('col'+k[3]).appendChild(d)});
 function opt(id,l){l.forEach(function(x){$(id).add(new Option(x[1],String(x[0])))});}
 opt('key',KB);opt('cons',CS);
@@ -181,8 +167,53 @@ function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.query
 Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=S.busy});
 $('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
 function online(v){S.on=v;$('off').hidden=v;btns()}
-function req(u,m){var c=new AbortController(),t=setTimeout(function(){c.abort()},6500);
-return fetch(u,{method:m||'GET',cache:'no-store',signal:c.signal}).then(function(r){return r.json().catch(function(){throw Error('设备返回了无效数据')}).then(function(j){if(!r.ok||j.error)throw Error(j.error||('请求失败 '+r.status));return j})}).finally(function(){clearTimeout(t)})}
+/* Everything here runs over one websocket: commands go out, events come in.
+No polling, no timers, and a key is on screen the instant the board sees it. */
+function wsReq(cmd,expect,timeout){
+return new Promise(function(res,rej){
+if(!S.ws||S.ws.readyState!==1){rej(Error('未连接设备'));return}
+var w={cmd:cmd,expect:expect,res:res,rej:rej,t:setTimeout(function(){
+var n=S.pending.indexOf(w);if(n>=0)S.pending.splice(n,1);rej(Error('请求超时，结果未确认，请刷新核对'))},timeout||6000)};
+S.pending.push(w);S.ws.send(cmd)})}
+function settle(type,data){
+for(var i=0;i<S.pending.length;i++){if(S.pending[i].expect!==type)continue;
+var w=S.pending.splice(i,1)[0];clearTimeout(w.t);
+if(type==='error')w.rej(Error((data&&data.error)||'设备返回错误'));else w.res(data);return}
+if(type==='error'&&S.pending.length){var w0=S.pending.shift();clearTimeout(w0.t);w0.rej(Error((data&&data.error)||'设备返回错误'))}}
+function req(u,m){
+if(u==='/api/bindings')return wsReq('get','bindings');
+if(u==='/api/status')return wsReq('status','status');
+if(u.indexOf('/api/set?')===0)return wsReq(u.slice(5),'bindings');
+if(u==='/api/reset')return wsReq('reset','bindings');
+return Promise.reject(Error('unknown endpoint '+u))}
+function pulse(raw){if(!raw)return;Array.prototype.forEach.call($('rmArt').children,function(e){
+if(+e.dataset.r===raw){e.classList.add('pulse');setTimeout(function(){e.classList.remove('pulse')},260)}})}
+function wsMessage(j){
+if(!j||typeof j.type!=='string')return;
+if(j.type==='key'){if(typeof j.keyPresses==='number')S.keyPress=j.keyPresses;
+if(j.lastKey)pulse(j.lastKey);
+if(typeof j.activeKey==='number')highlight(j.activeKey);return}
+if(j.type==='status'){stat(j);if(!S.on)load();return}
+settle(j.type,j)}
+function wsOpen(){S.wsRetry=0;S.pending=[];load()}
+function wsClosed(){online(false);
+if(S.wsTimer)clearTimeout(S.wsTimer);
+var d=Math.min(8000,600*(S.wsRetry=(S.wsRetry||0)+1));
+S.wsTimer=setTimeout(connectWS,d)}
+function connectWS(){
+/* the socket cannot carry an Authorization header, so fetch the token first
+over an authenticated request and hand it over in the URL */
+fetch('/api/token',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+if(!j||typeof j.token!=='string'||!j.token)throw Error('no token');
+openSocket(j.token)}).catch(function(){
+if(S.wsTimer)clearTimeout(S.wsTimer);
+S.wsTimer=setTimeout(connectWS,2500)})}
+function openSocket(token){
+try{if(S.ws)S.ws.close()}catch(e){}
+var proto=(location.protocol==='https:')?'wss://':'ws://';
+try{S.ws=new WebSocket(proto+location.host+'/ws?token='+encodeURIComponent(token))}catch(e){wsClosed();return}
+S.ws.onopen=wsOpen;S.ws.onclose=wsClosed;S.ws.onerror=function(){};
+S.ws.onmessage=function(ev){var j=null;try{j=JSON.parse(ev.data)}catch(e){return}wsMessage(j)}}
 function idx(l){var o={};(l||[]).forEach(function(a){o[a.raw]=a});return o}
 function apply(d){if(!Array.isArray(d.bindings)||!Array.isArray(d.defaults)||!Array.isArray(d.effective))throw Error('按键数据不完整');
 S.b=idx(d.bindings);S.d=idx(d.defaults);S.e=idx(d.effective);S.ok=true;render()}
@@ -191,46 +222,20 @@ c.className='k'+(b?' cus':'')+(r===S.sel?' sel':'');c.querySelector('.tg').textC
 c.querySelector('.act').textContent=fmt(cur(r))});
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('sel',+e.dataset.r===S.sel)});
 $('cnt').textContent=n;btns();drawWires()}
-// Curve from each physical button to its mapping slot, measured from the live
-// layout so it survives resize and any font/label change.
 function drawWires(){var g=$('grid'),svg=$('wires');if(!g||!svg)return;
-var gb=g.getBoundingClientRect(),out='';
+var gb=g.getBoundingClientRect(),out='<defs><marker id="tip" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8Z" style="fill:#aeb4bf;stroke:none"/></marker></defs>';if(innerWidth<=620){svg.innerHTML='';return}
 KEYS.forEach(function(k){var card=$('k'+k[0]),btn=document.querySelector('#rmArt [data-r="'+k[0]+'"]');
 if(!card||!btn)return;
 var cb=card.getBoundingClientRect(),bb=btn.getBoundingClientRect();
-var x1=(k[3]==='L'?bb.left:bb.right)-gb.left,y1=bb.top+bb.height/2-gb.top;
-var x2=(k[3]==='L'?cb.right:cb.left)-gb.left,y2=cb.top+cb.height/2-gb.top;
+var x1=(bb.left+bb.width/2)-gb.left,y1=bb.top+bb.height/2-gb.top;
+var x2=(k[3]==='L'?cb.right+9:cb.left-9)-gb.left,y2=cb.top+cb.height/2-gb.top;
 var dx=(x2-x1)*0.45;
-out+='<path data-r="'+k[0]+'" d="M'+x1.toFixed(1)+','+y1.toFixed(1)+' C'+(x1+dx).toFixed(1)+','+y1.toFixed(1)+' '+(x2-dx).toFixed(1)+','+y2.toFixed(1)+' '+x2.toFixed(1)+','+y2.toFixed(1)+'"/>';});
+out+='<path marker-end="url(#tip)" data-r="'+k[0]+'" d="M'+x1.toFixed(1)+','+y1.toFixed(1)+' C'+(x1+dx).toFixed(1)+','+y1.toFixed(1)+' '+(x2-dx).toFixed(1)+','+y2.toFixed(1)+' '+x2.toFixed(1)+','+y2.toFixed(1)+'"/>';});
 svg.innerHTML=out}
 function highlight(raw){KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.classList.toggle('live',!!raw&&k[0]===raw)});
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('live',!!raw&&+e.dataset.r===raw)});
 Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)})}
-function pollStatus(){if(S.poll)return;S.poll=true;
-fetch('/api/status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
-stat(j);highlight(j.activeKey);
-if(!S.on)load()  /*the device answers again - recover from the greyed-out state without a manual refresh*/
-})
-.catch(function(){}).finally(function(){S.poll=false})}
-/* A key-down that happened between two polls still flashes: the firmware counts
-every forwarded press, so a changed counter means "this key was pressed".*/
-function pulse(raw){if(!raw)return;Array.prototype.forEach.call($('rmArt').children,function(e){
-if(+e.dataset.r===raw){e.classList.add('pulse');setTimeout(function(){e.classList.remove('pulse')},260)}})}
-/* Event channel: one request parked on the device, answered the instant a key
-is forwarded. Not a timer - nothing is polled, and the counter in 'since'
-means a press can never be missed, however short. */
-function startEvents(){if(S.evStopped)return;
-S.evCtl=('AbortController'in window)?new AbortController():null;
-var since=(typeof S.keyPress==='number')?S.keyPress:0;
-fetch('/api/events?since='+since,{cache:'no-store',signal:S.evCtl?S.evCtl.signal:undefined})
-.then(function(r){return r.json()}).then(function(j){
-if(typeof j.keyPresses==='number'){S.keyPress=j.keyPresses;pulse(j.lastKey)}
-if(typeof j.activeKey==='number')highlight(j.activeKey);
-if(typeof j.remoteConnected==='boolean')stat(j);
-startEvents()})
-.catch(function(){if(!S.evStopped)setTimeout(startEvents,1200)})}
-function stopEvents(){S.evStopped=true;if(S.evCtl){try{S.evCtl.abort()}catch(e){}S.evCtl=null}}
-function resumeEvents(){if(!S.evStopped)return;S.evStopped=false;startEvents()}
+
 function stat(j){var rc=!!j.remoteConnected,h=!!j.hostConnected;
 var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
 function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
@@ -254,17 +259,17 @@ function same(a,b){return !!a&&a.kind===b.kind&&a.mod===b.mod&&a.key===b.key&&a.
 function save(){if(S.busy||!S.on)return Promise.resolve();var k=+$('kind').value;
 var a={raw:hx(S.cur),kind:k,mod:k===1?S.mods:0,key:k===1?+$('key').value:0,cons:k===2?+$('cons').value:0};
 if(k===1&&!a.mod&&!a.key){$('edE').textContent='请至少选择一个修饰键或主键。';$('edE').hidden=false;return Promise.resolve()}
-S.busy=true;btns();$('edE').hidden=true;stopEvents();
+S.busy=true;btns();$('edE').hidden=true;
 var q=Object.keys(a).map(function(x){return x+'='+a[x]}).join('&');
 return req('/api/set?'+q,'POST').then(function(j){if(j.ok!==true)throw Error('设备未确认保存');return req('/api/bindings')})
 .then(function(d){apply(d);var got=S.b[k===0?parseInt(a.raw,16):S.cur];
 if(k===0?!!got:!same(got,{kind:k,mod:a.mod,key:a.key,cons:a.cons}))throw Error('回读结果与提交不一致，保存未确认');
 $('ed').close();toast(k===0?'已恢复此键基础映射':'映射已保存并回读确认')})
-.catch(function(e){$('edE').textContent=err(e);$('edE').hidden=false}).finally(function(){S.busy=false;btns();resumeEvents()})}
-function reset(){if(S.busy||!S.on)return Promise.resolve();S.busy=true;btns();$('rdE').hidden=true;stopEvents();
+.catch(function(e){$('edE').textContent=err(e);$('edE').hidden=false}).finally(function(){S.busy=false;btns()})}
+function reset(){if(S.busy||!S.on)return Promise.resolve();S.busy=true;btns();$('rdE').hidden=true;
 return req('/api/reset','POST').then(function(j){if(j.ok!==true)throw Error('设备未确认恢复');return req('/api/bindings')})
 .then(function(d){apply(d);if(d.bindings.length)throw Error('仍存在自定义绑定，恢复未确认');$('rd').close();toast('已清除全部自定义绑定')})
-.catch(function(e){$('rdE').textContent=err(e);$('rdE').hidden=false}).finally(function(){S.busy=false;btns();resumeEvents()})}
+.catch(function(e){$('rdE').textContent=err(e);$('rdE').hidden=false}).finally(function(){S.busy=false;btns()})}
 document.addEventListener('click',function(e){var t=e.target.closest?e.target.closest('[data-r]'):null;if(t)openEd(+t.dataset.r)});
 $('edF').onsubmit=function(e){e.preventDefault();save()};
 $('kind').onchange=draft;$('key').onchange=draft;$('cons').onchange=draft;
@@ -276,9 +281,13 @@ $('resetAll').onclick=function(){$('rdE').hidden=true;$('rd').showModal()};
 $('rdC').onclick=function(){$('rd').close()};$('rdY').onclick=reset;
 $('refresh').onclick=$('refresh2').onclick=$('retry').onclick=function(){load(true)};
 $('goMap').onclick=function(){document.querySelector('.head').scrollIntoView({behavior:'smooth',block:'start'})};
-document.addEventListener('visibilitychange',function(){if(!document.hidden)load()});
-window.addEventListener('resize',drawWires);
-load();startEvents();
-setInterval(function(){if(!document.hidden)pollStatus()},3000);
-setInterval(function(){if(!document.hidden&&!$('ed').open&&!$('rd').open)load()},30000);
-</script></body></html>)rawliteral";
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.ws&&S.ws.readyState===1)load()});
+window.addEventListener('resize',drawWires);new ResizeObserver(drawWires).observe($('grid'));
+connectWS();
+
+
+
+</script>
+</body>
+</html>
+)rawliteral";
