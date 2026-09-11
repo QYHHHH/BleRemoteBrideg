@@ -944,6 +944,21 @@ void dispatch() {
   char session[64] = {};
   const bool hasSession = readSessionCookie(s_http.io, session, sizeof(session));
 
+  // Setup mode: force the visitor to define a password before anything else
+  // is served. (Without this, an unset password meant "wide open", which read
+  // as a cache bug to the user: the page just opened with no prompt at all.)
+  if (!settings::hasWebPassword() && !isSetup && !isLogin && !isLogout && !isWs
+      && strcmp(target, "/api/token") != 0) {
+    const int n = snprintf(s_http.header, sizeof(s_http.header),
+        "HTTP/1.1 302 Found\r\nLocation: /setup\r\nCache-Control: no-store\r\n"
+        "Content-Length: 0\r\nConnection: close\r\n\r\n");
+    if (n < 0 || (size_t)n >= sizeof(s_http.header)) { closeExchange(false); return; }
+    s_http.headerLen = (size_t)n; s_http.headerSent = 0;
+    s_http.body = ""; s_http.bodyLen = 0; s_http.bodySent = 0;
+    s_http.sending = true; s_http.progress = millis();
+    return;
+  }
+
   if (isWs) {
     if (settings::hasWebPassword()) {
       const char *tok = query ? strstr(query, "token=") : nullptr;
@@ -1031,8 +1046,13 @@ void dispatch() {
     else if (strcmp(target, "/api/status") == 0) handleStatus(head);
     else if (strcmp(target, "/api/bindings") == 0) handleBindings(head);
     else if (strcmp(target, "/api/token") == 0) {
+      // In setup mode (no password yet) there is no derived token - hand back
+      // a placeholder so the page can still open the websocket (the /ws gate
+      // allows setup mode regardless of the token value).
+      const String tok = settings::hasWebPassword() ? settings::webToken()
+                                                    : String("setup");
       const int n = snprintf(s_http.io, sizeof(s_http.io), "{\"token\":\"%s\"}",
-                             settings::webToken().c_str());
+                             tok.c_str());
       respond(200, "OK", "application/json", s_http.io, n > 0 ? (size_t)n : 0);
     }
     else if (strcmp(target, "/ws") == 0 && get) {
