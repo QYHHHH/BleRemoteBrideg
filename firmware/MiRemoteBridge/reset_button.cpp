@@ -66,7 +66,7 @@ void poll() {
         s_state = St::Pressed;
         s_edgeMs = now;  // restart the clock from the confirmed press
         s_lastProgressMs = now;
-        BR_LOGI(kTag, "key pressed - release to reboot, hold 5 s for factory reset");
+        BR_LOGI(kTag, "key pressed - hold 5 s for factory reset (short press does nothing)");
       }
       break;
 
@@ -74,11 +74,12 @@ void poll() {
       if (!down) {
         const uint32_t held = now - s_edgeMs;
         s_state = St::Idle;
-        // A hold that ran past the factory threshold already wiped and is on
-        // its way out; anything shorter than that is a plain reboot request.
-        BR_LOGW(kTag, "key released after %lu ms - rebooting", (unsigned long)held);
-        delay(200);
-        ESP.restart();
+        // Deliberate policy: a short press does NOTHING. The only function of
+        // this key is the 5-second factory-reset hold, which cannot be
+        // triggered accidentally by a quick press. Logged so the press is
+        // still observable on the console.
+        BR_LOGI(kTag, "short press (%lu ms) - no action (hold 5 s for factory reset)",
+                (unsigned long)held);
         break;
       }
       if (now - s_edgeMs >= kFactoryHoldMs) {

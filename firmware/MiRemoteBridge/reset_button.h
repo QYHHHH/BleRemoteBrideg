@@ -10,9 +10,9 @@
  *
  * This module turns it into a recovery button:
  *
- *   short press  (< 5 s, then release)  -> reboot
- *   hold >= 5 s                         -> factory reset (wipe all bonds and
- *                                          settings, then reboot)
+ *   short press  (< 5 s)   -> deliberately does nothing (logged only)
+ *   hold >= 5 s            -> factory reset (wipe all bonds and settings, then
+ *                             reboot)
  *
  * Progress is logged once per second while held, so the outcome of a press is
  * always visible on the console.
