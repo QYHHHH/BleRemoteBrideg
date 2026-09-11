@@ -203,7 +203,7 @@ bool startHttp() {
   addr.sin_family = AF_INET;
   addr.sin_port = htons(80);
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  if (!nonblocking(fd) || bind(fd, (sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 1) != 0) {
+  if (!nonblocking(fd) || bind(fd, (sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 4) != 0) {
     BR_LOGE(kTag, "HTTP listen failed, errno %d", errno);
     ::close(fd);
     return false;
@@ -955,6 +955,7 @@ void dispatch() {
     }
   } else if (settings::hasWebPassword()) {
     if (!hasSession || !sessionMatches(session)) {
+        BR_LOGI(kTag, "no/bad session for %s -> /login", target);
       if (!isLogin && !isLogout && !isSetup) {
         const int n = snprintf(s_http.header, sizeof(s_http.header),
             "HTTP/1.1 302 Found\r\nLocation: /login\r\nCache-Control: no-store\r\n"
@@ -1173,6 +1174,13 @@ void pollHttp() {
   const size_t left = header ? s_http.headerLen - s_http.headerSent : s_http.bodyLen - s_http.bodySent;
   if (!left) {
     if (s_pendingUpgrade) {
+      // Newest connection wins: a stale tab must not lock everyone else out,
+      // so a fresh upgrade force-closes the previous socket. The old page sees
+      // the close and reconnects - becoming the newest itself.
+      if (s_ws) {
+        BR_LOGI(kTag, "new websocket replaces the previous one");
+        wsClose();
+      }
       s_pendingUpgrade = false;
       s_ws = true;  // the 101 is out; from here on this socket speaks frames
       s_http.sending = false;
