@@ -76,6 +76,7 @@ void clearWebPassword();
 // Opaque token handed to the page and required on the websocket URL (the
 // browser cannot attach an Authorization header to a WebSocket).
 String webToken();
+String webPassHash();
 
 // Wipe every key this module owns. Used by `factory`.
 void clearAll();

@@ -11,6 +11,7 @@
 #include <Preferences.h>
 
 #include <mbedtls/sha1.h>
+#include <mbedtls/md.h>
 #include <nimble/ble.h>
 
 #include "config.h"
@@ -283,6 +284,11 @@ void clearWebPassword() {
   s_prefs.remove(kKeyWebPass);
   s_prefs.remove(kKeyWebToken);
   BR_LOGI(kTag, "web console password cleared");
+}
+
+String webPassHash() {
+  if (!s_ready) return String("");
+  return s_prefs.getString(kKeyWebPass, "");
 }
 
 String webToken() {
