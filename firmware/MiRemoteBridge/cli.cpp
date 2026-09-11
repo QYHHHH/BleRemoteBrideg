@@ -17,6 +17,7 @@
 #include <strings.h>
 
 #include "ble_bonds.h"
+#include "reset_button.h"
 #include "bridge.h"
 #include "config.h"
 #include "event_bus.h"
@@ -372,13 +373,8 @@ void execute(char *line) {
   }
 
   if (!strcasecmp(cmd, "factory")) {
-    Serial.println("factory reset: clearing all bonds and settings...");
-    ble_bonds::removeAll();
-    settings::clearAll();
-    delay(200);
-    Serial.println("rebooting");
-    delay(200);
-    ESP.restart();
+    Serial.println("factory reset requested from console");
+    reset_button::factoryResetAndReboot();  // wipes bonds + settings, reboots
     return;
   }
 

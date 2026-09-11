@@ -70,13 +70,31 @@ RC003 的音量、返回等键把**私有键码**塞在 HID 报文的按键槽�
 
 | 项 | 要求 |
 | --- | --- |
-| 主控 | ESP32-C3 开发板（实测：CH343 USB 转串口款） |
+| 主控 | ESP32-C3 开发板（实测：合宙 CORE-ESP32，CH343 USB 转串口款） |
 | 遥控器 | 小米蓝牙遥控器 2 Pro（RC003），已充电 |
 | 工具链 | Arduino CLI 1.5.1 + arduino-esp32 3.3.11（见下方目录说明） |
 
 **工具链不在仓库内**：Arduino CLI 位于 `.tools/`（不入 Git），arduino-esp32 数据目录
 在 `C:\code\arduino-c3-data`（不入 Git，**必须纯 ASCII 路径**——乐鑫 RISC-V 链接器
 处理中文路径不可靠）。首次使用请按 [`docs/TESTING.md`](docs/TESTING.md) 的指引安装。
+
+### 开发板与按键
+
+实测使用的开发板（合宙 CORE-ESP32，引脚图见
+[`docs/images/esp32c3-board.jpg`](docs/images/esp32c3-board.jpg)）：
+
+![合宙 ESP32-C3 开发板与 PinOut](docs/images/esp32c3-board.jpg)
+
+板上两个按键在固件中的角色：
+
+| 按键 | 引脚 | 行为 |
+| --- | --- | --- |
+| **BOOT** | GPIO9 | **恢复按键**（固件实现）：短按松开 = 重启；**按住 5 秒 = 恢复出厂设置**（清除全部配对与设置并重启），按住期间每秒打印倒计时 |
+| RESET | EN | 硬件复位芯片，固件不参与（等同于断电重开） |
+
+> 注意：上电瞬间按住 BOOT 仍会进入 ROM 下载模式（烧录用），这是芯片的
+> strapping 行为，与上述运行时功能互不干扰。恢复出厂也可以在串口输入
+> `factory` 达成，效果相同。
 
 ---
 

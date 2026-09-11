@@ -24,12 +24,14 @@
 #include "cli.h"
 #include "config.h"
 #include "log.h"
+#include "reset_button.h"
 
 void setup() {
   brlog::begin(BRIDGE_SERIAL_BAUD);
   delay(150);
 
   cli::begin();
+  reset_button::begin();
 
   if (!bridge::begin()) {
     BR_LOGE("MAIN", "bridge failed to start; console still available for diagnosis");
@@ -40,6 +42,7 @@ void setup() {
 
 void loop() {
   cli::poll();
+  reset_button::poll();
   bridge::loop();
   delay(1);
 }
