@@ -142,7 +142,8 @@ constexpr size_t kWsIn = 512;
 constexpr size_t kWsOut = 768;
 constexpr uint32_t kWsStatusEveryMs = 5000;  // state heartbeat on the same socket
 
-bool s_ws = false;            // frame mode (101 already delivered)
+bool s_ws = false;
+int s_wsFd = -1;            // frame mode (101 already delivered)
 bool s_pendingUpgrade = false; // 101 still draining through the HTTP path
 uint8_t s_wsInBuf[kWsIn];
 size_t s_wsInLen = 0;
@@ -655,6 +656,8 @@ void authChallenge(bool setupMode) {
 
 void wsClose() {
   s_ws = false;
+  if (s_wsFd >= 0) ::close(s_wsFd);
+  s_wsFd = -1;
   s_wsInLen = 0;
   s_wsOutLen = s_wsOutSent = 0;
 }
@@ -1118,21 +1121,22 @@ void pollHttp() {
   if (s_ws) {
     // 1) Drain the frame being sent.
     if (s_wsOutSent < s_wsOutLen) {
-      const int n = send(s_http.fd, s_wsOutBuf + s_wsOutSent, s_wsOutLen - s_wsOutSent, MSG_DONTWAIT);
+      const int n = send(s_wsFd, s_wsOutBuf + s_wsOutSent, s_wsOutLen - s_wsOutSent, MSG_DONTWAIT);
       if (n > 0) {
         s_wsOutSent += (size_t)n;
         s_http.progress = now;
         return;
       }
-      if (n < 0 && retryable(errno)) return;
-      wsClose();
-      closeExchange(false);
-      return;
+      if (n < 0 && retryable(errno)) {
+        /* window full: try again next pass */
+      } else {
+        wsClose();   /* only the websocket: the HTTP slot is a separate socket */
+      }
     }
     // 2) Read whatever the page sent. Any byte counts as liveness, and the
     //    browser answers our pings without the page doing anything.
     if (s_wsInLen < sizeof(s_wsInBuf)) {
-      const int n = recv(s_http.fd, s_wsInBuf + s_wsInLen, sizeof(s_wsInBuf) - s_wsInLen, MSG_DONTWAIT);
+      const int n = recv(s_wsFd, s_wsInBuf + s_wsInLen, sizeof(s_wsInBuf) - s_wsInLen, MSG_DONTWAIT);
       if (n > 0) {
         s_wsInLen += (size_t)n;
         s_http.progress = now;
@@ -1140,21 +1144,17 @@ void pollHttp() {
         wsConsume();
       } else if (n == 0) {
         wsClose();
-        closeExchange(false);
-        return;
       } else if (!retryable(errno)) {
         wsClose();
-        closeExchange(false);
-        return;
       }
     }
-    if (!s_ws) return;  // the frame above was a close
+    // If the peer just closed, skip the rest of the websocket work but DO NOT
+    // return: the HTTP slot is a different socket and still needs servicing.
+    if (s_ws) {
     if (now - s_wsLastRecvMs > kWsDeadAfterMs) {
       BR_LOGW(kTag, "websocket peer silent for %lu ms - dropping it so the server stays usable",
               (unsigned long)(now - s_wsLastRecvMs));
       wsClose();
-      closeExchange(false);
-      return;
     }
     if (now - s_wsLastPingMs >= kWsPingEveryMs) {
       s_wsLastPingMs = now;
@@ -1177,8 +1177,7 @@ void pollHttp() {
         wsSendStatus();
       }
     }
-    s_http.progress = now;  // a live socket is not a stalled request
-    return;
+    }
   }
   if (now - s_http.progress > kProgressTimeoutMs || now - s_http.started > kRequestTimeoutMs) {
     BR_LOGW(kTag, "HTTP timeout (header %u/%u, body %u/%u)", (unsigned)s_http.headerSent,
@@ -1210,6 +1209,8 @@ void pollHttp() {
       }
       s_pendingUpgrade = false;
       s_ws = true;  // the 101 is out; from here on this socket speaks frames
+      s_wsFd = s_http.fd;   // dedicated fd: HTTP keeps accepting other requests
+      s_http.fd = -1;
       s_http.sending = false;
       s_http.headerLen = s_http.headerSent = 0;
       s_http.bodyLen = s_http.bodySent = 0;
