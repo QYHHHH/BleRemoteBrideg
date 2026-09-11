@@ -33,6 +33,8 @@ const char *kKeyMapVoice = "map_voice";
 const char *kKeyBattery = "rc_batt";
 const char *kKeyBatteryValid = "rc_batt_v";
 const char *kKeyBindKeys = "bd_keys";
+const char *kKeyWifiSsid = "wf_ssid";
+const char *kKeyWifiPass = "wf_pass";
 
 bool s_ready = false;
 
@@ -180,6 +182,23 @@ void setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, ui
   hid_action_t acts[KEYMAP_MAX_BINDINGS];
   const size_t n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
   s_prefs.putBytes(kKeyBindKeys, raws, n);
+}
+
+String wifiSsid() { return s_ready ? s_prefs.getString(kKeyWifiSsid, "") : String(""); }
+
+String wifiPassword() { return s_ready ? s_prefs.getString(kKeyWifiPass, "") : String(""); }
+
+void setWifi(const String &ssid, const String &password) {
+  if (!s_ready) return;
+  s_prefs.putString(kKeyWifiSsid, ssid);
+  s_prefs.putString(kKeyWifiPass, password);
+  BR_LOGI(kTag, "saved Wi-Fi credentials for \"%s\"", ssid.c_str());
+}
+
+void clearWifi() {
+  if (!s_ready) return;
+  s_prefs.remove(kKeyWifiSsid);
+  s_prefs.remove(kKeyWifiPass);
 }
 
 void clearAll() {

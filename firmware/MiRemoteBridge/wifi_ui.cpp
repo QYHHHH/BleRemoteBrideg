@@ -27,8 +27,35 @@ namespace {
 const char *kTag = "WIFI";
 const char *kApSsid = "MiRemoteBridge";
 
+// How the config page is reachable. Station mode is the default: the router
+// owns DHCP and the client stays on its own network.
+enum class Mode { Off, Station, Ap };
+
 WebServer *s_server = nullptr;
 bool s_enabled = false;
+Mode s_mode = Mode::Off;
+
+// How long `wifi on` waits for the association before giving up. The BLE link
+// keeps running throughout, so this only paces the console command.
+const uint32_t kJoinTimeoutMs = 15000;
+
+// Short, log-friendly name for a Wi-Fi status code (the library's enum prints
+// as a bare number otherwise).
+const char *statusName(wl_status_t status) {
+  switch (status) {
+    case WL_NO_SSID_AVAIL:   return "network not found";
+    case WL_CONNECT_FAILED:  return "wrong password?";
+    case WL_CONNECTION_LOST: return "connection lost";
+    case WL_DISCONNECTED:    return "disconnected";
+    case WL_IDLE_STATUS:     return "idle";
+    default:                 return "unknown";
+  }
+}
+
+// The network the page is currently reachable on.
+String networkName() {
+  return (s_mode == Mode::Ap) ? String(kApSsid) : settings::wifiSsid();
+}
 
 // ---------------------------------------------------------------------------
 // JSON responses. Hand-rolled: the payloads are tiny and fixed-shape, and
@@ -123,7 +150,7 @@ void handleGetBindings() {
 
 void handleGetStatus() {
   String out = "{\"wifi\":true,\"ap\":\"";
-  out += kApSsid;
+  out += jsonEscape(networkName());
   out += "\",\"hostConnected\":";
   out += (hid_server::hostConnected() ? "true" : "false");
   out += ",\"remoteConnected\":";
@@ -134,7 +161,11 @@ void handleGetStatus() {
   out += settings::batteryLevel();
   out += ",\"bindings\":";
   out += keymap_binding_count();
-  out += "}";
+  out += ",\"mode\":\"";
+  out += wifi_ui::mode();
+  out += "\",\"ip\":\"";
+  out += wifi_ui::ip();
+  out += "\"}";
   sendJson(200, out);
 }
 
@@ -182,15 +213,24 @@ void handleReset() {
 
 // GET / - the page lives in PROGMEM.
 //
-// Size matters, see docs/TESTING.md 4.13. The ESP32-C3 cannot push the plain
-// ~21 KB page out while BLE holds the heap (measured ceiling ~13 KB: at 21 KB
-// the response comes back 200 with 0 bytes and the server stops answering
-// afterwards, because NetworkClient::write() gives up after
-// WIFI_CLIENT_MAX_WRITE_RETRY and returns a PARTIAL count that send_P ignores).
+// Serve the gzip-compressed copy when the client advertises gzip (browsers
+// always do) and keep the plain page as a fallback. Regenerate the compressed
+// copy with tests/tools/gen_web_page.py.
 //
-// So serve the gzip-compressed copy (web_page_gz.h, ~8 KB) and keep the plain
-// page as a fallback for clients that do not advertise gzip. Browsers always
-// do. Regenerate the compressed copy with tests/tools/gen_web_page.py.
+// KNOWN LIMITATION - the response is truncated (docs/TESTING.md 4.13.3).
+// Measured on hardware: this handler returns the correct headers
+// (Content-Encoding: gzip, Content-Length: 8257) but the body stops at
+// exactly 5612 B on every attempt (5/5), i.e. 14259 of 21578 bytes decoded.
+// The cause is in the write path, not the link: a 1252 B JSON response
+// completes in 60 ms and /api/status in ~15 ms, while NetworkClient::write()
+// gives up after WIFI_CLIENT_MAX_WRITE_RETRY and returns a PARTIAL count that
+// send_P() ignores.
+//
+// Two hand-rolled flow-controlled replacements (retry the remainder, and
+// retry in 512 B pieces under a wall-clock cap) were tried on hardware and
+// BOTH made it worse - the client got no response at all. They were removed
+// rather than left in the tree. Fixing this needs a proper investigation of
+// the write path, not another guess.
 void handleRoot() {
   const bool wantsGzip = s_server->hasHeader("Accept-Encoding") &&
                          s_server->header("Accept-Encoding").indexOf("gzip") >= 0;
@@ -251,10 +291,63 @@ void begin() {}
 bool enable() {
   if (s_enabled) return true;
 
-  BR_LOGI(kTag, "starting AP \"%s\" - config page at http://192.168.4.1/", kApSsid);
-  // max_connection = 1: the page is used by one client at a time, and every
-  // extra station slot costs RAM. With the AP up the free heap is only ~13 KB
-  // (BLE has the rest), so keep the AP's own footprint as small as possible.
+  const String ssid = settings::wifiSsid();
+  if (ssid.isEmpty()) {
+    BR_LOGE(kTag, "no Wi-Fi configured yet - run \"wifi join <ssid> <password>\" once, "
+                  "or \"wifi ap on\" for the fallback access point");
+    return false;
+  }
+  const String pass = settings::wifiPassword();
+
+  const uint32_t heapBefore = ESP.getFreeHeap();
+  BR_LOGI(kTag, "joining \"%s\" - the config page will be served on the LAN", ssid.c_str());
+  BR_LOGI(kTag, "before Wi-Fi: heap %u (largest %u), host %d, rc003 %d, bonds %d",
+          (unsigned)heapBefore, (unsigned)ESP.getMaxAllocHeap(),
+          (int)hid_server::hostConnected(), (int)rc003_client::connected(), ble_bonds::count());
+
+  // Station mode: the router runs DHCP, so the board needs no DHCP server and
+  // the client never has to change networks. See wifi_ui.h for why.
+  WiFi.mode(WIFI_STA);
+  // Do NOT call WiFi.setSleep(false) here. It made the link more responsive,
+  // but it also cost ~9 KB of heap (19.6 KB -> 10.5 KB free), and at 10.5 KB
+  // the page stops being served at all. Heap is the scarce resource; latency
+  // is not.
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(ssid.c_str(), pass.c_str());
+  const uint32_t deadline = millis() + kJoinTimeoutMs;
+  while (WiFi.status() != WL_CONNECTED && (int32_t)(millis() - deadline) < 0) {
+    delay(100);  // BLE keeps running; this only paces the console command
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    BR_LOGE(kTag, "could not join \"%s\" (%s) - check the credentials, move closer, "
+                  "or use \"wifi ap on\"",
+            ssid.c_str(), statusName(WiFi.status()));
+    WiFi.mode(WIFI_OFF);
+    return false;
+  }
+
+  startServer();
+  s_enabled = true;
+  s_mode = Mode::Station;
+  BR_LOGI(kTag, "config page: http://%s/ (heap %u B, Wi-Fi cost %u B)",
+          WiFi.localIP().toString().c_str(), (unsigned)ESP.getFreeHeap(),
+          (unsigned)(heapBefore - ESP.getFreeHeap()));
+  return true;
+}
+
+// Fallback for when the router is out of range or its credentials are unknown.
+// Kept deliberately small (one station slot) and documented as the slow path:
+// the AP costs 36-55 KB and its DHCP server only answers above ~13-20 KB free.
+bool enableAp() {
+  if (s_enabled) return true;
+
+  const uint32_t heapBefore = ESP.getFreeHeap();
+  BR_LOGI(kTag, "starting fallback AP \"%s\" (prefer \"wifi on\" - the AP also has to "
+                "run DHCP and the heap is tight while BLE is up)",
+          kApSsid);
+  BR_LOGI(kTag, "before AP: heap %u (largest %u), host %d, rc003 %d, bonds %d",
+          (unsigned)heapBefore, (unsigned)ESP.getMaxAllocHeap(),
+          (int)hid_server::hostConnected(), (int)rc003_client::connected(), ble_bonds::count());
   // Register before softAP() so the association events are not missed. This
   // core's onEvent() takes no event base; the callback filters by id.
   WiFi.onEvent(onApEvent);
@@ -262,14 +355,14 @@ bool enable() {
     BR_LOGE(kTag, "softAP failed");
     return false;
   }
-  BR_LOGI(kTag, "AP up, heap free %u B, AP IP %s", (unsigned)ESP.getFreeHeap(),
-          WiFi.softAPIP().toString().c_str());
+  BR_LOGI(kTag, "AP up, heap free %u B (AP cost %u B), AP IP %s", (unsigned)ESP.getFreeHeap(),
+          (unsigned)(heapBefore - ESP.getFreeHeap()), WiFi.softAPIP().toString().c_str());
 
   startServer();
   s_enabled = true;
-  const IPAddress ip = WiFi.softAPIP();
+  s_mode = Mode::Ap;
   BR_LOGI(kTag, "config page: http://%s/ (connect to the \"%s\" Wi-Fi network)",
-          ip.toString().c_str(), kApSsid);
+          WiFi.softAPIP().toString().c_str(), kApSsid);
   return true;
 }
 
@@ -280,22 +373,31 @@ bool disable() {
     delete s_server;
     s_server = nullptr;
   }
-  const bool ok = WiFi.softAPdisconnect(true);
+  const bool ok = (s_mode == Mode::Ap) ? WiFi.softAPdisconnect(true) : WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
   s_enabled = false;
-  BR_LOGI(kTag, "AP stopped, heap back to %u B", (unsigned)ESP.getFreeHeap());
+  s_mode = Mode::Off;
+  BR_LOGI(kTag, "config UI stopped, heap back to %u B", (unsigned)ESP.getFreeHeap());
   return ok;
 }
 
 bool enabled() { return s_enabled; }
 
-unsigned stationCount() { return s_enabled ? (unsigned)WiFi.softAPgetStationNum() : 0; }
+const char *mode() {
+  switch (s_mode) {
+    case Mode::Station: return "sta";
+    case Mode::Ap:      return "ap";
+    default:            return "off";
+  }
+}
 
-const char *apIp() {
+unsigned stationCount() { return s_mode == Mode::Ap ? (unsigned)WiFi.softAPgetStationNum() : 0; }
+
+const char *ip() {
   static char buf[16];
   if (!s_enabled) return "-";
-  const IPAddress ip = WiFi.softAPIP();
-  snprintf(buf, sizeof(buf), "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+  const IPAddress addr = (s_mode == Mode::Ap) ? WiFi.softAPIP() : WiFi.localIP();
+  snprintf(buf, sizeof(buf), "%u.%u.%u.%u", addr[0], addr[1], addr[2], addr[3]);
   return buf;
 }
 

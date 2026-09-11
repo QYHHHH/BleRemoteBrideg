@@ -605,16 +605,18 @@ AP 本身约吃 38 KB；BLE 两条链路再把堆压到 13 KB 量级。
 失效的是下游 —— 日志里 `host connected: no (0)`，按键没有接收方。
 `wifi off` 后堆回到 ~50 KB，桥接器恢复正常。
 
-**页面体积红线（实测三档）**
+**页面体积红线（实测）**
 
 | 页面大小 | 发送方式 | 结果 |
 | --- | --- | --- |
-| 13087 B | `send_P` | ✅ 可用（原版页面） |
-| 21482 B | `send_P` | ❌ 200 但 0 字节，之后服务卡死 |
+| 21482 B | `send_P` | ❌ 200 但 0 字节 |
 | 21482 B | 1 KB 分块 + 无流控 | ❌ 只到 29696/47845 字节后卡死 |
 | 47845 B | `send_P` | ❌ 同上 |
+| 8257 B（gzip） | `send_P` | ⚠️ 响应头正确，**正文被截断**（0–5612 / 8257） |
 
-**所以可用上限在 13 KB 附近**，不是"越大越危险"的渐进关系，而是超过某个点就完全发不出去。
+> **更正**：本文档早先版本写过"13087 B 可用（原版页面）"，那是**从旧页面体积推断的，不是实测**。
+> 回查 `HANDOFF.md` 与 §4.11，此前只验证过 AP/HTTP/**API**，**页面本身从未在真机上确认能加载**。
+> 现在有证据表明它很可能一直不可用 —— 见 §4.13.3。
 根因：`NetworkClient::write_P()` 只是 `write()`（flash 内存映射，不需要大缓冲），
 而 `write()` 在 `WIFI_CLIENT_MAX_WRITE_RETRY` 次重试后**返回部分写入量**，
 `send_P` 不看返回值 → 剩余字节被静默丢弃，HTTP 服务随后不再应答。
@@ -665,6 +667,44 @@ void collectHeaders(const char *headerKeys[], const size_t headerKeysCount);
 **gzip 方案的状态**：已实现（`tests/tools/gen_web_page.py` 生成 `web_page_gz.h`，
 21578 → 8257 字节；`handleRoot()` 按 `Accept-Encoding` 分流，明文页作回退），
 编译烧录通过，**但因 DHCP 失效未能完成真机验证**。
+
+#### 4.13.4 改为「连路由器」后：页面**首次在真机上完整加载**
+
+AP 模式的根本问题是板子自己还要跑 DHCP 服务，而 BLE 已经把堆压到临界。
+改成 **STA 模式**（板子加入现有 Wi-Fi，由路由器发 IP）后：
+
+```
+wifi join MyHomeWiFi <password>     # 凭据存 NVS
+wifi on
+  → joining "MyHomeWiFi" - the config page will be served on the LAN
+  → config page: http://192.168.1.100/ (heap 19632 B, Wi-Fi cost 57568 B)
+
+curl --compressed http://192.168.1.100/
+  第2次: HTTP 200  gz 8257B  1.20s  解压后 21578   ← 完整
+  第3次: HTTP 200  gz 8257B  1.26s  解压后 21578   ← 完整
+```
+
+**这是该页面第一次在真机上完整送达**（结尾 `</html>`，浏览器无报错）。
+对比 AP 模式：同样的页面被截断到 5612 B、耗时 10.4 s。
+两个原因：路由器负责 DHCP（板子不再需要 DHCP 服务），链路质量也由路由器保证。
+传输从 10.4 s 降到 1.2 s。
+
+**但还没完 —— 堆水位波动仍未解决。** 多次实测 `wifi on` 之后的堆：
+
+| 场景 | Wi-Fi 开启后 free heap | 页面 |
+| --- | --- | --- |
+| STA，`before Wi-Fi` 77200 | 19632 B | ✅ 完整 |
+| STA，`before Wi-Fi` 67960/68124 | 10512–10540 B | ❌ 0 字节 |
+| STA，`before Wi-Fi` 67964 | 10528 B | ❌ 0 字节 |
+
+Wi-Fi 开销稳定（57436–57584 B），**差异全部来自开 Wi-Fi 之前的堆**：
+67960–77200 B（约 9 KB 波动），来源未查明。**堆 ≥ ~19 KB 时页面可用，~10.5 KB 时不可用。**
+
+另外试过 `WiFi.setSleep(false)` 想降低首包延迟，**已回退**：它没解决波动，且无法证明有收益。
+
+**当前状态**：STA 模式已实现并验证可用（`wifi join` / `wifi on`），
+AP 保留为兜底（`wifi ap on`）。**页面能否加载仍取决于那 9 KB 波动，未达到可对外声称的稳定度。**
+下一步应查清 `before Wi-Fi` 堆的 9 KB 波动来源（怀疑与 BLE 链路状态或 Wi-Fi 库重入有关）。
 
 ---
 

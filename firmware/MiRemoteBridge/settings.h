@@ -54,6 +54,15 @@ void setBatteryLevel(uint8_t percent);
 void loadBindings();
 void setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, uint16_t consumer);
 
+// ---- Wi-Fi credentials for the config UI ---------------------------------
+// The config page is served over the local network: the bridge joins the
+// existing Wi-Fi (station mode) so no access point and no DHCP server are
+// needed on the board. Empty ssid means "not configured yet".
+String wifiSsid();
+String wifiPassword();
+void setWifi(const String &ssid, const String &password);
+void clearWifi();
+
 // Wipe every key this module owns. Used by `factory`.
 void clearAll();
 

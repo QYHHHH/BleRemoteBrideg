@@ -94,7 +94,9 @@ void printHelp() {
   Serial.println("  log <0-4>                    log level (0 off .. 4 debug)");
   Serial.println("  selftest                     run the on-device vector + dispatch tests");
   Serial.println("  sim                          run only the dispatch simulation");
-  Serial.println("  wifi on | off | status       start/stop the Wi-Fi config AP (Web UI)");
+  Serial.println("  wifi on | off | status       config Web UI: join the saved Wi-Fi network");
+  Serial.println("  wifi join <ssid> <pass>      save the network the config UI should join");
+  Serial.println("  wifi ap on                   fallback: start an access point instead");
   Serial.println("  reboot | factory             restart / wipe bonds and settings");
   Serial.println();
 }
@@ -450,28 +452,59 @@ void execute(char *line) {
   if (!strcasecmp(cmd, "wifi")) {
     if (argc < 2 || !strcasecmp(argv[1], "status")) {
       if (wifi_ui::enabled()) {
-        Serial.printf("config AP: ON - connect to Wi-Fi \"MiRemoteBridge\", open http://192.168.4.1/\n");
-        // Associated clients is the fastest way to tell "cannot connect" apart
-        // from "connected but never got a DHCP lease".
-        Serial.printf("stations  : %u associated\n", (unsigned)wifi_ui::stationCount());
-        Serial.printf("AP IP     : %s\n", wifi_ui::apIp());
+        Serial.printf("config UI : ON (%s) - open http://%s/\n", wifi_ui::mode(), wifi_ui::ip());
+        if (!strcasecmp(wifi_ui::mode(), "ap")) {
+          // Associated clients is the fastest way to tell "cannot connect"
+          // apart from "connected but never got a DHCP lease".
+          Serial.printf("stations  : %u associated\n", (unsigned)wifi_ui::stationCount());
+        }
         Serial.printf("heap free : %u B\n", (unsigned)ESP.getFreeHeap());
+      } else if (settings::wifiSsid().isEmpty()) {
+        Serial.println("config UI : off - no Wi-Fi configured yet");
+        Serial.println("            run: wifi join <ssid> <password>   (then: wifi on)");
+        Serial.println("            or : wifi ap on                   (fallback access point)");
       } else {
-        Serial.println("config AP: off (wifi on to enable)");
+        Serial.printf("config UI : off - saved network \"%s\" (wifi on to join)\n",
+                      settings::wifiSsid().c_str());
       }
       return;
     }
+    if (!strcasecmp(argv[1], "join")) {
+      if (argc < 3) {
+        Serial.println("usage: wifi join <ssid> <password>   (use \"\" for an open network)");
+        return;
+      }
+      settings::setWifi(argv[2], (argc >= 4) ? argv[3] : "");
+      Serial.printf("saved network \"%s\" - run wifi on to join it\n", argv[2]);
+      return;
+    }
     if (!strcasecmp(argv[1], "on")) {
-      Serial.println(wifi_ui::enable()
-        ? "AP starting - connect to Wi-Fi \"MiRemoteBridge\", open http://192.168.4.1/"
-        : "failed to start AP");
+      if (wifi_ui::enable()) {
+        Serial.printf("config UI up - open http://%s/\n", wifi_ui::ip());
+      } else {
+        Serial.println("could not start the config UI (see the log above)");
+      }
       return;
     }
     if (!strcasecmp(argv[1], "off")) {
-      Serial.println(wifi_ui::disable() ? "AP stopped" : "AP stop failed");
+      Serial.println(wifi_ui::disable() ? "config UI stopped" : "config UI stop failed");
       return;
     }
-    Serial.println("usage: wifi on | wifi off | wifi status");
+    if (!strcasecmp(argv[1], "ap")) {
+      if (argc >= 3 && !strcasecmp(argv[2], "on")) {
+        Serial.println(wifi_ui::enableAp()
+          ? "fallback AP up - connect to Wi-Fi \"MiRemoteBridge\", open http://192.168.4.1/"
+          : "failed to start the fallback AP");
+        return;
+      }
+      if (argc >= 3 && !strcasecmp(argv[2], "off")) {
+        Serial.println(wifi_ui::disable() ? "config UI stopped" : "config UI stop failed");
+        return;
+      }
+      Serial.println("usage: wifi ap on | wifi ap off");
+      return;
+    }
+    Serial.println("usage: wifi on | wifi off | wifi status | wifi join <ssid> <password> | wifi ap on");
     return;
   }
 

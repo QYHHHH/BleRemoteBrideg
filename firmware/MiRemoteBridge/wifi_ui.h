@@ -1,16 +1,16 @@
 /*
- * MiRemoteBridge - ESP32-C3 dual-role BLE bridge for Xiaomi RC003 remote
+ * MiRemoteBridge - on-demand Web UI for programmable key bindings
  *
- * wifi_ui.h - on-demand Wi-Fi AP + Web UI for programmable key bindings
+ * The page is served over the local network, and by default the bridge JOINS
+ * the existing Wi-Fi as a station (`wifi join <ssid> <pass>` once, then
+ * `wifi on`). That is deliberate: in access-point mode the board also has to
+ * run a DHCP server, and with BLE holding the heap the AP cost 36-55 KB while
+ * its DHCP server only answered above ~13-20 KB free - so the page was
+ * reachable only by luck (docs/TESTING.md 4.13). As a station the router does
+ * DHCP and the client never has to change networks.
  *
- * Wi-Fi and BLE share the same radio on the ESP32-C3, and coexistence costs
- * both heap (~50 KB for the Wi-Fi stack) and BLE airtime. Configuration is a
- * rare activity, so the AP is OFF by default and only runs after
- * `wifi on` (serial console). `wifi off` tears everything down and returns
- * the heap. Bindings live in NVS, so changes survive the AP going away.
- *
- * When enabled the board opens an open access point named "MiRemoteBridge"
- * and serves the configuration page at http://192.168.4.1/
+ * An access point stays available as a fallback (`wifi ap on`) for when the
+ * router is out of range or its credentials are not known.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -21,20 +21,24 @@
 
 namespace wifi_ui {
 
-// Register the AP/WebServer toggle with the console. Safe to call at boot.
+// Register the console commands. Safe to call at boot.
 void begin();
 
-// Bring the AP + HTTP server up (or down). Returns false when the request
-// could not be honoured (radio busy, already in the requested state, ...).
+// `wifi on` / `wifi off`: join the configured network and serve the page.
+// enable() fails (with a console hint) when no credentials are stored yet.
 bool enable();
 bool disable();
 bool enabled();
 
-// Diagnostics for `wifi status`. Associated clients is the quickest way to
-// tell "the phone cannot connect" apart from "it associated but the AP's DHCP
-// server never handed out a lease". Both return harmless values when off.
+// `wifi ap on`: start the fallback access point instead of joining a network.
+bool enableAp();
+
+// "off", "sta" or "ap".
+const char *mode();
+
+// Diagnostics for `wifi status`. Both return harmless values when off.
 unsigned stationCount();
-const char *apIp();
+const char *ip();
 
 // Feed the HTTP server. No-op while disabled; call from loop().
 void loop();
