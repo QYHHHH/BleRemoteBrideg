@@ -7,7 +7,7 @@
  * HID key down, one button up produces one HID key up. There is no auto-repeat,
  * no macro, no combo sequencing and no game logic anywhere in this file.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "keymap.h"

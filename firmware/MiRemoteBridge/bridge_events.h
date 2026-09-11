@@ -3,7 +3,7 @@
  *
  * bridge_events.h - events exchanged between the BLE callbacks and the loop
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

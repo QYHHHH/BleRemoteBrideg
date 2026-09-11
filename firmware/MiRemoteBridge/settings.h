@@ -6,7 +6,7 @@
  * Wrapped in one small module so the NVS keys and their defaults live in a
  * single place instead of being sprinkled across the BLE code.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

@@ -58,7 +58,7 @@ def main() -> int:
     out.append(" * Source : tests/vectors/key_vectors.json")
     out.append(" * Generator: tests/tools/gen_vectors.py")
     out.append(" *")
-    out.append(" * SPDX-License-Identifier: MIT")
+    out.append(" * SPDX-License-Identifier: GPL-3.0-or-later")
     out.append(" */")
     out.append("")
     out.append("#pragma once")

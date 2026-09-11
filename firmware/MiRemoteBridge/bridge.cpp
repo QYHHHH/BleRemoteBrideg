@@ -6,7 +6,7 @@
  * This is the only place where an RC003 event turns into a HID report, and it
  * always runs in the Arduino loop task - never inside a BLE callback.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "bridge.h"

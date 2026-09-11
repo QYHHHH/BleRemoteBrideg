@@ -16,6 +16,7 @@
 | L4 下游（C3 → iPhone） | iOS BLE HID | **通过**（音量键、方向键实测；iOS 订阅了键盘/Consumer/电池全部三条通知） | §4.9 |
 | L4 多主机 | Windows ↔ iPhone 轮换 | **通过**（切换间隔 <0.1 s；bond 保护策略就位，第 4 台设备触发的腾位待实测） | §4.9 |
 | L4 重连速度 | 重启到按键生效 | **优化至 3.3 s**（原始 9.5 s；根因与修复见 §4.8） | `build/reconnect-timing*.log` |
+| L4 Web 配置界面 | Web UI + NVS 绑定持久化 | **通过**（AP/HTTP/绑定 API 实测；页面交互待多设备浏览器回归） | §4.11；`build/wifi-test.log` |
 | L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **部分**：蓝牙关→开重连、长静置首按即时已验证；其余 §5.3 |
 
 已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`；
@@ -522,6 +523,18 @@ Windows 动作"如需实现，唯一现实路径是给 C3 加 NFC 读卡模块�
 未排期。
 
 ---
+
+### 4.11 Wi-Fi 配置栈与分区方案（Web UI 的代价与对策）
+
+加入 `wifi_ui`（Wi-Fi AP + HTTP 服务器 + 页面）后：
+
+1. **flash 溢出**：默认分区只有 1.2 MB app，Wi-Fi/lwip/WebServer 使 text 段超出。
+   FQBN 增加 `PartitionScheme=huge_app`（3 MB app，无 OTA）；实测 flash
+   1 360 719 B (43%)。`scripts/_common.ps1` 已固化该选项。
+2. **堆水位**：AP 开启时 free ~20.8 KB（紧张但稳定，min 20.5 KB）；`wifi off` 后
+   回落到 ~59 KB（**不会**回到初始 106 KB——Wi-Fi 库保留内部缓冲，属预期；
+   完全恢复需重启）。两轮 on/off 循环后 free 稳定在 58.9–59.0 KB，无泄漏。
+3. **共存**：AP 启停期间 RC003 保持 READY 不断链。
 
 ## 5. L4 实机验收清单（部分完成）
 

@@ -3,7 +3,7 @@
  *
  * settings.cpp - persisted configuration (NVS)
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "settings.h"

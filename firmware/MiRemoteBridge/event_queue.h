@@ -13,7 +13,7 @@
  * event; the loop does the HID work. That keeps the two roles from re-entering
  * each other inside the NimBLE host task.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

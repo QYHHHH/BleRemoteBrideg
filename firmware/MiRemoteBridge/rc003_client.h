@@ -3,7 +3,7 @@
  *
  * rc003_client.h - upstream BLE central role (Xiaomi Bluetooth Remote 2 Pro)
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

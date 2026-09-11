@@ -41,6 +41,8 @@ ESP32-C3 双角色 BLE 桥接固件：把**小米蓝牙遥控器 2 Pro（RC003�
   Windows 上永远不会有键卡住。
 - **测试基建**：宿主端模型检查（11096 项断言，含 4000 步随机不变量测试）+
   设备端自检（137 项向量 + 44 项分发仿真），宿主与设备消费同一份期望值向量。
+- **Web 配置界面**：串口 `wifi on` 后，板子开启 Wi-Fi 热点并提供按键映射页面
+  （手机/电脑浏览器直接访问），逐键绑定电脑快捷键或媒体键，配置持久化。
 
 ---
 
@@ -188,6 +190,22 @@ RC003 上的 NFC 是一张 **ISO 14443-4 智能卡**（复旦微芯片，小米�
 
 ---
 
+## 配置界面（Web UI，按需 Wi-Fi）
+
+串口敲 `wifi on`，板子开启名为 **MiRemoteBridge** 的 Wi-Fi 热点：
+
+1. 手机或电脑连接该热点
+2. 浏览器打开 **http://192.168.4.1/**
+3. 逐键配置：点"编辑"→ 选**电脑键盘快捷键**（Ctrl/Shift/Alt/Win + 主键）或
+   **媒体键**（音量、播放、AC 后退等）→ 保存即生效并持久化
+4. 配置完敲 `wifi off` 关闭热点（Wi-Fi 与 BLE 共享射频，平时关闭零开销）
+
+`bind` 串口命令可完成同样的事（`bind list` 列表）。页面右下角"恢复默认映射"
+一键清空全部自定义绑定。**为什么按需开关**：Wi-Fi 与 BLE 共享射频和内存
+（AP 开启时堆剩余约 20 KB），配置是低频操作，平时关闭让 BLE 保持最优。
+
+---
+
 ## 串口控制台
 
 115200 波特率，输入 `help` 看全表。常用：
@@ -204,6 +222,7 @@ RC003 上的 NFC 是一张 **ISO 14443-4 智能卡**（复旦微芯片，小米�
 | `raw on\|off` / `lat on\|off` / `log <0-4>` | 原始报文 / 延迟 / 日志级别 |
 | `map back\|power\|voice <模式>` | 运行时键位，NVS 持久化 |
 | `selftest` / `sim` | 设备端自检（向量 + 分发仿真） |
+| `wifi on\|off\|status` | 开/关 Web 配置热点（http://192.168.4.1/） |
 | `factory` | 清除全部配对与设置并重启 |
 
 ---
@@ -319,7 +338,22 @@ tests/
 
 ---
 
+## 致谢
+
+- [GetSayAll/remote-mic-app-windows](https://github.com/GetSayAll/remote-mic-app-windows)
+  （GPL-3.0）——本项目的 Web 配置界面在**布局与交互设计**上参考了它的按键映射页
+  （按键卡片环绕遥控器、逐键配置槽）。我们未复制其源码或素材文件，页面为独立实现；
+  它对 RC003 的按键码与配对行为的公开记录也帮助了键表核对。
+- [cuicui-V5/RemoteMapper-ESP32](https://github.com/cuicui-V5/RemoteMapper-ESP32)——
+  最早被参考的同类项目；其记录的 RC003 原始键码帮助本项目起步（其中 4 个码后来在
+  真机上纠正，见 [`docs/KEYMAP.md`](docs/KEYMAP.md) §1）。
+
+感谢以上项目的作者与社区。
+
+---
+
 ## 许可证
 
-本项目源码：MIT，见 [`LICENSE`](LICENSE)。第三方引用核查结论见
+本项目以 **GPL-3.0-or-later** 发布，见 [`LICENSE`](LICENSE)。选择 copyleft 是为了让
+所有基于本项目的改进同样开源。第三方引用与素材边界见
 [`docs/THIRD_PARTY_NOTICES.md`](docs/THIRD_PARTY_NOTICES.md)。

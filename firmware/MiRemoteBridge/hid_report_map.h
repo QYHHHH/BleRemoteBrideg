@@ -33,7 +33,7 @@
  * the matching report TYPE for every report the descriptor mentions, and this
  * firmware never drives keyboard LEDs.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

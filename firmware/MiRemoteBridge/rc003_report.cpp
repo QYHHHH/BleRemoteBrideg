@@ -3,7 +3,7 @@
  *
  * rc003_report.cpp - RC003 notification parsing
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "rc003_report.h"

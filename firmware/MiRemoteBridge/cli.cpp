@@ -7,7 +7,7 @@
  * subscribe, recover) can be driven and observed over the same serial port the
  * firmware logs to - no GUI, no guessing.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "cli.h"

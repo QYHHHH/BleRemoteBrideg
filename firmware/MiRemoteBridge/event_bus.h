@@ -3,7 +3,7 @@
  *
  * event_bus.h - the process-wide event queue shared by all BLE callbacks
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

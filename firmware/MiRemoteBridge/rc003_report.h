@@ -18,7 +18,7 @@
  * This file deliberately has no Arduino/NimBLE dependency so the host-side
  * model tests can compile and exercise it directly.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

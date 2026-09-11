@@ -3,7 +3,7 @@
  *
  * cli.h - line based serial console
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

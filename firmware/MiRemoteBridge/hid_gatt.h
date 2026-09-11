@@ -3,7 +3,7 @@
  *
  * hid_gatt.h - the downstream HID service, built directly on NimBLE
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

@@ -15,7 +15,7 @@
  * numeric codes themselves are hardware facts observed on the wire; the tables
  * and the implementation here are original.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

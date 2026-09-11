@@ -29,7 +29,7 @@
  * below therefore goes through toString() / the String constructor and never
  * uses getNative() for the upstream peer.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "rc003_client.h"

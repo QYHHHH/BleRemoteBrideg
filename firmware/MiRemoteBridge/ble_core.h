@@ -11,7 +11,7 @@
  * Everything that needs the stack (the HID peripheral and the RC003 central)
  * assumes ble_core::begin() has already run.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

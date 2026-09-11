@@ -17,7 +17,7 @@
  * Progress is logged once per second while held, so the outcome of a press is
  * always visible on the console.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

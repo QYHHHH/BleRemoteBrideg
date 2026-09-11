@@ -15,7 +15,7 @@
  * One NimBLE host stack, two simultaneous roles. Nothing here deals with USB,
  * audio, Wi-Fi, a companion application or drivers of any kind.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include <Arduino.h>

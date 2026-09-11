@@ -3,7 +3,7 @@
  *
  * log.h - small levelled logger with rate limiting
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

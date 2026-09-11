@@ -3,7 +3,7 @@
  *
  * reset_button.cpp - BOOT key (GPIO9): short press = reboot, hold 5 s = factory
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "reset_button.h"

@@ -6,7 +6,7 @@
  * Source : tests/vectors/key_vectors.json
  * Generator: tests/tools/gen_vectors.py
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

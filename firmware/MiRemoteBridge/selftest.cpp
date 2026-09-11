@@ -14,7 +14,7 @@
  *               actual HID delivery and the radio timing. Those are Stage 4/5
  *               hardware acceptance items and are listed in docs/TESTING.md.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "selftest.h"

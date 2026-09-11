@@ -8,7 +8,7 @@
  * straight against the NimBLE host API. Everything else in the firmware goes
  * through the wrapper.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

@@ -3,7 +3,7 @@
  *
  * hid_server.h - downstream BLE HID peripheral role (what Windows sees)
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #pragma once

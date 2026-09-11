@@ -5,7 +5,7 @@
  *
  * See hid_gatt.h for why this is not built with BLEHIDDevice.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "hid_gatt.h"

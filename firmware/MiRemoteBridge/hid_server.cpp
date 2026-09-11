@@ -24,7 +24,7 @@
  * one per report ID, as HOGP defines it -- and the Arduino BLE wrapper cannot
  * register two of those. The history is in docs/TESTING.md sections 4.5/4.6.
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "hid_server.h"
