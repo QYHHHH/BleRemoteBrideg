@@ -144,7 +144,7 @@ bool startHttp() {
   addr.sin_family = AF_INET;
   addr.sin_port = htons(80);
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  if (!nonblocking(fd) || bind(fd, (sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 3) != 0) {
+  if (!nonblocking(fd) || bind(fd, (sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 1) != 0) {
     BR_LOGE(kTag, "HTTP listen failed, errno %d", errno);
     ::close(fd);
     return false;
@@ -381,6 +381,16 @@ void pollHttp() {
     if (!nonblocking(fd)) { ::close(fd); return; }
     const int one = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    // Linger 0: close() sends RST instead of starting a graceful shutdown.
+    // The response bytes are already gone by then, so the client sees a
+    // complete reply; what it avoids is the server-side TIME_WAIT pile-up.
+    // With a 150 ms poll and a 5 s keep-alive window the board churns through
+    // connections fast, and every lingering pcb holds a TCP control block -
+    // that pile-up is what drove the free heap down to a few hundred bytes.
+    struct linger lg {};
+    lg.l_onoff = 1;
+    lg.l_linger = 0;
+    setsockopt(fd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
     s_http.fd = fd;
     s_http.used = 0;
     s_http.sending = false;
