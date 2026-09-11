@@ -101,7 +101,7 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 <div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver">__BUILDTIME__</span><span class="grow"></span>
 <span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
 <main>
-<div class="warn" id="off" hidden><span>无法连接桥接器，显示的是上次读取的数据，编辑已暂停。</span><button id="retry">重新连接</button></div>
+<div class="warn" id="off" hidden><span>无法连接桥接器<span id="offWhy">（连接断开，自动重连中）</span></span><button id="retry">重新连接</button></div>
 <div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">与桥接器连接同一路由器，即可配置。</p><p id="diag" aria-live="polite"></p></div>
 <button class="btn p" id="goMap">编辑按键映射</button><button class="btn" id="refresh">刷新</button></div>
 <div class="head"><h2>按键映射</h2><span class="mut" style="font-size:11px"><span id="cnt">—</span> 项自定义 · 点卡片或遥控器按键编辑</span></div>
@@ -166,7 +166,7 @@ function setSel(id,v){if(!Array.prototype.some.call($(id).options,function(o){re
 function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.querySelectorAll('[data-r],#resetAll'),function(e){e.disabled=!S.ok||!S.on||L});
 Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=S.busy});
 $('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
-function online(v){S.on=v;$('off').hidden=v;btns()}
+function online(v,why){S.on=v;$('off').hidden=v;btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
 /* Everything here runs over one websocket: commands go out, events come in.
 No polling, no timers, and a key is on screen the instant the board sees it. */
 function wsReq(cmd,expect,timeout){
