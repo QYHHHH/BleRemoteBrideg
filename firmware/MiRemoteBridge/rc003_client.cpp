@@ -483,6 +483,13 @@ bool discoverAndSubscribe() {
   startSecurity(connId);
   waitForSecurity(connId, 3000);
 
+  // Ask for the fast connection parameters immediately. Everything below -
+  // service discovery, characteristic discovery, CCCD writes - is ATT
+  // traffic that runs at the current connection interval, so the earlier the
+  // interval shrinks the earlier the whole sequence finishes. This used to
+  // happen at the very end of the function, after all the slow work.
+  s_client->updateConnParams(12, 12, 0, 400);
+
   std::map<std::string, BLERemoteService *> *services = s_client->getServices();
   if (!services || services->empty()) {
     BR_LOGE(kTagGatt, "service discovery returned nothing");
@@ -492,110 +499,125 @@ bool discoverAndSubscribe() {
 
   int subscribed = 0;
 
-  for (auto &kv : *services) {
-    BLERemoteService *svc = kv.second;
-    if (!svc) continue;
+  // Two passes over the discovered services, and the order is not cosmetic:
+  // the service map is a std::map keyed by the UUID *string*, which sorts
+  // 0x180F (battery) BEFORE 0x1812 (HID). A single in-order pass spends ~2 s
+  // on the battery read + subscribe before it ever reaches the HID report,
+  // and on every reboot that exact delay pushes back the moment keys start
+  // working. Pass 0 handles only the HID service (the key path); pass 1
+  // sweeps everything else, battery included.
+  for (int pass = 0; pass < 2; pass++) {
+    for (auto &kv : *services) {
+      BLERemoteService *svc = kv.second;
+      if (!svc) continue;
 
-    const String svcUuid = svc->getUUID().toString();
-    BR_LOGI(kTagGatt, "service %s", svcUuid.c_str());
+      const String svcUuid = svc->getUUID().toString();
 
-    std::map<std::string, BLERemoteCharacteristic *> *chars = svc->getCharacteristics();
-    if (!chars) continue;
+      // The pass filter MUST run before getCharacteristics(): that call is
+      // lazy and performs the ATT discovery of the service's characteristics
+      // on first touch. Filtering after it would still pay the discovery cost
+      // for every service pass 0 skips - measured at ~3.2 s on this remote.
+      const bool isHidService = svcUuid.indexOf("1812") >= 0;
+      if ((pass == 0) != isHidService) continue;  // pass 0: HID only; pass 1: the rest
 
-    const bool isHidService = svcUuid.indexOf("1812") >= 0;
-    const bool isAtvvService = svcUuid.indexOf("ab5e0001") >= 0;
-    const bool isBatteryService = svcUuid.indexOf(RC003_BATTERY_SVC_UUID) >= 0;
+      BR_LOGI(kTagGatt, "service %s", svcUuid.c_str());
+      std::map<std::string, BLERemoteCharacteristic *> *chars = svc->getCharacteristics();
+      if (!chars) continue;
 
-    for (auto &kc : *chars) {
-      BLERemoteCharacteristic *ch = kc.second;
-      if (!ch) continue;
+      const bool isAtvvService = svcUuid.indexOf("ab5e0001") >= 0;
+      const bool isBatteryService = svcUuid.indexOf(RC003_BATTERY_SVC_UUID) >= 0;
 
-      const String uuid = ch->getUUID().toString();
-      BR_LOGD(kTagGatt, "  char %s n=%d i=%d w=%d", uuid.c_str(), ch->canNotify() ? 1 : 0,
-              ch->canIndicate() ? 1 : 0, (ch->canWrite() || ch->canWriteNoResponse()) ? 1 : 0);
+      for (auto &kc : *chars) {
+        BLERemoteCharacteristic *ch = kc.second;
+        if (!ch) continue;
 
-      // ---- HOGP report characteristic (0x2A4D) -------------------------
-      if (isHidService && uuid.indexOf(RC003_HID_REPORT_UUID) >= 0) {
-        if (ch->canNotify() || ch->canIndicate()) {
-          if (ch->subscribe(/*notifications=*/true, onHogpNotify, /*response=*/false)) {
-            s_charReport = ch;
-            subscribed++;
-            BR_LOGI(kTagGatt, "subscribed to HID report %s", uuid.c_str());
-          } else {
-            s_subscriptionFailures++;
-            BR_LOGE(kTagGatt, "subscribe failed on HID report %s", uuid.c_str());
+        const String uuid = ch->getUUID().toString();
+        BR_LOGD(kTagGatt, "  char %s n=%d i=%d w=%d", uuid.c_str(), ch->canNotify() ? 1 : 0,
+                ch->canIndicate() ? 1 : 0, (ch->canWrite() || ch->canWriteNoResponse()) ? 1 : 0);
+
+        // ---- HOGP report characteristic (0x2A4D) -------------------------
+        if (isHidService && uuid.indexOf(RC003_HID_REPORT_UUID) >= 0) {
+          if (ch->canNotify() || ch->canIndicate()) {
+            if (ch->subscribe(/*notifications=*/true, onHogpNotify, /*response=*/false)) {
+              s_charReport = ch;
+              subscribed++;
+              BR_LOGI(kTagGatt, "subscribed to HID report %s", uuid.c_str());
+            } else {
+              s_subscriptionFailures++;
+              BR_LOGE(kTagGatt, "subscribe failed on HID report %s", uuid.c_str());
+            }
           }
+          continue;
         }
-        continue;
-      }
 
-      // ---- HOGP protocol mode (0x2A4E): force Report Protocol ----------
-      if (isHidService && uuid.indexOf(RC003_PROTOCOL_MODE_UUID) >= 0) {
-        if (ch->canWrite() || ch->canWriteNoResponse()) {
-          uint8_t reportMode = 0x01;
-          if (ch->writeValue(&reportMode, 1, false)) {
-            BR_LOGI(kTagGatt, "protocol mode set to Report (0x01)");
+        // ---- HOGP protocol mode (0x2A4E): force Report Protocol ----------
+        if (isHidService && uuid.indexOf(RC003_PROTOCOL_MODE_UUID) >= 0) {
+          if (ch->canWrite() || ch->canWriteNoResponse()) {
+            uint8_t reportMode = 0x01;
+            if (ch->writeValue(&reportMode, 1, false)) {
+              BR_LOGI(kTagGatt, "protocol mode set to Report (0x01)");
+            }
           }
+          continue;
         }
-        continue;
-      }
 
-      // ---- HOGP control point (0x2A4C): exit suspend --------------------
-      if (isHidService && uuid.indexOf(RC003_HID_CTRL_POINT_UUID) >= 0) {
-        if (ch->canWrite() || ch->canWriteNoResponse()) {
-          uint8_t exitSuspend = 0x00;
-          ch->writeValue(&exitSuspend, 1, false);
-          BR_LOGD(kTagGatt, "hid control point: exit suspend");
-        }
-        continue;
-      }
-
-      // ---- ATVV control channel: voice button only ---------------------
-      if (BRIDGE_ATVV_CTL_ENABLE && isAtvvService && uuid.indexOf("ab5e0004") >= 0) {
-        if (ch->canNotify() || ch->canIndicate()) {
-          if (ch->subscribe(/*notifications=*/true, onAtvvCtlNotify, /*response=*/false)) {
-            s_charAtvvCtl = ch;
-            subscribed++;
-            BR_LOGI(kTagGatt, "subscribed to ATVV control (voice button only, no audio)");
-          } else {
-            s_subscriptionFailures++;
-            BR_LOGW(kTagGatt, "subscribe failed on ATVV control");
+        // ---- HOGP control point (0x2A4C): exit suspend --------------------
+        if (isHidService && uuid.indexOf(RC003_HID_CTRL_POINT_UUID) >= 0) {
+          if (ch->canWrite() || ch->canWriteNoResponse()) {
+            uint8_t exitSuspend = 0x00;
+            ch->writeValue(&exitSuspend, 1, false);
+            BR_LOGD(kTagGatt, "hid control point: exit suspend");
           }
+          continue;
         }
-        continue;
-      }
 
-      // ---- Battery level (0x2A19): pass the remote's charge through ------
-      //
-      // Read once so the host has a number straight away, and subscribe if the
-      // remote offers notifications. Discovery already runs in this task, so a
-      // blocking read is fine here - unlike in a BLE callback.
-      if (BRIDGE_BATTERY_PASSTHROUGH && isBatteryService &&
-          uuid.indexOf(RC003_BATTERY_LEVEL_UUID) >= 0) {
-        if (ch->canRead()) {
-          const String v = ch->readValue();
-          if (v.length() >= 1 && (uint8_t)v[0] <= 100) {
-            s_remoteBattery = (uint8_t)v[0];
-            s_remoteBatteryValid = true;
-            BR_LOGI(kTagGatt, "remote battery level: %u%%", (unsigned)s_remoteBattery);
-            event_bus::post(BR_EV_RC_BATTERY, s_remoteBattery, false);
-          } else {
-            BR_LOGW(kTagGatt, "remote battery read: %u byte(s), unusable", (unsigned)v.length());
+        // ---- ATVV control channel: voice button only ---------------------
+        if (BRIDGE_ATVV_CTL_ENABLE && isAtvvService && uuid.indexOf("ab5e0004") >= 0) {
+          if (ch->canNotify() || ch->canIndicate()) {
+            if (ch->subscribe(/*notifications=*/true, onAtvvCtlNotify, /*response=*/false)) {
+              s_charAtvvCtl = ch;
+              subscribed++;
+              BR_LOGI(kTagGatt, "subscribed to ATVV control (voice button only, no audio)");
+            } else {
+              s_subscriptionFailures++;
+              BR_LOGW(kTagGatt, "subscribe failed on ATVV control");
+            }
           }
+          continue;
         }
-        if (ch->canNotify() || ch->canIndicate()) {
-          if (ch->subscribe(/*notifications=*/true, onBatteryNotify, /*response=*/false)) {
-            s_charBattery = ch;
-            BR_LOGI(kTagGatt, "subscribed to remote battery level");
-          } else {
-            BR_LOGW(kTagGatt, "subscribe failed on remote battery level");
-          }
-        }
-        continue;
-      }
 
-      // The ATVV audio characteristic (ab5e0003) is intentionally NOT
-      // subscribed: this firmware never touches the microphone path.
+        // ---- Battery level (0x2A19): pass the remote's charge through ------
+        //
+        // Read once so the host has a number straight away, and subscribe if the
+        // remote offers notifications. Discovery already runs in this task, so a
+        // blocking read is fine here - unlike in a BLE callback.
+        if (BRIDGE_BATTERY_PASSTHROUGH && isBatteryService &&
+            uuid.indexOf(RC003_BATTERY_LEVEL_UUID) >= 0) {
+          if (ch->canRead()) {
+            const String v = ch->readValue();
+            if (v.length() >= 1 && (uint8_t)v[0] <= 100) {
+              s_remoteBattery = (uint8_t)v[0];
+              s_remoteBatteryValid = true;
+              BR_LOGI(kTagGatt, "remote battery level: %u%%", (unsigned)s_remoteBattery);
+              event_bus::post(BR_EV_RC_BATTERY, s_remoteBattery, false);
+            } else {
+              BR_LOGW(kTagGatt, "remote battery read: %u byte(s), unusable", (unsigned)v.length());
+            }
+          }
+          if (ch->canNotify() || ch->canIndicate()) {
+            if (ch->subscribe(/*notifications=*/true, onBatteryNotify, /*response=*/false)) {
+              s_charBattery = ch;
+              BR_LOGI(kTagGatt, "subscribed to remote battery level");
+            } else {
+              BR_LOGW(kTagGatt, "subscribe failed on remote battery level");
+            }
+          }
+          continue;
+        }
+
+        // The ATVV audio characteristic (ab5e0003) is intentionally NOT
+        // subscribed: this firmware never touches the microphone path.
+      }
     }
   }
 
@@ -604,7 +626,6 @@ bool discoverAndSubscribe() {
     return false;
   }
 
-  s_client->updateConnParams(12, 12, 0, 400);
   s_subscribed = true;
   s_notifyCount = 0;
   BR_LOGI(kTagGatt, "ready: %d subscription(s), notifications live", subscribed);
