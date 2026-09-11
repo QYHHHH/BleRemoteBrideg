@@ -1,6 +1,6 @@
 # 测试与验收
 
-本文档把"验证"分成三层，并逐层说明**当前真实状态**。请务必区分"编译通过"和"实机通过"。
+本文档把"验证"分成四层，并逐层说明**当前真实状态**。请务必区分"编译通过"和"实机通过"。
 
 ---
 
@@ -8,7 +8,7 @@
 
 | 层级 | 内容 | 状态 | 证据 |
 | --- | --- | --- | --- |
-| L1 编译验证 | 对 `esp32:esp32:esp32c3:FlashMode=dio` 干净编译 | **通过** | 0 error / 0 warning，flash 691045 B (52%)，RAM 20332 B (6%) |
+| L1 编译验证 | `esp32:esp32:esp32c3:FlashMode=dio,PartitionScheme=huge_app` | **通过**（2026-09-11 新版 UI 编译，非本次真机验证） | flash 1392931 B (44%)，全局 RAM 41220 B (12%)；CLI exit 0，无 stderr |
 | L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11096, failed: 0` |
 | L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `137 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
 | L4 上游（RC003 → C3） | 扫描、直连、配对加密、服务发现、订阅通知、逐键解析 | **通过** | 13/13 键识别，0 未知码；延迟 min 190 / median 215 / max 361 µs（§5.1、§5.2）|
@@ -16,7 +16,7 @@
 | L4 下游（C3 → iPhone） | iOS BLE HID | **通过**（音量键、方向键实测；iOS 订阅了键盘/Consumer/电池全部三条通知） | §4.9 |
 | L4 多主机 | Windows ↔ iPhone 轮换 | **通过**（切换间隔 <0.1 s；bond 保护策略就位，第 4 台设备触发的腾位待实测） | §4.9 |
 | L4 重连速度 | 重启到按键生效 | **优化至 3.3 s**（原始 9.5 s；根因与修复见 §4.8） | `build/reconnect-timing*.log` |
-| L4 Web 配置界面 | Web UI + NVS 绑定持久化 | **通过**（AP/HTTP/绑定 API 实测；页面交互待多设备浏览器回归） | §4.11；`build/wifi-test.log` |
+| L4 Web 配置界面 | Web UI + NVS 绑定持久化 | **通过**（AP/HTTP/绑定 API 实测；页面重做后已在真实 Chromium 完成 85 项浏览器回归，见 §4.12；**ESP32 上的新版页面与堆水位待真机回归**） | §4.11、§4.12；`build/wifi-test.log` |
 | L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **部分**：蓝牙关→开重连、长静置首按即时已验证；其余 §5.3 |
 
 已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`；
@@ -41,16 +41,19 @@ BLE 侧无任何"写 NFC 卡"的服务。
 或直接：
 
 ```
-arduino-cli compile --fqbn esp32:esp32:esp32c3 `
+arduino-cli --config-file arduino-cli.yaml compile `
+  --fqbn "esp32:esp32:esp32c3:FlashMode=dio,PartitionScheme=huge_app" `
   --output-dir ./build/MiRemoteBridge ./firmware/MiRemoteBridge
 ```
 
-实测结果：
+2026-09-11 新版 Web UI 的编译输出（仅编译验证；历史真机记录见 §4）：
 
 ```
-Sketch uses 691805 bytes (52%) of program storage space. Maximum is 1310720 bytes.
-Global variables use 19788 bytes (6%) of dynamic memory, leaving 307892 bytes for local variables.
+Sketch uses 1392931 bytes (44%) of program storage space. Maximum is 3145728 bytes.
+Global variables use 41220 bytes (12%) of dynamic memory, leaving 286460 bytes for local variables. Maximum is 327680 bytes.
 ```
+
+全局 RAM 占用不代表 Wi-Fi 启用后的空闲堆；新版页面/API 在低堆水位下仍需真机回归。
 
 无 warning、无 error。（体积会随每次改动小幅变化，以实际输出为准。）
 
@@ -535,6 +538,38 @@ Windows 动作"如需实现，唯一现实路径是给 C3 加 NFC 读卡模块�
    回落到 ~59 KB（**不会**回到初始 106 KB——Wi-Fi 库保留内部缓冲，属预期；
    完全恢复需重启）。两轮 on/off 循环后 free 稳定在 58.9–59.0 KB，无泄漏。
 3. **共存**：AP 启停期间 RC003 保持 READY 不断链。
+
+---
+
+### 4.12 Web UI 浏览器端回归（2026-09-11，**非真机**）
+
+页面重做后需要在不接板子的前提下把浏览器逻辑跑一遍。做法是从 `web_page.h` 抽出页面，
+注入一个**只存在于预览文件**的 `fetch` 模拟器（`tests/tools/web_ui_preview.py`），
+再用真实 Chromium 执行断言（`tests/tools/check_web_ui.py`）。
+
+```bash
+python tests/tools/web_ui_preview.py            # 生成 outputs/web-ui-preview.html
+python tests/tools/check_web_ui.py --emit-js build/web-ui-assertions.js
+# 浏览器执行（任意 Chromium 自动化驱动均可）
+```
+
+**已验证（85 项断言，全部通过）**：
+
+| 类别 | 覆盖 |
+| --- | --- |
+| 数据加载 | 13 张卡片 + 13 个遥控器热点；`effective` 生效值优先于静态默认 |
+| 逐键保存 | 13 个键逐个保存，请求 `raw` 为**十六进制**，回读值与提交值逐项一致 |
+| 编辑回填 | 修饰键位、主键、Consumer 十进制回填；「不改直接保存」不丢修饰键 |
+| 组合与边界 | 仅修饰键和弦（Ctrl+Win）、右 Alt+`,`、空键盘动作被拒 |
+| 清除语义 | 「恢复此键默认」先改草稿、保存后才生效；恢复后回落串口基础模式 |
+| 失败处理 | HTTP 错误保留编辑器；回读不一致判定失败；离线显示旧数据并禁用写入 |
+| 注入防护 | 广播名含 HTML 时按文本渲染，不进入 DOM |
+| 布局 | 1440 / 1024 / 768 / 390 / 320 五档 × 三页，均无横向溢出；Esc 关闭弹窗 |
+
+**这一层没有验证**：ESP32 上的真实 HTTP 栈、NVS 持久化、Wi-Fi 与 BLE 共存下的堆水位、
+真实手机浏览器。§0 表格里 Web UI 一行的"浏览器回归"指本节，**仍不等于真机验收**。
+
+---
 
 ## 5. L4 实机验收清单（部分完成）
 

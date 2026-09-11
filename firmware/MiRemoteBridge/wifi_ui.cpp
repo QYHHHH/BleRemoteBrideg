@@ -36,7 +36,27 @@ bool s_enabled = false;
 // ---------------------------------------------------------------------------
 
 void sendJson(int code, const String &body) {
+  s_server->sendHeader("Cache-Control", "no-store");
   s_server->send(code, "application/json", body);
+}
+
+// Device names are remote-controlled input, not JSON source text.
+String jsonEscape(const String &value) {
+  String out;
+  for (size_t i = 0; i < value.length(); ++i) {
+    const unsigned char c = (unsigned char)value[i];
+    if (c == '"' || c == '\\') {
+      out += '\\';
+      out += (char)c;
+    } else if (c < 0x20) {
+      char escaped[7];
+      snprintf(escaped, sizeof(escaped), "\\u%04x", (unsigned)c);
+      out += escaped;
+    } else {
+      out += (char)c;
+    }
+  }
+  return out;
 }
 
 void handleGetBindings() {
@@ -77,6 +97,24 @@ void handleGetBindings() {
     out += def[i].press.consumer;
     out += '}';
   }
+  // Report the actual action, including serial-selected runtime modes.
+  // Read-only: the validated keymap and HID paths are not changed.
+  out += "],\"effective\":[";
+  for (size_t i = 0; i < nd; i++) {
+    if (i) out += ',';
+    const hid_action_t a = keymap_lookup(def[i].raw_code);
+    out += "{\"raw\":";
+    out += def[i].raw_code;
+    out += ",\"kind\":";
+    out += (a.kind == HID_ACT_NONE) ? 0 : ((a.kind == HID_ACT_CONSUMER) ? 2 : 1);
+    out += ",\"mod\":";
+    out += a.modifier;
+    out += ",\"key\":";
+    out += a.keycode;
+    out += ",\"cons\":";
+    out += a.consumer;
+    out += '}';
+  }
   out += "]}";
 
   sendJson(200, out);
@@ -90,7 +128,7 @@ void handleGetStatus() {
   out += ",\"remoteConnected\":";
   out += (rc003_client::connected() ? "true" : "false");
   out += ",\"remoteName\":\"";
-  out += rc003_client::connectedName();
+  out += jsonEscape(rc003_client::connectedName());
   out += "\",\"battery\":";
   out += settings::batteryLevel();
   out += ",\"bindings\":";

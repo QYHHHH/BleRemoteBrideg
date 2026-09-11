@@ -12,6 +12,10 @@ build/
 
 # Local assistant/workspace notes (not project source)
 .workbuddy/
+.workbuddy-ai/
+
+# Generated browser previews and regression screenshots
+outputs/
 
 # Editor and OS files
 .vscode/

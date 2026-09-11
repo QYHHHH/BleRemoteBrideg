@@ -32,7 +32,7 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 | iPhone 连接（音量/方向键） | ✅ 用户实测 |
 | 多主机轮换（Windows↔iPhone <0.1s 接管） | ✅ 实测 |
 | BOOT 键：短按无操作 / 长按 5s 恢复出厂 | ⚠️ 代码完成已烧录，物理按压待用户验证 |
-| Web 配置 UI（wifi on → 192.168.4.1） | ⚠️ 固件实测 AP/HTTP/API 正常；**浏览器页面交互待用户回归** |
+| Web 配置 UI（wifi on → 192.168.4.1） | ⚠️ 固件实测 AP/HTTP/API 正常；**页面已重做并完成 85 项浏览器回归（模拟 API，见 `docs/TESTING.md` §4.12），真机浏览器与堆水位待回归** |
 | `bind` 串口命令（设置/列表/解除） | ✅ 实测 |
 
 **待办**：`docs/TESTING.md` §5.3 的边界清单（长按、连按、休眠唤醒、两侧同时重启、
@@ -100,4 +100,8 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 # 物理按键（需要人手）：短按 BOOT 应只出日志不重启；长按 5s 清全部配对（危险）
 # Web UI：串口 wifi on → 手机连 "MiRemoteBridge" 热点 → http://192.168.4.1/
 #         逐键改绑定 → 按遥控器验证 → wifi off
+# 不接板子先跑页面回归（浏览器逻辑 + 模拟 API，非真机）：
+#   python tests/tools/web_ui_preview.py
+#   python tests/tools/check_web_ui.py --emit-js build/web-ui-assertions.js
+#   （再用任意 Chromium 自动化驱动执行 build/web-ui-assertions.js，见 TESTING.md §4.12）
 ```
