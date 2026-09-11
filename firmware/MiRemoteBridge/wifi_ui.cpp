@@ -211,37 +211,37 @@ void handleReset() {
   sendJson(200, "{\"ok\":true}");
 }
 
-// GET / - the page lives in PROGMEM.
+// GET / , /app.css , /app.js - the page, split into three gzip assets.
 //
-// Serve the gzip-compressed copy when the client advertises gzip (browsers
-// always do) and keep the plain page as a fallback. Regenerate the compressed
-// copy with tests/tools/gen_web_page.py.
+// Two things were learned the hard way (docs/TESTING.md 4.13):
+//  1. Every response sent straight from PROGMEM failed on hardware - the
+//     client saw the status line and headers, then 0 bytes of body - while
+//     every response built in RAM (the /api/* JSON handlers) worked, down to
+//     a 1748 B asset failing where a 1252 B JSON body succeeded. So the blobs
+//     are copied into a heap buffer and sent through the same path the JSON
+//     handlers use.
+//  2. Splitting the page into three resources keeps each copy small: at
+//     ~10 KB free a single 8 KB asset would not fit twice (source + String).
 //
-// KNOWN LIMITATION - the response is truncated (docs/TESTING.md 4.13.3).
-// Measured on hardware: this handler returns the correct headers
-// (Content-Encoding: gzip, Content-Length: 8257) but the body stops at
-// exactly 5612 B on every attempt (5/5), i.e. 14259 of 21578 bytes decoded.
-// The cause is in the write path, not the link: a 1252 B JSON response
-// completes in 60 ms and /api/status in ~15 ms, while NetworkClient::write()
-// gives up after WIFI_CLIENT_MAX_WRITE_RETRY and returns a PARTIAL count that
-// send_P() ignores.
-//
-// Two hand-rolled flow-controlled replacements (retry the remainder, and
-// retry in 512 B pieces under a wall-clock cap) were tried on hardware and
-// BOTH made it worse - the client got no response at all. They were removed
-// rather than left in the tree. Fixing this needs a proper investigation of
-// the write path, not another guess.
-void handleRoot() {
-  const bool wantsGzip = s_server->hasHeader("Accept-Encoding") &&
-                         s_server->header("Accept-Encoding").indexOf("gzip") >= 0;
-  if (wantsGzip) {
-    s_server->sendHeader("Content-Encoding", "gzip");
-    s_server->sendHeader("Vary", "Accept-Encoding");
-    s_server->send_P(200, "text/html", kIndexHtmlGz, kIndexHtmlGzLen);
+// Always gzip: every browser accepts it, which also removes the
+// Accept-Encoding handshake (and the collectHeaders() requirement with it).
+void sendAsset(PGM_P blob, size_t len, const char *contentType) {
+  char *buf = (char *)malloc(len);
+  if (!buf) {
+    BR_LOGE(kTag, "asset: cannot allocate %u B (heap %u B)", (unsigned)len,
+            (unsigned)ESP.getFreeHeap());
+    s_server->send(503, "text/plain", "out of memory serving the page");
     return;
   }
-  s_server->send_P(200, "text/html", kIndexHtml);
+  memcpy_P(buf, blob, len);
+  s_server->sendHeader("Content-Encoding", "gzip");
+  s_server->send(200, contentType, String(buf, len));
+  free(buf);
 }
+
+void handleRoot() { sendAsset(kIndexHtmlGz, kIndexHtmlGzLen, "text/html"); }
+void handleCss() { sendAsset(kIndexCssGz, kIndexCssGzLen, "text/css"); }
+void handleJs() { sendAsset(kIndexJsGz, kIndexJsGzLen, "application/javascript"); }
 
 void handleNotFound() { s_server->send(404, "text/plain", "not found"); }
 
@@ -267,13 +267,9 @@ void onApEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
 
 void startServer() {
   s_server = new WebServer(80);
-  // The WebServer only captures request headers that were declared here
-  // (its _headerKeysCount starts at 0 and nothing else is recorded). Without
-  // this, header("Accept-Encoding") always returns "" and the page silently
-  // falls back to the uncompressed copy, which is too big to send.
-  static const char *kCollectedHeaders[] = {"Accept-Encoding"};
-  s_server->collectHeaders(kCollectedHeaders, 1);
   s_server->on("/", HTTP_GET, handleRoot);
+  s_server->on("/app.css", HTTP_GET, handleCss);
+  s_server->on("/app.js", HTTP_GET, handleJs);
   s_server->on("/api/status", HTTP_GET, handleGetStatus);
   s_server->on("/api/bindings", HTTP_GET, handleGetBindings);
   s_server->on("/api/set", HTTP_POST, handleSet);

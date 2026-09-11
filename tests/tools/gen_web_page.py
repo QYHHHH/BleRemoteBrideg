@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Pre-compress the Web UI page so the firmware ships a payload the AP can send.
+"""Split the Web UI page into assets and gzip them for the firmware.
 
-Why this exists (docs/TESTING.md 4.13): the plain page is ~21 KB and the
-ESP32-C3 cannot push that out in one write while BLE has the heap - measured
-ceiling is ~13 KB. Gzip takes it to ~7 KB, which fits, and it is generated at
-build time instead of hand-maintained.
+Why this exists (docs/TESTING.md 4.13): the ESP32-C3 has to serve the config
+page while BLE holds most of the heap. Measured on hardware, a response larger
+than the largest free block does not arrive at all - the gzip payload was
+8257 B while the largest contiguous block was only 7668 B, and the client got
+0 bytes (no truncation, no error). Serving CSS and JS as separate resources
+keeps every single response comfortably under that limit, and lets the browser
+cache them.
 
 Usage:
   python tests/tools/gen_web_page.py            # write web_page_gz.h
@@ -16,11 +19,15 @@ plain arduino-cli build works without running Python first.
 import argparse
 import gzip
 import io
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "firmware/MiRemoteBridge/web_page.h"
 OUTPUT = ROOT / "firmware/MiRemoteBridge/web_page_gz.h"
+
+STYLE_RE = re.compile(r"<style>(.*?)</style>", re.DOTALL)
+SCRIPT_RE = re.compile(r"<script>(.*?)</script>", re.DOTALL)
 
 
 def firmware_html():
@@ -28,41 +35,62 @@ def firmware_html():
     return source.split('R"rawliteral(', 1)[1].split(')rawliteral";', 1)[0]
 
 
-def compress(raw: bytes) -> bytes:
+def compress(text: str) -> bytes:
     # mtime=0 keeps the output byte-identical across runs, so the generated
     # header does not churn on every build.
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=9, mtime=0) as gz:
-        gz.write(raw)
+        gz.write(text.encode("utf-8"))
     return buf.getvalue()
 
 
-def render(html: bytes, blob: bytes) -> str:
+def split(html: str):
+    """Return (shell html, css, js) with the assets pulled out and linked."""
+    style = STYLE_RE.search(html)
+    script = SCRIPT_RE.search(html)
+    if not style or not script:
+        raise SystemExit("web_page.h must contain exactly one <style> and one <script>")
+    css = style.group(1).strip()
+    js = script.group(1).strip()
+    shell = html[:style.start()] + '<link rel="stylesheet" href="/app.css">' + html[style.end():]
+    # Re-find the script: the style replacement shifted the offsets.
+    script = SCRIPT_RE.search(shell)
+    shell = shell[:script.start()] + '<script src="/app.js"></script>' + shell[script.end():]
+    return shell, css, js
+
+
+def blob(name: str, data: bytes) -> str:
     lines = []
-    for i in range(0, len(blob), 16):
-        chunk = ",".join("0x%02x" % b for b in blob[i:i + 16])
-        lines.append("  " + chunk + ",")
-    body = "\n".join(lines)
+    for i in range(0, len(data), 16):
+        lines.append("  " + ",".join("0x%02x" % b for b in data[i:i + 16]) + ",")
+    return (f"static const size_t {name}Len = {len(data)};\n\n"
+            f"static const char {name}[] PROGMEM = {{\n" + "\n".join(lines) + "\n};\n")
+
+
+def render(parts) -> str:
+    html, css, js = parts
+    body = []
+    for name, text in (("kIndexHtmlGz", html), ("kIndexCssGz", css), ("kIndexJsGz", js)):
+        raw = text.encode("utf-8")
+        packed = compress(text)
+        body.append(f"// {name}: {len(raw)} -> {len(packed)} bytes")
+        body.append(blob(name, packed))
     return f"""/*
- * MiRemoteBridge - gzip-compressed Web UI page. GENERATED FILE, DO NOT EDIT.
+ * MiRemoteBridge - gzip-compressed Web UI assets. GENERATED FILE, DO NOT EDIT.
  *
  * Regenerate with: python tests/tools/gen_web_page.py
- * Source: firmware/MiRemoteBridge/web_page.h ({len(html)} bytes -> {len(blob)} bytes gzipped)
+ * Source: firmware/MiRemoteBridge/web_page.h
  *
- * Served with Content-Encoding: gzip. The plain page is kept as a fallback for
- * clients that do not advertise gzip; browsers always do.
+ * Each asset is served on its own endpoint (/ , /app.css , /app.js) and always
+ * gzip-encoded: every browser accepts gzip, and splitting keeps each response
+ * under the largest free block the ESP32-C3 can manage while BLE is up.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #pragma once
 #include <pgmspace.h>
 
-static const size_t kIndexHtmlGzLen = {len(blob)};
-
-static const char kIndexHtmlGz[] PROGMEM = {{
-{body}
-}};
-"""
+""" + "\n".join(body)
 
 
 def main():
@@ -71,21 +99,19 @@ def main():
                         help="verify the committed header matches the source")
     args = parser.parse_args()
 
-    html = firmware_html().encode("utf-8")
-    blob = compress(html)
-    generated = render(html, blob)
+    parts = split(firmware_html())
+    generated = render(parts)
+    sizes = ", ".join(f"{len(t.encode())}->{len(compress(t))}" for t in parts)
 
     if args.check:
         current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
         if current != generated:
             raise SystemExit("web_page_gz.h is stale - run gen_web_page.py")
-        print(f"web_page_gz.h up to date ({len(html)} -> {len(blob)} bytes)")
+        print(f"web_page_gz.h up to date (html, css, js: {sizes})")
         return
 
     OUTPUT.write_text(generated, encoding="utf-8")
-    ratio = 100 * len(blob) / len(html)
-    print(f"{OUTPUT.name}: {len(html)} -> {len(blob)} bytes ({ratio:.0f}%), "
-          f"{len(generated)} bytes of C source")
+    print(f"{OUTPUT.name}: html, css, js = {sizes} bytes (raw -> gzip)")
 
 
 if __name__ == "__main__":
