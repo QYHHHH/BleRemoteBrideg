@@ -59,8 +59,12 @@ constexpr uint32_t kAutoStartDelayMs = 8000;
 // requests; they do not allocate unbounded application buffers on the MCU.
 constexpr size_t kHeaderLimit = 1536;
 constexpr size_t kIoCapacity = 3072;
-constexpr size_t kIoPerLoop = 384;
+constexpr size_t kIoPerLoop = 1024;
 constexpr uint32_t kProgressTimeoutMs = 4000;
+// How long one loop() pass may spend pushing a response out. Short enough to
+// keep BLE key dispatch prompt, long enough that a 6 KB script leaves in a few
+// passes instead of sixteen.
+constexpr uint32_t kSendBudgetMs = 5;
 constexpr uint32_t kRequestTimeoutMs = 15000;
 struct Exchange {
   int fd = -1;
@@ -384,7 +388,9 @@ void handleReset() {
 // the password. BOOT held for 5 s clears the namespace, which is the way back
 // in when the password is forgotten.
 
-bool authDecodeBasic(const char *header, String &pass) {
+const char *kConsoleUser = "admin";  // fixed: the user name never changes
+
+bool authDecodeBasic(const char *header, String &user, String &pass) {
   if (!header || strncasecmp(header, "Basic ", 6) != 0) return false;
   unsigned char raw[160];
   size_t rawLen = 0;
@@ -395,13 +401,86 @@ bool authDecodeBasic(const char *header, String &pass) {
   raw[rawLen] = 0;
   const char *colon = strchr((const char *)raw, ':');
   if (!colon) return false;
-  pass = String(colon + 1);  // the user name is ignored; only the password counts
+  user = String((const char *)raw).substring(0, colon - (const char *)raw);
+  pass = String(colon + 1);
   return true;
+}
+
+// Shown while no password is stored. Chrome shows only "Sign in" for a Basic
+// challenge - the realm text never reaches the user - so the explanation has
+// to live in a real page.
+const char kSetupPage[] =
+    "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+    "<title>设置访问密码</title><style>"
+    "body{font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;"
+    "background:#f4f5fa;color:#1c2333;margin:0;padding:24px;display:flex;justify-content:center}"
+    ".c{background:#fff;border:1px solid #e6e9f2;border-radius:16px;padding:26px;max-width:420px;width:100%}"
+    "h1{font-size:19px;margin:0 0 10px}p{font-size:13px;color:#5a627a;line-height:1.7;margin:0 0 18px}"
+    "label{display:block;font-size:12px;color:#8a93a6;margin:14px 0 6px}"
+    "input{width:100%;box-sizing:border-box;padding:11px;border:1px solid #e6e9f2;border-radius:9px;font-size:14px}"
+    "button{margin-top:20px;width:100%;padding:12px;border:0;border-radius:10px;background:#3b6ef6;"
+    "color:#fff;font-size:14px;cursor:pointer}"
+    ".hint{font-size:12px;color:#8a93a6;margin-top:16px;line-height:1.7}"
+    "</style></head><body><div class=\"c\">"
+    "<h1>首次使用：设置访问密码</h1>"
+    "<p>这台设备还没有访问密码。设置之后浏览器会提示保存，以后自动填入。</p>"
+    "<form method=\"get\" action=\"/setup\">"
+    "<label>访问密码（至少 4 位）</label>"
+    "<input type=\"password\" name=\"password\" required minlength=\"4\" autofocus>"
+    "<label>再输入一次</label>"
+    "<input type=\"password\" name=\"confirm\" required minlength=\"4\">"
+    "<button type=\"submit\">设置密码</button></form>"
+    "<p class=\"hint\">忘记密码时：按住板上 BOOT 键 5 秒，即可清除全部设置与配对"
+    "（Wi-Fi 密码、访问密码、按键映射、蓝牙配对）恢复出厂。</p>"
+    "</div></body></html>";
+
+const char kSetupDonePage[] =
+    "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+    "<title>密码已设置</title><style>"
+    "body{font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;"
+    "background:#f4f5fa;color:#1c2333;margin:0;padding:24px;display:flex;justify-content:center}"
+    ".c{background:#fff;border:1px solid #e6e9f2;border-radius:16px;padding:26px;max-width:420px;width:100%}"
+    "h1{font-size:19px;margin:0 0 10px}p{font-size:13px;color:#5a627a;line-height:1.7}"
+    "a{display:inline-block;margin-top:18px;padding:11px 20px;border-radius:10px;background:#3b6ef6;"
+    "color:#fff;text-decoration:none;font-size:14px}</style></head><body><div class=\"c\">"
+    "<h1>密码已设置</h1>"
+    "<p>请重新打开页面，浏览器会要求输入用户名和密码——<b>用户名填 admin，密码用刚才设置的那个</b>。"
+    "浏览器会提示保存它。</p><a href=\"/\">打开配置页面</a>"
+    "</div></body></html>";
+
+const char kSetupMismatchPage[] =
+    "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+    "<title>两次输入不一致</title></head><body style=\"font-family:system-ui,sans-serif;padding:24px\">"
+    "<h1 style=\"font-size:18px\">两次输入的密码不一致</h1>"
+    "<p><a href=\"/\">返回重试</a></p></body></html>";
+
+// Pull one query parameter out of a raw query string ("a=1&b=2").
+bool queryValue(const char *query, const char *name, char *out, size_t cap) {
+  if (!query || !name || !out || cap == 0) return false;
+  const size_t nameLen = strlen(name);
+  const char *at = query;
+  while (at && *at) {
+    if (strncmp(at, name, nameLen) == 0 && at[nameLen] == '=') {
+      const char *v = at + nameLen + 1;
+      const char *end = strchr(v, '&');
+      size_t len = end ? (size_t)(end - v) : strlen(v);
+      if (len >= cap) len = cap - 1;
+      memcpy(out, v, len);
+      out[len] = 0;
+      return true;
+    }
+    at = strchr(at, '&');
+    if (at) ++at;
+  }
+  return false;
 }
 
 void authChallenge(bool setupMode) {
   const char *realm = setupMode ? "MiRemoteBridge setup - choose a console password"
-                                : "MiRemoteBridge web console";
+                                : "MiRemoteBridge (user name: admin)";
   const char *body = setupMode
       ? "Setup mode: enter a user name (any) and the password you want to use.\n"
         "It is stored hashed; hold BOOT for 5 seconds to wipe it again.\n"
@@ -722,17 +801,37 @@ void dispatch() {
       }
     }
   } else {
-    String pass;
-    const bool haveCreds = authDecodeBasic(auth, pass);
+    String user, pass;
+    const bool haveCreds = authDecodeBasic(auth, user, pass);
+    const bool adminUser = user.equalsIgnoreCase(kConsoleUser);
     if (!settings::hasWebPassword()) {
-      if (haveCreds && pass.length() > 0) {
-        settings::setWebPassword(pass);
-        BR_LOGI(kTag, "setup mode: console password stored from the first visit");
-      } else {
-        authChallenge(true);
+      // Setup mode. A Basic challenge alone is useless here (Chrome never shows
+      // the realm), so serve an explanatory page with a form instead. A client
+      // that does send credentials still gets the shortcut.
+      if (strcmp(target, "/setup") == 0) {
+        char pw[64] = {}, confirm[64] = {};
+        const bool havePw = queryValue(query, "password", pw, sizeof(pw));
+        const bool haveConfirm = queryValue(query, "confirm", confirm, sizeof(confirm));
+        if (!havePw || strlen(pw) < 4) {
+          respond(200, "OK", "text/html; charset=utf-8", kSetupPage, strlen(kSetupPage));
+        } else if (!haveConfirm || strcmp(pw, confirm) != 0) {
+          respond(200, "OK", "text/html; charset=utf-8", kSetupMismatchPage, strlen(kSetupMismatchPage));
+        } else {
+          settings::setWebPassword(String(pw));
+          BR_LOGI(kTag, "setup page stored the console password");
+          respond(200, "OK", "text/html; charset=utf-8", kSetupDonePage, strlen(kSetupDonePage));
+        }
         return;
       }
-    } else if (!haveCreds || pass.length() == 0 || !settings::checkWebPassword(pass)) {
+      if (haveCreds && adminUser && pass.length() > 0) {
+        settings::setWebPassword(pass);
+        BR_LOGI(kTag, "setup mode: console password stored from Basic credentials");
+        // fall through and serve the request
+      } else {
+        respond(200, "OK", "text/html; charset=utf-8", kSetupPage, strlen(kSetupPage));
+        return;
+      }
+    } else if (!haveCreds || !adminUser || pass.length() == 0 || !settings::checkWebPassword(pass)) {
       authChallenge(false);
       return;
     }
@@ -885,7 +984,6 @@ void pollHttp() {
     return;
   }
   const bool header = s_http.headerSent < s_http.headerLen;
-  const char *src = header ? s_http.header + s_http.headerSent : s_http.body + s_http.bodySent;
   const size_t left = header ? s_http.headerLen - s_http.headerSent : s_http.bodyLen - s_http.bodySent;
   if (!left) {
     if (s_pendingUpgrade) {
@@ -900,18 +998,36 @@ void pollHttp() {
     }
     return;
   }
-  // Exactly one nonblocking send per loop. Never wait or retry here: returning
-  // to loop delivers queued BLE key releases before the next network attempt.
-  const int n = send(s_http.fd, src, left < kIoPerLoop ? left : kIoPerLoop, MSG_DONTWAIT);
-  if (n < 0) {
-    if (retryable(errno)) ++s_backPressure;
-    else { BR_LOGW(kTag, "HTTP send failed, errno %d", errno); closeExchange(false); }
-    return;
+  // Push the response out in a tight loop for a few milliseconds instead of
+  // one block per loop() pass. The old shape sent 384 bytes per pass, so a
+  // 6 KB script took sixteen passes - and every pass is a window where a BLE
+  // coexistence hiccup can stall the transfer past the 4 s progress timeout,
+  // killing the response. That is exactly how the page ended up rendering its
+  // HTML while /app.js never arrived, leaving a blank screen with no script.
+  // The budget keeps the loop responsive: key dispatch is delayed by at most
+  // kSendBudgetMs, and only while a response is actually draining.
+  const uint32_t budgetEnd = now + kSendBudgetMs;
+  for (;;) {
+    const bool headerNow = s_http.headerSent < s_http.headerLen;
+    const char *chunkSrc = headerNow ? s_http.header + s_http.headerSent
+                                     : s_http.body + s_http.bodySent;
+    const size_t remain = headerNow ? s_http.headerLen - s_http.headerSent
+                                    : s_http.bodyLen - s_http.bodySent;
+    if (remain == 0) break;
+    const size_t chunk = remain < kIoPerLoop ? remain : kIoPerLoop;
+    const int n = send(s_http.fd, chunkSrc, chunk, MSG_DONTWAIT);
+    if (n < 0) {
+      if (retryable(errno)) { ++s_backPressure; break; }   // window full: finish next pass
+      BR_LOGW(kTag, "HTTP send failed, errno %d", errno);
+      closeExchange(false);
+      return;
+    }
+    if (n == 0) break;
+    if (headerNow) s_http.headerSent += (size_t)n;
+    else s_http.bodySent += (size_t)n;
+    s_http.progress = millis();
+    if (millis() - budgetEnd < 0x80000000u && (int32_t)(millis() - budgetEnd) >= 0) break;
   }
-  if (n == 0) return;
-  if (header) s_http.headerSent += (size_t)n;
-  else s_http.bodySent += (size_t)n;
-  s_http.progress = now;
   if (s_http.headerSent == s_http.headerLen && s_http.bodySent == s_http.bodyLen) {
     // Keep the connection open. The page polls for live key state, and opening
     // a fresh socket per poll would pile up TIME_WAIT entries (TCP_MSL is 60 s)
