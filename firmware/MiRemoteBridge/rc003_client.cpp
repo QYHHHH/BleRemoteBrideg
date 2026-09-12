@@ -508,7 +508,7 @@ bool waitForSecurity(uint16_t connHandle, uint32_t timeoutMs) {
     ble_gap_conn_desc desc;
     if (ble_gap_conn_find(connHandle, &desc) != 0) return false;
     if(s_slotBusy)return false;
-    if (desc.sec_state.encrypted && desc.sec_state.bonded) {
+    if (desc.sec_state.encrypted && (desc.sec_state.bonded || storedPeerKey(desc))) {
       BR_LOGI(kTagSec, "link encrypted (bonded=%d, authenticated=%d)", (int)desc.sec_state.bonded,
               (int)desc.sec_state.authenticated);
       return true;
@@ -1030,7 +1030,7 @@ void taskLoop() {
       if (discoverAndSubscribe()) {
         ble_gap_conn_desc peer{};
         if (ble_gap_conn_find(s_client->getConnId(),&peer) ||
-            !peer.sec_state.encrypted || !peer.sec_state.bonded) {
+            !peer.sec_state.encrypted || (!peer.sec_state.bonded && !storedPeerKey(peer))) {
           BR_LOGW(kTag,"pairing not complete; identity not saved");
           s_client->disconnect();setState(St::SCANNING,"pairing incomplete");break;
         }
