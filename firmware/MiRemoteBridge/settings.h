@@ -18,13 +18,24 @@
 namespace settings {
 
 void begin();
+uint8_t activeSlot();
+bool selectSlot(uint8_t slot);
+bool slotInfo(uint8_t slot, String &address, String &name, uint8_t &type);
+bool pairingEnabled();
+void setPairingEnabled(bool enabled);
+size_t learnedKeys(uint8_t *out, size_t cap);
+bool learnKey(uint8_t raw);
+String keyName(uint8_t raw);
+bool renameKey(uint8_t raw, const String &name);
+bool deleteKey(uint8_t raw);
+
 
 // ---- RC003 (upstream) identity -------------------------------------------
 bool hasRc003();
 String rc003Address();
 uint8_t rc003AddrType();
 String rc003Name();
-void setRc003(const String &address, uint8_t addrType, const String &name);
+bool setRc003(const String &address, uint8_t addrType, const String &name);
 void clearRc003();
 
 // ---- keymap modes ---------------------------------------------------------

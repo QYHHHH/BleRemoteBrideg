@@ -16,6 +16,14 @@ namespace rc003_client {
 
 // Starts the background central task. Assumes ble_core::begin() has run.
 bool begin();
+bool restoreActiveSlot();
+// Slot operation: 0 select, 1 enable discovery, 2 delete device. Loop services
+// the NVS/map handoff only after the central task has disconnected and paused.
+bool requestSlot(uint8_t slot, uint8_t action);
+bool slotBusy();
+const char *slotError();
+void serviceSlot();
+
 
 // ----- console API ---------------------------------------------------------
 // All of these are safe to call from the Arduino loop / console task; they only

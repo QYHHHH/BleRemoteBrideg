@@ -48,6 +48,7 @@ typedef struct {
 
 // Number of physical keys in the default map (13).
 size_t keymap_default_count(void);
+void keymap_use_preset(bool enabled);
 
 // The default table. Index 0..keymap_default_count()-1.
 const keymap_entry_t *keymap_default_table(void);

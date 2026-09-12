@@ -33,6 +33,7 @@ void releaseAll();
 // True while at least one host is connected to our HID server.
 bool hostConnected();
 uint8_t hostCount();
+bool slotSwitchSafe();
 
 // Stop advertising, drop the host connection (if any) and start advertising
 // again. Used after the Windows bond is deleted so the host is forced to pair

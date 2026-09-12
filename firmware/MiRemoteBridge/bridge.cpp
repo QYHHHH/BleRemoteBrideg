@@ -59,6 +59,12 @@ void releaseActive(const char *why) {
 void handleKeyEvent(uint8_t rawCode, bool pressed, uint32_t tsUs) {
   if (pressed) {
     if (rawCode == 0) return;
+    if(settings::activeSlot()==0) {
+      bool fixed=false;const keymap_entry_t *defs=keymap_default_table();
+      for(size_t i=0;i<keymap_default_count();i++) if(defs[i].raw_code==rawCode)fixed=true;
+      if(!fixed)return; // Fixed template never forwards extra keys.
+    }
+    s_keyPresses++; s_lastKeyRaw = rawCode;
 
     const hid_action_t action = keymap_lookup(rawCode);
 
@@ -102,8 +108,7 @@ void handleKeyEvent(uint8_t rawCode, bool pressed, uint32_t tsUs) {
     s_activeRaw = rawCode;
     s_activeDown = true;
     s_reportsSent++;
-    s_keyPresses++;
-    s_lastKeyRaw = rawCode;
+
     return;
   }
 
@@ -123,6 +128,8 @@ void handleEvent(const bridge_event_t &ev) {
 
   switch (ev.type) {
     case BR_EV_RC_KEY:
+      if (rc003_client::slotBusy()) break;
+      if (ev.pressed) settings::learnKey(ev.code);
       handleKeyEvent(ev.code, ev.pressed, ev.ts_us);
       break;
 
@@ -148,6 +155,7 @@ void handleEvent(const bridge_event_t &ev) {
       break;
 
     case BR_EV_RC_BATTERY:
+      if (rc003_client::slotBusy()) break;
       // The remote reports its own charge; re-publish it so the host shows the
       // remote's battery rather than a number this bridge made up. Persisted so
       // a host connecting after a reboot reads the last real value immediately.
@@ -205,6 +213,9 @@ bool begin() {
     return false;
   }
 
+  if (!rc003_client::restoreActiveSlot()) {
+    BR_LOGE(kTag,"active slot bond restore failed"); return false;
+  }
   if (!hid_server::begin()) {
     BR_LOGE(kTag, "HID peripheral failed to start");
     return false;
@@ -228,6 +239,8 @@ void loop() {
     handleEvent(ev);
     drained++;
   }
+
+  rc003_client::serviceSlot();
 
   // Keep advertising alive on the downstream side.
   static uint32_t lastAdvCheck = 0;

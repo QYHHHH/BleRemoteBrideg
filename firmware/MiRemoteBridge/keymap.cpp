@@ -27,6 +27,9 @@
 //  * HOME = Win+D (show desktop), TV = F8, MENU = Space.
 //  * BACK / POWER / VOICE are runtime-selectable, see keymap_set_*_mode().
 // ---------------------------------------------------------------------------
+static bool s_preset = true;
+void keymap_use_preset(bool enabled) { s_preset = enabled; }
+
 static const keymap_entry_t kDefaultTable[] = {
     // raw code            action kind        modifier       keycode        consumer
     { MI_KEY_VOL_UP,   { HID_ACT_CONSUMER, HID_MOD_NONE, HID_KEY_NONE,  HID_CONSUMER_VOL_UP  } },
@@ -316,6 +319,8 @@ hid_action_t keymap_lookup_ex(const keymap_entry_t *table, size_t count, uint8_t
   for (size_t i = 0; i < s_bindingCount; i++) {
     if (s_bindings[i].raw_code == raw_code) return s_bindings[i].press;
   }
+
+  if (!s_preset) return none_action();
 
   // Runtime-selectable keys must NOT fall through to the static table when the
   // runtime answer is NONE: that NONE means "the user turned this button off"

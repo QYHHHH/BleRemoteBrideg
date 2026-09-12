@@ -44,6 +44,20 @@ int removePeer(BLEAddress peer);
 // Returns the number of records deleted.
 int makeRoomForPeer(const BLEAddress &incoming, const BLEAddress &protected_addr);
 
+// Slots are zero-based. BLEAddress carries the peer identity address AND type.
+// Archives are durable NVS blobs, independent of the three-entry live bond store.
+// Main-loop calls only: stop scanning/advertising/connecting and wait for this
+// remote to disconnect before archive/restore/delete; computer link can remain.
+// snapshotSlot is also safe when no live bond exists (keeps any saved archive).
+// restoreSlot returns false if no matching archive exists; caller may pair anew
+// only when hasSlotArchive is false. An operational restore failure must not pair.
+bool hasSlotArchive(uint8_t slot, BLEAddress peer);
+bool snapshotSlot(uint8_t slot, BLEAddress peer);
+bool archiveSlot(uint8_t slot, BLEAddress peer);
+bool restoreSlot(uint8_t slot, BLEAddress peer);
+bool deleteSlot(uint8_t slot, BLEAddress peer);
+bool clearSlotArchives();
+
 // Forget everything. Used by the factory-reset console command.
 int removeAll();
 

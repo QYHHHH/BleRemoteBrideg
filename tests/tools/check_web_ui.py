@@ -42,14 +42,14 @@ FLASH_BUDGET = 18500
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 140
+EXPECTED_CHECKS = 149
 
 TESTS = r"""(async () => {
   const results=[];
   const assert=(condition,name)=>{if(!condition)throw Error(name);results.push(name);};
-  await load();
+  while(S.load)await new Promise(r=>setTimeout(r,10));await load();
   assert(S.on && S.ok,'initial API load');
-  const oldConfirm=window.confirm,pairCalls=()=>__demo.calls.filter(c=>c.path==='/api/pair');
+  const oldConfirm=window.confirm,pairCalls=()=>__demo.calls.filter(c=>c.path==='/api/slot');
   window.confirm=()=>false;await $('pairRemote').onclick();
   assert(pairCalls().length===0,'pair cancellation sends no request');
   window.confirm=()=>true;await $('pairRemote').onclick();
@@ -79,6 +79,26 @@ TESTS = r"""(async () => {
   delete __demo.status.fwVersion;delete __demo.status.buildTime;await load();
   assert($('ver').textContent==='','no stale stamp when firmware omits it');
   __demo.status.fwVersion='v0.0.1';__demo.status.buildTime='Sep 12 2026 12:56:33';await load();
+  await slotAction('select',1);
+  assert(selectedSlot===1&&$('grid').hidden,'select slot activates generic remote page');
+  await slotAction('add',1);
+  assert(!slots[1].address,'scan does not automatically bind a device');
+  await req('/api/connect?address=00:11:22:33:44:01&type=0','POST');await load();
+  assert(slots[1].address&&$('pairRemote').hidden,'explicit device selection is persisted');
+  __demo.keys[1].push({raw:144,name:'自定义键'});await load();
+  openSlotEditor(144);$('slotKind').value='1';$('slotKey').value='4';await autoSave();
+  assert(S.b[144]&&S.b[144].key===4,'generic discovered key saves real binding');
+  $('slotName').value='新名称';await $('slotName').onchange();
+  assert(learned[0].name==='新名称','key rename reads back from board');
+  editor.close();await slotAction('select',0);
+  assert(!S.b[144],'switch isolates mappings');
+  await slotAction('select',1);
+  assert(S.b[144].key===4,'switch back restores previous mapping');
+  await slotAction('delete',1);
+  assert(!slots[1].address&&S.b[144].key===4,'device deletion retains shortcut configuration');
+  await slotAction('add',1);await req('/api/connect?address=00:11:22:33:44:01&type=0','POST');await load();await reset();
+  assert(slots[1].address&&!S.b[144]&&learned.length===1,'shortcut reset retains pairing and discovered keys');
+  await slotAction('select',0);
   assert(document.querySelectorAll('.k').length===13,'13 key cards');
   assert(document.querySelectorAll('#rmArt [data-r]').length===13,'13 remote hotspots');
   assert(fmt(cur(0x3E))==='Ctrl + Win','runtime voice mode wins over static table');

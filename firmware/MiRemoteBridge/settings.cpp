@@ -23,6 +23,10 @@ namespace {
 static const char *kTag = "NVS";
 
 Preferences s_prefs;
+Preferences s_slotPrefs;
+uint8_t s_slot = 0;
+Preferences &remotePrefs() { return s_slot ? s_slotPrefs : s_prefs; }
+
 
 const char *kKeyRcAddr = "rc_addr";
 const char *kKeyRcType = "rc_type";
@@ -51,34 +55,113 @@ namespace settings {
 void begin() {
   if (s_ready) return;
   s_ready = s_prefs.begin(BRIDGE_NVS_NAMESPACE, /*readOnly=*/false);
+  if (s_ready) selectSlot(s_prefs.getUChar("active_slot", 0));
   if (!s_ready) {
     BR_LOGE(kTag, "failed to open NVS namespace \"%s\"", BRIDGE_NVS_NAMESPACE);
   }
 }
 
-bool hasRc003() { return s_ready && s_prefs.isKey(kKeyRcAddr); }
-
-String rc003Address() { return s_ready ? s_prefs.getString(kKeyRcAddr, "") : String(""); }
-
-uint8_t rc003AddrType() {
-  return s_ready ? s_prefs.getUChar(kKeyRcType, BLE_ADDR_PUBLIC) : (uint8_t)BLE_ADDR_PUBLIC;
+uint8_t activeSlot() { return s_slot; }
+bool selectSlot(uint8_t slot) {
+  if (!s_ready || slot > 2) return false;
+  if (slot != s_slot) {
+    if (slot) {
+      // Validate the destination before closing the current handle.
+      char ns[12]; snprintf(ns, sizeof(ns), "mrb_slot%u", slot);
+      Preferences probe;
+      if (!probe.begin(ns, false)) return false;
+      probe.end();
+    }
+    s_slotPrefs.end();
+    if (slot) {
+      char ns[12]; snprintf(ns, sizeof(ns), "mrb_slot%u", slot);
+      if (!s_slotPrefs.begin(ns, false)) {
+        if(s_slot) {snprintf(ns,sizeof(ns),"mrb_slot%u",s_slot);s_slotPrefs.begin(ns,false);}
+        return false;
+      }
+    }
+    s_slot = slot;
+  }
+  for (unsigned raw = 1; raw < 256; ++raw) keymap_set_binding(raw, 0, 0, 0, 0);
+  keymap_use_preset(slot == 0);
+  loadBindings();
+  return s_prefs.putUChar("active_slot", slot) == 1;
+}
+bool slotInfo(uint8_t slot, String &address, String &name, uint8_t &type) {
+  if (slot > 2) return false;
+  Preferences temp;
+  Preferences *p = &s_prefs;
+  if (slot) {
+    char ns[12]; snprintf(ns, sizeof(ns), "mrb_slot%u", slot);
+    if (!temp.begin(ns, true)) { address = ""; name = ""; type = 0; return true; }
+    p = &temp;
+  }
+  address = p->getString(kKeyRcAddr, "");
+  name = p->getString(kKeyRcName, "");
+  type = p->getUChar(kKeyRcType, BLE_ADDR_PUBLIC);
+  return true;
+}
+bool pairingEnabled() { return remotePrefs().getBool("pairing", false); }
+void setPairingEnabled(bool enabled) { remotePrefs().putBool("pairing", enabled); }
+size_t learnedKeys(uint8_t *out, size_t cap) {
+  const size_t n = remotePrefs().getBytesLength("learned");
+  if (!n || n > cap) return 0;
+  return remotePrefs().getBytes("learned", out, cap);
+}
+bool learnKey(uint8_t raw) {
+  if (!raw || !s_slot) return false;
+  uint8_t keys[KEYMAP_MAX_BINDINGS];
+  size_t n = learnedKeys(keys, sizeof(keys));
+  for (size_t i=0;i<n;i++) if(keys[i]==raw) return false;
+  if(n==sizeof(keys)) return false;
+  keys[n++]=raw;
+  return remotePrefs().putBytes("learned", keys, n)==n;
+}
+String keyName(uint8_t raw) {
+  char key[8]; snprintf(key,sizeof(key),"kn_%02x",raw);
+  return remotePrefs().getString(key,"");
+}
+bool renameKey(uint8_t raw, const String &name) {
+  if (!raw || name.length()>72 || !name.length()) return false;
+  char key[8]; snprintf(key,sizeof(key),"kn_%02x",raw);
+  return remotePrefs().putString(key,name)==name.length();
+}
+bool deleteKey(uint8_t raw) {
+  if (!s_slot || !setBinding(raw,0,0,0,0)) return false;
+  uint8_t keys[KEYMAP_MAX_BINDINGS]; size_t n=learnedKeys(keys,sizeof(keys));
+  size_t j=0; for(size_t i=0;i<n;i++) if(keys[i]!=raw) keys[j++]=keys[i];
+  if (j && remotePrefs().putBytes("learned",keys,j)!=j) return false;
+  if (!j) remotePrefs().remove("learned");
+  char key[8]; snprintf(key,sizeof(key),"kn_%02x",raw); remotePrefs().remove(key);
+  return true;
 }
 
-String rc003Name() { return s_ready ? s_prefs.getString(kKeyRcName, "") : String(""); }
+bool hasRc003() { return s_ready && rc003Address().length()==17 && rc003AddrType()<=BLE_ADDR_RANDOM; }
 
-void setRc003(const String &address, uint8_t addrType, const String &name) {
-  if (!s_ready) return;
-  s_prefs.putString(kKeyRcAddr, address);
-  s_prefs.putUChar(kKeyRcType, addrType);
-  s_prefs.putString(kKeyRcName, name);
-  BR_LOGI(kTag, "saved remote %s (%s) type=%u", name.c_str(), address.c_str(), (unsigned)addrType);
+String rc003Address() { return s_ready ? remotePrefs().getString(kKeyRcAddr, "") : String(""); }
+
+uint8_t rc003AddrType() {
+  return s_ready ? remotePrefs().getUChar(kKeyRcType, BLE_ADDR_PUBLIC) : (uint8_t)BLE_ADDR_PUBLIC;
+}
+
+String rc003Name() { return s_ready ? remotePrefs().getString(kKeyRcName, "") : String(""); }
+
+bool setRc003(const String &address, uint8_t addrType, const String &name) {
+  if (!s_ready || address.length()!=17 || addrType>BLE_ADDR_RANDOM) return false;
+  // Address is the commit marker: publish it only after metadata is durable.
+  if (remotePrefs().putUChar(kKeyRcType, addrType)!=1) return false;
+  if (remotePrefs().putString(kKeyRcName, name)!=name.length()) return false;
+  if (remotePrefs().putString(kKeyRcAddr, address)!=address.length()) return false;
+  return true;
 }
 
 void clearRc003() {
   if (!s_ready) return;
-  s_prefs.remove(kKeyRcAddr);
-  s_prefs.remove(kKeyRcType);
-  s_prefs.remove(kKeyRcName);
+  remotePrefs().remove(kKeyRcAddr);
+  remotePrefs().remove(kKeyRcType);
+  remotePrefs().remove(kKeyRcName);
+  remotePrefs().remove(kKeyBatteryValid);
+  remotePrefs().remove(kKeyBattery);
 }
 
 void loadKeymapModes() {
@@ -126,15 +209,15 @@ void setLogLevel(uint8_t level) {
 // re-discovered - without this it would see 100% every time until the next
 // battery notification.
 int batteryLevel() {
-  if (!s_ready || !s_prefs.getBool(kKeyBatteryValid, false)) return -1;
-  return (int)s_prefs.getUChar(kKeyBattery, 0);
+  if (!s_ready || !remotePrefs().getBool(kKeyBatteryValid, false)) return -1;
+  return (int)remotePrefs().getUChar(kKeyBattery, 0);
 }
 
 void setBatteryLevel(uint8_t percent) {
   if (!s_ready) return;
   if (percent > 100) percent = 100;
-  s_prefs.putUChar(kKeyBattery, percent);
-  s_prefs.putBool(kKeyBatteryValid, true);
+  remotePrefs().putUChar(kKeyBattery, percent);
+  remotePrefs().putBool(kKeyBatteryValid, true);
 }
 
 // --- programmable key bindings -------------------------------------------
@@ -144,11 +227,11 @@ void setBatteryLevel(uint8_t percent) {
 
 void loadBindings() {
   if (!s_ready) return;
-  if (s_prefs.isKey(kKeyBindingsV2)) {
+  if (remotePrefs().isKey(kKeyBindingsV2)) {
     uint8_t snapshot[2 + KEYMAP_MAX_BINDINGS * 6];
-    const size_t size = s_prefs.getBytesLength(kKeyBindingsV2);
+    const size_t size = remotePrefs().getBytesLength(kKeyBindingsV2);
     if (size < 2 || size > sizeof(snapshot) ||
-        s_prefs.getBytes(kKeyBindingsV2, snapshot, sizeof(snapshot)) != size ||
+        remotePrefs().getBytes(kKeyBindingsV2, snapshot, sizeof(snapshot)) != size ||
         snapshot[0] != 1 || snapshot[1] > KEYMAP_MAX_BINDINGS ||
         size != 2u + 6u * snapshot[1]) {
       BR_LOGE(kTag, "invalid binding snapshot, not loading stale legacy records");
@@ -167,11 +250,12 @@ void loadBindings() {
     BR_LOGI(kTag, "loaded %u persisted binding(s)", (unsigned)snapshot[1]);
     return;
   }
-  const size_t len = s_prefs.getBytesLength(kKeyBindKeys);
+  if (s_slot) return; // Legacy bindings belong only to slot 0.
+  const size_t len = remotePrefs().getBytesLength(kKeyBindKeys);
   if (len == 0) return;
 
   uint8_t raws[KEYMAP_MAX_BINDINGS];
-  const size_t got = s_prefs.getBytes(kKeyBindKeys, raws, sizeof(raws));
+  const size_t got = remotePrefs().getBytes(kKeyBindKeys, raws, sizeof(raws));
   if (got == 0 || got > sizeof(raws)) {
     BR_LOGW(kTag, "binding manifest unreadable (%u bytes), ignoring", (unsigned)got);
     return;
@@ -181,7 +265,7 @@ void loadBindings() {
     char key[8];
     snprintf(key, sizeof(key), "bd_%02x", raws[i]);
     uint8_t rec[5] = {0};
-    if (s_prefs.getBytes(key, rec, sizeof(rec)) != sizeof(rec)) continue;
+    if (remotePrefs().getBytes(key, rec, sizeof(rec)) != sizeof(rec)) continue;
     if (rec[0] == 0) continue;
     const uint16_t consumer = (uint16_t)(rec[3] | ((uint16_t)rec[4] << 8));
     keymap_set_binding(raws[i], rec[0], rec[1], rec[2], consumer);
@@ -221,7 +305,7 @@ bool setBinding(uint8_t raw, uint8_t kind, uint8_t modifier, uint8_t keycode, ui
   const size_t size = 2 + 6 * count;
   // Preferences::putBytes includes nvs_commit. A failure is never reported as
   // success, and never updates the runtime binding ahead of persistence.
-  if (s_prefs.putBytes(kKeyBindingsV2, snapshot, size) != size) {
+  if (remotePrefs().putBytes(kKeyBindingsV2, snapshot, size) != size) {
     BR_LOGE(kTag, "binding snapshot commit failed; live map unchanged");
     return false;
   }
@@ -298,6 +382,10 @@ String webToken() {
 
 void clearAll() {
   if (!s_ready) return;
+  for(uint8_t slot=1;slot<3;slot++) {
+    char ns[12];snprintf(ns,sizeof(ns),"mrb_slot%u",slot);
+    Preferences p;if(p.begin(ns,false))p.clear();
+  }
   s_prefs.clear();
 }
 

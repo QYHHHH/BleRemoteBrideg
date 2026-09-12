@@ -329,6 +329,13 @@ bool hostConnected() { return s_server && s_server->getConnectedCount() > 0; }
 
 uint8_t hostCount() { return s_server ? (uint8_t)s_server->getConnectedCount() : 0; }
 
+bool slotSwitchSafe() {
+  if(!hostConnected()) return true;
+  ble_gap_conn_desc desc{};
+  return hostCount()==1 && !ble_gap_conn_find(s_server->getConnId(),&desc) &&
+         desc.sec_state.encrypted;
+}
+
 void forceReAdvertise() {
   if (!s_adv) return;
 

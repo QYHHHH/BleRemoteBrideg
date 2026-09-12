@@ -288,7 +288,7 @@ void handleBindings(bool head) {
   out.add("],\"defaults\":[");
   for (size_t i = 0; i < n; ++i) {
     if (i) out.add(",");
-    actionJson(out, defs[i].raw_code, defs[i].press);
+    actionJson(out, defs[i].raw_code, settings::activeSlot() ? hid_action_t{} : defs[i].press);
   }
   out.add("],\"effective\":[");
   for (size_t i = 0; i < n; ++i) {
@@ -297,6 +297,55 @@ void handleBindings(bool head) {
   }
   out.add("]}");
   jsonResult(out, head);
+}
+
+bool decodeName(char *text) {
+  char *out=text;
+  for(char *p=text;*p;p++) {
+    if(*p=='%') {
+      if(!p[1] || !p[2] || !isxdigit((unsigned char)p[1]) || !isxdigit((unsigned char)p[2]))return false;
+      char hex[3]={p[1],p[2],0};unsigned v=strtoul(hex,nullptr,16);
+      if(v<32 || v==127)return false;
+      *out++=(char)v;p+=2;
+    } else *out++=*p=='+'?' ':*p;
+  }
+  *out=0;return true;
+}
+void handleNearby(bool head) {
+  Json out(s_http.io,sizeof(s_http.io));out.add("[");
+  const size_t n=rc003_client::nearbyCount();
+  for(size_t i=0;i<n && i<12;i++) {
+    String addr,name;uint8_t type;int rssi;
+    if(!rc003_client::nearbyAt(i,&addr,&type,&name,&rssi))break;
+    if(i)out.add(",");
+    out.add("{\"address\":");out.quoted(addr.c_str());
+    out.add(",\"name\":");out.quoted(name.c_str());
+    out.add(",\"type\":%u,\"rssi\":%d}",type,rssi);
+  }
+  out.add("]");jsonResult(out,head);
+}
+void handleSlots(bool head) {
+  Json out(s_http.io,sizeof(s_http.io));
+  out.add("{\"active\":%u,\"busy\":%s,\"error\":",
+      settings::activeSlot(), boolean(rc003_client::slotBusy()));
+  out.quoted(rc003_client::slotError());
+  out.add(",\"slots\":[");
+  for(uint8_t i=0;i<3;i++) {
+    String addr,name; uint8_t type; settings::slotInfo(i,addr,name,type);
+    if(i) out.add(",");
+    out.add("{\"address\":");out.quoted(addr.c_str());
+    out.add(",\"name\":");out.quoted(name.c_str());
+    out.add("}");
+  }
+  out.add("],\"keys\":[");
+  uint8_t keys[KEYMAP_MAX_BINDINGS];
+  size_t n=settings::learnedKeys(keys,sizeof(keys));
+  for(size_t i=0;i<n;i++) {
+    if(i)out.add(",");
+    out.add("{\"raw\":%u,\"name\":",keys[i]);
+    out.quoted(settings::keyName(keys[i]).c_str());out.add("}");
+  }
+  out.add("]}");jsonResult(out,head);
 }
 
 void handleStatus(bool head) {
@@ -370,6 +419,10 @@ bool bindingArgs(char *query, uint8_t &raw, uint8_t &kind, uint8_t &mod, uint8_t
   bool known = false;
   const keymap_entry_t *defs = keymap_default_table();
   for (size_t i = 0; i < keymap_default_count(); ++i) if (defs[i].raw_code == raw) known = true;
+  if (!known && settings::activeSlot()) {
+    uint8_t keys[KEYMAP_MAX_BINDINGS]; size_t n=settings::learnedKeys(keys,sizeof(keys));
+    for(size_t i=0;i<n;i++) if(keys[i]==raw) known=true;
+  }
   if (!known) return false;
   if (kind == 1) { cons = 0; return key || mod; }
   if (kind == 2) { mod = key = 0; return cons != 0; }
@@ -779,7 +832,9 @@ void wsCommand(char *msg) {
     hid_action_t acts[KEYMAP_MAX_BINDINGS];
     size_t n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
     while (n > 0) {
-      settings::setBinding(raws[0], 0, 0, 0, 0);
+      if(!settings::setBinding(raws[0], 0, 0, 0, 0)) {
+        wsQueue("{\"type\":\"error\",\"error\":\"reset failed\"}");return;
+      }
       n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
     }
     wsQueue("{\"type\":\"reset\"}");
@@ -914,6 +969,7 @@ void dispatch() {
       (strcmp(version, "HTTP/1.1") != 0 && strcmp(version, "HTTP/1.0") != 0)) {
     errorResponse(400, "Bad Request", "invalid request line"); return;
   }
+  int expectedSlot = -1;
   bool crossSite = false, nonemptyBody = false;
   char host[96] = {}, origin[128] = {};
   for (char *line = strstr(s_http.io, "\r\n"); line && line[2];) {
@@ -921,6 +977,7 @@ void dispatch() {
     char *end = strstr(line, "\r\n");
     if (!end || end == line) break;
     const char saved = *end; *end = 0;
+    if (strncasecmp(line, "X-MRB-Slot:", 11) == 0) expectedSlot=atoi(line+11);
     if (strncasecmp(line, "Host:", 5) == 0) sscanf(line + 5, "%95s", host);
     if (strncasecmp(line, "Origin:", 7) == 0) sscanf(line + 7, "%127s", origin);
     if (strncasecmp(line, "Sec-Fetch-Site:", 15) == 0 && strstr(line + 15, "cross-site")) crossSite = true;
@@ -1018,6 +1075,12 @@ void dispatch() {
   }
   // Setup mode (no password yet), and /login, /logout, /setup themselves are open.
 
+  if(post && expectedSlot>=0 && expectedSlot!=settings::activeSlot()) {
+    errorResponse(409,"Conflict","active slot changed");return;
+  }
+  if (post && rc003_client::slotBusy()) {
+    errorResponse(409,"Conflict","slot changing"); return;
+  }
   if (isLogin) {
     // The form submits with GET (the server refuses non-empty POST bodies), so
     // a password may ride in the query string. Present -> verify and set the
@@ -1077,6 +1140,8 @@ void dispatch() {
     else if (strcmp(target, "/app.css") == 0) respond(200, "OK", "text/css; charset=utf-8", kIndexCssGz, kIndexCssGzLen, true, head);
     else if (strcmp(target, "/app.js") == 0) respond(200, "OK", "application/javascript; charset=utf-8", kIndexJsGz, kIndexJsGzLen, true, head);
     else if (strcmp(target, "/api/status") == 0) handleStatus(head);
+    else if (strcmp(target, "/api/slots") == 0) handleSlots(head);
+    else if (strcmp(target, "/api/nearby") == 0) handleNearby(head);
     else if (strcmp(target, "/api/bindings") == 0) handleBindings(head);
     else if (strcmp(target, "/api/token") == 0) {
       // In setup mode (no password yet) there is no derived token - hand back
@@ -1118,9 +1183,52 @@ void dispatch() {
     else if (strcmp(target, "/api/set") == 0 || strcmp(target, "/api/reset") == 0)
       errorResponse(405, "Method Not Allowed", "writes require POST");
     else errorResponse(404, "Not Found", "not found");
-  } else if (strcmp(target, "/api/pair") == 0) {
-    rc003_client::requestForget();
-    respond(202, "Accepted", "application/json", "{\"ok\":true}", 11);
+  } else if (strcmp(target, "/api/slot") == 0) {
+    char slot[4]={},action[8]={};
+    if(!queryValue(query,"slot",slot,sizeof(slot)) || strlen(slot)!=1 || slot[0]<'0' || slot[0]>'2' ||
+       !queryValue(query,"action",action,sizeof(action))) {
+      errorResponse(400,"Bad Request","invalid slot"); return;
+    }
+    int op=!strcmp(action,"select")?0:!strcmp(action,"add")?1:!strcmp(action,"delete")?2:-1;
+    if(op<0) {errorResponse(400,"Bad Request","invalid action");return;}
+    if(!rc003_client::requestSlot(slot[0]-'0',op)) errorResponse(409,"Conflict","slot operation pending");
+    else respond(202,"Accepted","application/json","{\"ok\":true}",11);
+  } else if (strcmp(target, "/api/connect") == 0) {
+    char addr[18]={},type[4]={};
+    if(!settings::pairingEnabled() || settings::hasRc003() ||
+       !queryValue(query,"address",addr,sizeof(addr)) ||
+       !queryValue(query,"type",type,sizeof(type))) {
+      errorResponse(400,"Bad Request","enable pairing first");return;
+    }
+    bool matched=false;
+    for(size_t i=0;i<rc003_client::nearbyCount();i++) {
+      String a,n;uint8_t t;int r;
+      if(rc003_client::nearbyAt(i,&a,&t,&n,&r) && a==addr && atoi(type)==t) {
+        bool used=false;
+        for(uint8_t j=0;j<3;j++) if(j!=settings::activeSlot()) {
+          String saved,label;uint8_t at;settings::slotInfo(j,saved,label,at);
+          if(saved.equalsIgnoreCase(a))used=true;
+        }
+        if(!used) matched=rc003_client::requestConnect(a,t,n);
+        break;
+      }
+    }
+    if(matched)respond(202,"Accepted","application/json","{\"ok\":true}",11);
+    else errorResponse(409,"Conflict","device unavailable or already assigned");
+  } else if (strcmp(target, "/api/key") == 0) {
+    char raw[4]={},name[224]={},action[8]={};
+    if(rc003_client::slotBusy()) {errorResponse(409,"Conflict","slot changing");return;}
+    if(!queryValue(query,"raw",raw,sizeof(raw)) || !queryValue(query,"action",action,sizeof(action))) {
+      errorResponse(400,"Bad Request","invalid key");return;
+    }
+    char *end=nullptr; unsigned long code=strtoul(raw,&end,16);
+    if(!*raw || *end || !code || code>255) {errorResponse(400,"Bad Request","invalid key");return;}
+    bool ok=false;
+    if(!strcmp(action,"delete")) ok=settings::deleteKey(code);
+    else if(!strcmp(action,"rename") && queryValue(query,"name",name,sizeof(name)) && decodeName(name))
+      ok=settings::renameKey(code,String(name));
+    if(ok) respond(200,"OK","application/json","{\"ok\":true}",11);
+    else errorResponse(400,"Bad Request","key update failed");
   } else if (strcmp(target, "/api/set") == 0) {
     if (!query) errorResponse(400, "Bad Request", "binding parameters required");
     else handleSet(query);

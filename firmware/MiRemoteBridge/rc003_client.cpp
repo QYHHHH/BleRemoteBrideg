@@ -53,6 +53,8 @@
 #include "log.h"
 #include "rc003_report.h"
 #include "settings.h"
+#include "bridge.h"
+#include "hid_server.h"
 
 namespace {
 
@@ -78,6 +80,11 @@ enum class St : uint8_t {
 };
 
 St s_state = St::IDLE;
+volatile bool s_slotBusy = false;
+volatile bool s_slotPaused = false;
+uint8_t s_slotTarget = 0, s_slotAction = 0;
+const char *s_slotError = "";
+
 
 BLEClient *s_client = nullptr;
 BLERemoteCharacteristic *s_charReport = nullptr;
@@ -252,6 +259,7 @@ void rememberNearby(const String &addr, uint8_t addrType, const String &name, in
 // Anything that sends HID reports MUST NOT happen here.
 // ---------------------------------------------------------------------------
 void feedEvents(const rc003_key_event_t *raw, size_t rawCount) {
+  if (s_slotBusy) return;
   rc003_key_event_t norm[3];
   for (size_t i = 0; i < rawCount; i++) {
     const size_t n = rc003_tracker_apply(&s_tracker, &raw[i], norm, 3);
@@ -386,6 +394,7 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
     portEXIT_CRITICAL(&s_pendMux);
     if (alreadyPending) return;
 
+    if (!settings::hasRc003()) return; // Every empty slot requires explicit device selection.
     bool match = false;
     const char *why = nullptr;
 
@@ -396,13 +405,6 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
       if (settings::rc003Address().equalsIgnoreCase(addr)) {
         match = true;
         why = "saved address";
-      } else {
-        const String boundName = settings::rc003Name();
-        if (boundName.length() > 0 && name.length() > 0 && boundName.equalsIgnoreCase(name)) {
-          BR_LOGI(kTagScan, "bound remote re-advertised with a new address (%s)", addr.c_str());
-          match = true;
-          why = "saved name";
-        }
       }
     } else {
       // Unbound: only accept an obvious remote. A bare 0x1812 HID service is
@@ -416,6 +418,11 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
       }
     }
 
+    for (uint8_t i=0;i<3;i++) if(i!=settings::activeSlot()) {
+      String saved, label; uint8_t type;
+      settings::slotInfo(i,saved,label,type);
+      if(saved.length() && saved.equalsIgnoreCase(addr)) return;
+    }
     if (!match) return;
 
     BR_LOGI(kTagScan, "target found: \"%s\" %s rssi=%d type=%u (via %s)", name.c_str(), addr.c_str(), rssi,
@@ -710,12 +717,7 @@ bool connectToAddress(const String &addrText, uint8_t addrType) {
     s_connectedName = settings::hasRc003() ? settings::rc003Name() : String("Xiaomi BT Remote");
   }
 
-  // Persist what we were actually able to reach; that is what makes the next
-  // reconnect a direct one.
-  if (!settings::hasRc003() || !settings::rc003Address().equalsIgnoreCase(s_connectedAddr) ||
-      settings::rc003AddrType() != addrType) {
-    settings::setRc003(s_connectedAddr, addrType, s_connectedName);
-  }
+
   return true;
 }
 
@@ -862,7 +864,29 @@ void handleRequests() {
 // Central task
 // ---------------------------------------------------------------------------
 void taskLoop() {
+  if (s_slotBusy) {
+    if (!s_slotPaused) {
+      BLEDevice::getScan()->stop();
+      if (s_client && s_client->isConnected()) {
+        s_client->disconnect();
+        vTaskDelay(pdMS_TO_TICKS(50));
+        return;
+      }
+      clearPending();
+      portENTER_CRITICAL(&s_reqMux);
+      s_reqConnect=s_reqForget=s_reqReconnect=s_reqScanNow=false;
+      portEXIT_CRITICAL(&s_reqMux);
+      s_slotPaused = true;
+    }
+    vTaskDelay(pdMS_TO_TICKS(20));
+    return;
+  }
   handleRequests();
+  if (!settings::hasRc003() && !settings::pairingEnabled()) {
+    setState(St::IDLE, "empty slot");
+    vTaskDelay(pdMS_TO_TICKS(100));
+    return;
+  }
 
   switch (s_state) {
     case St::IDLE:
@@ -951,6 +975,28 @@ void taskLoop() {
 
     case St::DISCOVERING:
       if (discoverAndSubscribe()) {
+        ble_gap_conn_desc peer{};
+        if (ble_gap_conn_find(s_client->getConnId(),&peer) ||
+            !peer.sec_state.encrypted || !peer.sec_state.bonded) {
+          BR_LOGW(kTag,"pairing not complete; identity not saved");
+          s_client->disconnect();setState(St::SCANNING,"pairing incomplete");break;
+        }
+        {
+          BLEAddress identity(peer.peer_id_addr);
+          bool duplicate=false;
+          for(uint8_t slot=0;slot<3;slot++) {
+            if(slot==settings::activeSlot()) continue;
+            String address,name;uint8_t type;
+            settings::slotInfo(slot,address,name,type);
+            if(address==identity.toString() && type==identity.getType()) duplicate=true;
+          }
+          if(duplicate || !settings::setRc003(identity.toString(), identity.getType(), s_connectedName)) {
+            s_slotError=duplicate ? "此遥控器已属于其他槽位" : "保存设备失败，请重试";
+            s_client->disconnect();setState(St::SCANNING,"identity rejected");break;
+          }
+          s_connectedAddr=identity.toString();
+        }
+        settings::setPairingEnabled(false);
         setState(St::READY, "subscribed");
         event_bus::post(BR_EV_RC_READY);
       } else {
@@ -1011,6 +1057,58 @@ void taskEntry(void *arg) {
 }  // namespace
 
 namespace rc003_client {
+
+bool slotBusy() { return s_slotBusy; }
+const char *slotError() { return s_slotError; }
+bool requestSlot(uint8_t slot, uint8_t action) {
+  if (slot>2 || action>2 || s_slotBusy || !hid_server::slotSwitchSafe()) return false;
+  s_slotTarget=slot; s_slotAction=action; s_slotError="";
+  s_slotPaused=false; s_slotBusy=true;
+  return true;
+}
+void serviceSlot() {
+  if (!s_slotBusy || !s_slotPaused || event_bus::pending() || !hid_server::slotSwitchSafe()) return;
+  bridge::releaseAllKeys();
+  BLEDevice::stopAdvertising();
+  const uint8_t old=settings::activeSlot();
+  const String addr=settings::rc003Address();
+  const uint8_t type=settings::rc003AddrType();
+  bool ok=true;
+  if (settings::hasRc003())
+    ok=ble_bonds::archiveSlot(old,BLEAddress(addr,type));
+  if (ok) ok=settings::selectSlot(s_slotTarget);
+  if (ok && s_slotAction==2) {
+    ok=ble_bonds::deleteSlot(s_slotTarget,
+        settings::hasRc003() ? BLEAddress(settings::rc003Address(),settings::rc003AddrType()) : BLEAddress());
+    if(ok) { settings::clearRc003(); settings::setPairingEnabled(false); }
+  }
+  if (ok && s_slotAction==1) {
+    if (settings::hasRc003()) ok=false; // Delete explicitly before adding.
+    else settings::setPairingEnabled(true);
+  }
+  if (ok && settings::hasRc003() && ble_bonds::hasSlotArchive(s_slotTarget, BLEAddress(settings::rc003Address(),settings::rc003AddrType())))
+    ok=ble_bonds::restoreSlot(s_slotTarget,
+        BLEAddress(settings::rc003Address(),settings::rc003AddrType()));
+  if (!ok) {
+    s_slotError="槽位操作失败，保留原配置";
+    settings::selectSlot(old);
+    if(addr.length()) ble_bonds::restoreSlot(old,BLEAddress(addr,type));
+  }
+  s_connectedAddr=""; s_connectedName="";
+  s_remoteBatteryValid=false; s_scanBurstStartMs=0; s_directAttempts=0;
+  rc003_tracker_reset(&s_tracker);
+  setState(St::IDLE,"slot operation");
+  s_slotPaused=false; s_slotBusy=false;
+  hid_server::ensureAdvertising();
+}
+
+bool restoreActiveSlot() {
+  if(settings::hasRc003() && ble_bonds::hasSlotArchive(settings::activeSlot(),
+      BLEAddress(settings::rc003Address(),settings::rc003AddrType())))
+    return ble_bonds::restoreSlot(settings::activeSlot(),
+      BLEAddress(settings::rc003Address(),settings::rc003AddrType()));
+  return true;
+}
 
 bool begin() {
   if (s_taskHandle) return true;

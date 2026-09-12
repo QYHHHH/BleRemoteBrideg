@@ -35,6 +35,10 @@ def demo_html():
   let bindings = [];
   try { bindings = JSON.parse(sessionStorage.getItem('mrb-ui-demo') || '[]'); } catch (_) {}
   const control = window.__demo = {fault:null, calls:[], status:{heapTotal:204800,heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
+  let active=0;
+  const devices=[{name:'RC003',address:''},{name:'',address:''},{name:'',address:''}],maps=[bindings,[],[]],keys=[[],[],[]];
+  control.devices=devices;control.keys=keys;
+  window.WebSocket=class {constructor(url){this.url=url;this.readyState=1;queueMicrotask(()=>this.onopen&&this.onopen())}close(){this.readyState=3;this.onclose&&this.onclose({code:1000})}};
   window.fetch = async (input, options={}) => {
     const u = new URL(input, 'http://preview.invalid');
     const method = options.method || 'GET';
@@ -42,12 +46,28 @@ def demo_html():
     if (control.fault === 'offline') throw new TypeError('Failed to fetch');
     if (control.fault === 'json') return new Response('{', {status:200});
     const json = (data, status=200) => new Response(JSON.stringify(data), {status,headers:{'Content-Type':'application/json'}});
+    if (method === 'GET' && u.pathname === '/api/token') return json({token:'preview',occupied:false});
+    if (method === 'GET' && u.pathname === '/api/nearby') return json([{name:'测试遥控器',address:'00:11:22:33:44:0'+active,type:0,rssi:-45}]);
+    if (method === 'GET' && u.pathname === '/api/slots') return json({active,busy:false,error:'',slots:devices,keys:keys[active]});
     if (method === 'GET' && u.pathname === '/api/status') return json({...control.status,bindings:bindings.length});
-    if (method === 'GET' && u.pathname === '/api/bindings') return json({bindings,defaults,effective:base.map(a=>bindings.find(b=>b.raw===a.raw)||a)});
+    if (method === 'GET' && u.pathname === '/api/bindings') return json({bindings,defaults,effective:active?keys[active].map(k=>bindings.find(b=>b.raw===k.raw)||{raw:k.raw,kind:0,mod:0,key:0,cons:0}):base.map(a=>bindings.find(b=>b.raw===a.raw)||a)});
     if (method !== 'POST') return json({error:'not found'},404);
     if (control.fault === 'write') return json({error:'模拟：设备拒绝保存'},400);
     if (control.fault === 'mismatch') return json({ok:true});
-    if (u.pathname === '/api/pair') return json({ok:true});
+    if (u.pathname === '/api/slot') {
+      maps[active]=bindings;active=+u.searchParams.get('slot');bindings=maps[active];
+      const action=u.searchParams.get('action');
+      if(action==='add')control.pairing=true;
+      if(action==='delete')devices[active]={name:'',address:''};
+      return json({ok:true});
+    }
+    if(u.pathname==='/api/connect'){devices[active]={name:'测试遥控器',address:u.searchParams.get('address')};control.pairing=false;return json({ok:true});}
+    if(u.pathname==='/api/key'){
+      const raw=parseInt(u.searchParams.get('raw'),16),action=u.searchParams.get('action');
+      if(action==='rename')keys[active].find(k=>k.raw===raw).name=u.searchParams.get('name');
+      else {keys[active]=keys[active].filter(k=>k.raw!==raw);bindings=bindings.filter(k=>k.raw!==raw)}
+      return json({ok:true});
+    }
     if (u.pathname === '/api/set') {
       const raw = parseInt(u.searchParams.get('raw'),16), kind = Number(u.searchParams.get('kind'));
       const mod = Number(u.searchParams.get('mod')), key = Number(u.searchParams.get('key')), cons = Number(u.searchParams.get('cons'));
@@ -59,7 +79,7 @@ def demo_html():
     try { sessionStorage.setItem('mrb-ui-demo',JSON.stringify(bindings)); } catch (_) {}
     return json({ok:true});
   };
-  document.addEventListener('DOMContentLoaded',()=>document.getElementById('demo').hidden=false);
+  document.addEventListener('DOMContentLoaded',()=>document.getElementById('demo')&&(document.getElementById('demo').hidden=false));
 })();
 </script>
 '''.replace("FIXTURE", json.dumps(defaults, ensure_ascii=False))
