@@ -557,7 +557,14 @@ bool discoverAndSubscribe() {
   // interval, so ordinary packet loss can never trip it.
   s_client->updateConnParams(12, 12, 0, 100);
 
-  std::map<std::string, BLERemoteService *> *services = s_client->getServices();
+  // The client owns these objects across disconnects. Reuse handles only for
+  // the same saved peer; switching devices or failed subscription rediscover.
+  static std::map<std::string, BLERemoteService *> *cached=nullptr;
+  static String cachedPeer;
+  const bool reuse=cached && cachedPeer==s_connectedAddr && !s_newPeer.length();
+  std::map<std::string, BLERemoteService *> *services = reuse ? cached : s_client->getServices();
+  cached=services;cachedPeer=s_connectedAddr;
+  BR_LOGI(kTagGatt,"service cache %s",reuse?"reused":"refreshed");
   if (!services || services->empty()) {
     BR_LOGE(kTagGatt, "service discovery returned nothing");
     return false;
@@ -698,6 +705,7 @@ bool discoverAndSubscribe() {
   }
 
   if (subscribed == 0) {
+    cached=nullptr;
     BR_LOGE(kTagGatt, "no notification source found - is this an RC003?");
     return false;
   }
