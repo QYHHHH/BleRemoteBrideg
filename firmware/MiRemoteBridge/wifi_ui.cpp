@@ -787,9 +787,9 @@ void wsSendStatus() {
   char buf[320];
   Json out(buf, sizeof(buf));
   out.add("{\"type\":\"status\",\"keyPresses\":%lu,\"keyEvents\":%lu,\"lastKey\":%u,\"activeKey\":%u,"
-          "\"remoteConnected\":%s,\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
+          "\"remoteConnected\":%s,\"remoteState\":\"%s\",\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
       (unsigned long)bridge::keyPresses(), (unsigned long)bridge::keyEvents(), bridge::lastKeyRaw(), bridge::activeRawCode(),
-      boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
+      boolean(rc003_client::connected()), rc003_client::stateName(), boolean(hid_server::hostConnected()),
       rc003_client::batteryLevel(), (unsigned)keymap_binding_count(),
       (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);

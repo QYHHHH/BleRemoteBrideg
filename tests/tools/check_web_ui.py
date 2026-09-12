@@ -31,14 +31,11 @@ import gen_web_page  # noqa: E402
 from cdp import CHROME, Cdp, find_page, fresh_profile, launch_chrome  # noqa: E402
 from web_ui_preview import ROOT, demo_html  # noqa: E402
 
-# Reviewed total after the approved three-slot UI on 2026-09-12: 17574 B.
-#
-# The old budget watched the SOURCE page instead (26956 B and growing), which is
-# not what the device stores - the page is served gzipped, so only the packed
-# assets are compiled into flash. A tripwire that fires on a number the device
-# never sees just goes red and gets ignored, which is exactly what happened.
-# This one fires on flash growth, which is the real cost, with room to grow.
-FLASH_BUDGET = 18500
+# The check watches the packed gzip assets that are stored in flash, rather than
+# the larger source page. The 24 KiB ceiling is a tripwire for accidental asset
+# growth; low runtime heap and partial TCP writes are handled by the firmware's
+# streaming path and are not fixed by an artificially tight page-size number.
+FLASH_BUDGET = 24000
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.

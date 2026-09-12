@@ -32,7 +32,7 @@ button{font:inherit;color:inherit;cursor:pointer}button:disabled{cursor:not-allo
 main{max-width:1680px;margin:0 auto;padding:12px 18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 18px #26324904}
 .hero{display:flex;align-items:center;gap:18px;padding:10px 16px;margin-bottom:10px}
-.hero .t{flex:1;min-width:0}.hero h1{margin-bottom:4px}.hero p{font-size:12px;color:var(--mut)}
+.hero .t{flex:1;min-width:0}.hero h1{margin-bottom:4px}.hero p{font-size:12px;color:var(--mut)}.hero #diag:empty{display:none}.hero #diag.wake{margin:7px 0 0;padding:5px 8px;color:#8b6b37;background:#fff9ef;border:1px solid #f0ddbb;border-radius:6px}
 .btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 14px;border:1px solid #dfe3e9;border-radius:7px;background:#fff;font-size:12px;white-space:nowrap}
 .btn:hover{background:#f8fafc}.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}.btn.p:hover{background:#0966d9}
 .btn.d{color:#b45345}
@@ -181,7 +181,7 @@ for(i=0;i<10;i++)KB.push([30+i,String((i+1)%10)]);
 for(i=0;i<12;i++)KB.push([58+i,'F'+(i+1)]);
 var CS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
 var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
-var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null,wsOpened:false,claimed:false};
+var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null,wsOpened:false,claimed:false,switching:false};
 function hx(v){return v.toString(16).toUpperCase().padStart(2,'0')}
 function pick(l,v,d){for(var i=0;i<l.length;i++)if(l[i][0]===v)return l[i][1];return d}
 function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return pick(CS,a.cons,'媒体 0x'+hx(a.cons));
@@ -274,15 +274,16 @@ Array.prototype.forEach.call(document.querySelectorAll('.learned-key'),function(
 function memory(j){function kb(n){return typeof n==='number'&&n>=0?(n/1024).toFixed(1)+' KiB':'—'}
 if(typeof j.heapFree!=='number')return;
 $('memFree').textContent=kb(j.heapFree)+' 可用';$('memDetail').textContent='历史最低 '+kb(j.heapMin)+' · 最大连续块 '+kb(j.heapLargest);$('memState').textContent='更新于 '+new Date().toLocaleTimeString()+' · 约 5 秒更新';var valid=typeof j.heapTotal==='number'&&j.heapTotal>0&&j.heapFree>=0&&j.heapFree<=j.heapTotal,used=valid?100*(j.heapTotal-j.heapFree)/j.heapTotal:null;if($('memRing')){$('memRing').style.setProperty('--used',used===null?'0%':used+'%');$('memPct').textContent=used===null?'—':used.toFixed(1)+'%';$('memTotal').textContent=valid?'总堆内存 '+kb(j.heapTotal):'总堆内存未知';$('memRing').setAttribute('aria-label',used===null?'已使用内存比例未知':'已使用堆内存 '+used.toFixed(1)+'%')}}
-function stat(j){S.lastStatus=j;memory(j);var rc=!!j.remoteConnected,h=!!j.hostConnected;
-// Version and build stamp come from /api/status, i.e. from the running
+function connectionHint(j){var e=$("diag"),s=String(j&&j.remoteState||""),t=S.switching?"正在切换遥控器，请按一下任意键唤醒。":s==="DISCOVERING"?"正在发现服务，请按一下任意键唤醒。":s==="CONNECTING"||s==="DIRECT"?"正在连接，请按一下任意键唤醒。":s==="SCANNING"||s==="BACKOFF"?"正在搜索，请按一下任意键唤醒。":"";e.textContent=t;e.className=t?"wake":""}function stat(j){S.lastStatus=j;memory(j);var rc=!!j.remoteConnected,h=!!j.hostConnected;// Version and build stamp come from /api/status, i.e. from the running
 // firmware, not from the generated page bytes - so it can never go stale.
 if(j.type!=='status'||Object.prototype.hasOwnProperty.call(j,'fwVersion')||Object.prototype.hasOwnProperty.call(j,'buildTime'))$('ver').textContent=(j.fwVersion||'')+(j.buildTime?' · build '+j.buildTime:'');
 var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
 function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
 pill('pR',rc,rc?'遥控器已连接':'遥控器未连接');pill('pH',h,h?'被控蓝牙已连接':'被控蓝牙未连接');pill('pB',bat!=='未知',bat==='未知'?'电量未知':'电量 '+bat);
 $('h1').textContent=(rc&&h)?'RC003 已就绪':(rc?'遥控器已连接，等待主机':'等待遥控器连接');
-$('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。');if(typeof drawSlots==='function')drawSlots();if(typeof j.activeKey==='number')highlight(j.activeKey)}
+$('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。');
+connectionHint(j);if(typeof drawSlots==='function')drawSlots();
+if(typeof j.activeKey==='number')highlight(j.activeKey)}
 function load(manual){if(S.load||S.busy||$('ed').open||$('rd').open)return;S.load=true;const socket=S.ws;btns();
 return req('/api/slots').then(applySlots).then(function(){return req('/api/bindings')}).then(apply).then(function(){return req('/api/status')}).then(function(j){stat(j);online(socket===S.ws&&!!socket&&socket.readyState===1);if(manual)toast('已刷新')})
 .catch(function(e){if(e&&e.relogin){location.href='/login';return}
@@ -368,12 +369,12 @@ function drawSlots(){
 }
 async function slotAction(action,slot){
  if(!S.on||S.busy||S.load||S.slotBusy)return;
- S.busy=true;btns();$('ed').close();editor.close();if(typeof pairing!=='undefined')pairing.close();
+  S.busy=true;S.switching=action==='select';if(S.switching)connectionHint({remoteState:'CONNECTING'});btns();$('ed').close();editor.close();if(typeof pairing!=='undefined')pairing.close();
  try{
   await req('/api/slot?slot='+slot+'&action='+action,'POST');
   for(let i=0;i<200;i++){const j=await req('/api/slots');applySlots(j);if(!j.busy){if(j.error)throw Error(j.error);break}if(i===199)throw Error('操作仍在进行，请稍候');await new Promise(r=>setTimeout(r,150))}
   await req('/api/bindings').then(apply);await req('/api/status').then(stat);
- }catch(e){toast(err(e))}finally{S.busy=false;btns()}
+ }catch(e){toast(err(e))}finally{S.busy=false;S.switching=false;connectionHint(S.lastStatus||{});btns()}
 }
 $('slots').onclick=e=>{const b=e.target.closest('[data-slot]');if(b&&+b.dataset.slot!==selectedSlot)slotAction('select',+b.dataset.slot)};
 const pairing=document.createElement('dialog');pairing.innerHTML='<div class="dh"><h2>选择遥控器</h2><button class="btn" id="pairClose">关闭</button></div><div class="db"><p>进入配对模式后选择设备，按信号强度排序。搜索阶段暂无 SN，请用名称和 MAC 区分。</p><div id="nearby"></div></div><div class="da"><button class="btn" id="scanRefresh">刷新搜索结果</button></div>';document.body.append(pairing);
