@@ -9,8 +9,8 @@
 | 层级 | 内容 | 状态 | 证据 |
 | --- | --- | --- | --- |
 | L1 编译验证 | `esp32:esp32:esp32c3:FlashMode=dio,PartitionScheme=huge_app` | **通过**（2026-09-11 新版 UI 编译，非本次真机验证） | flash 1392931 B (44%)，全局 RAM 41220 B (12%)；CLI exit 0，无 stderr |
-| L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11096, failed: 0` |
-| L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `137 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
+| L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11098, failed: 0` |
+| L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `139 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
 | L4 上游（RC003 → C3） | 扫描、直连、配对加密、服务发现、订阅通知、逐键解析 | **通过** | 13/13 键识别，0 未知码；延迟 min 190 / median 215 / max 361 µs（§5.1、§5.2）|
 | L4 下游（C3 → Windows） | 键盘 + 媒体键 | **通过**（用户实测 13 键全部可用） | 两集合两报告 ID + 自建服务层（§4.6、§4.7）；蓝牙关→开自动重连 |
 | L4 下游（C3 → iPhone） | iOS BLE HID | **通过**（音量键、方向键实测；iOS 订阅了键盘/Consumer/电池全部三条通知） | §4.9 |
@@ -98,7 +98,7 @@ python tests/model/check_vectors.py
    `CAPS` 响应不算按键。
 3. **按下/松开状态机向量**（8 条）：重复按下被吞掉、重复松开被吞掉、未松开就按新键会先自动释放旧键。
 4. **键表向量**（20 条）：13 个物理键 + 5 个别名码 + 2 个未知码必须映射为"无"。
-5. **运行时模式向量**（8 条）：返回/电源/语音三组可选模式的每一种取值。
+5. **运行时模式向量**（10 条）：返回/电源/语音三组可选模式的每一种取值。
 6. **未知码全覆盖检查**：遍历 0x00–0xFF，任何非已知键码都必须映射为"无"——保证不会把杂散字节
    当按键发出去。
 7. **HID 报告描述符解析**：真实解析 `hid_report_map.h` 的字节流，断言
@@ -130,7 +130,7 @@ python tests/model/check_vectors.py
 
 ```
 [TEST   ] --- vector suite ---
-[TEST   ] vector suite: 137 passed, 0 failed
+[TEST   ] vector suite: 139 passed, 0 failed
 [TEST   ] --- dispatch simulation ---
 [TEST   ] dispatch simulation: 44 passed, 0 failed
 [TEST   ] selftest total: 0 failure(s)
@@ -425,7 +425,7 @@ Arduino 封装层做不到（见上），所以下一步是**绕过 `BLEHIDDevic
 **没有改动**：`ble_core`、`ble_bonds`、`rc003_client`、`keymap`、`event_bus`、`bridge`、`cli`。
 RC003 那一侧和配对/Bond 逻辑完全不受影响。
 
-**状态**：编译通过（0 warning，686595 B），模型检查 11096/0。**已上机，Windows 枚举通过。**
+**状态**：编译通过（0 warning，686595 B），模型检查 11098/0。**已上机，Windows 枚举通过。**
 
 上机结果（2026-09-10 19:33，见 `build/win-pair4.log` 与 `build/win-diag4.txt`）：
 
@@ -572,7 +572,7 @@ python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，�
 断言失败时的排查工具：`python tests/tools/spot_audit.py`（`--raw 0x52` 可指定键）—— 逐键打印
 三态各自改了哪些计算样式，并把遥控器截图写到 `outputs/`；有死状态就以非零码退出。
 
-**已验证（125 项断言，全部通过）**：
+**已验证（150 项断言，全部通过）**：
 
 > 修正记录：这层断言一度**跑不到也跑不对**，两个独立缺陷 ——
 > ① 执行入口要求传入外部 `agent-browser` 可执行文件，而它不在本仓库工具链里，
@@ -916,17 +916,17 @@ pass clear（串口） → 清除密码，回到 setup 模式
 | --- | --- | --- | --- | --- | --- |
 | 1 | 音量 + | `0x80` | Consumer `0x00E9` | | ✅ |
 | 2 | 音量 − | `0x81` | Consumer `0x00EA` | | ✅ |
-| 3 | 返回 | `0xF1` | Consumer `0x0224` | | ✅ |
+| 3 | 返回 | `0xF1` | 键盘 Backspace `0x2A` | | ✅ |
 | 4 | 上 | `0x52` | 键盘 `0x52` | | ✅ |
 | 5 | 下 | `0x51` | 键盘 `0x51` | | ✅ |
 | 6 | 左 | `0x50` | 键盘 `0x50` | | ✅ |
 | 7 | 右 | `0x4F` | 键盘 `0x4F` | | ✅ |
 | 8 | 确定 | `0x28` | 键盘 `0x28` | | ✅ |
-| 9 | 主页 | **`0x4A`** | LSUI + `0x07`（Win+D） | | ✅ |
+| 9 | 主页 | **`0x4A`** | LGUI + `0x2B`（Win+Tab） | | ✅ |
 | 10 | 菜单 | **`0x65`** | 键盘 `0x2C`（Space） | | ✅ |
-| 11 | 电视 | **`0x35`** | 键盘 `0x41`（F8） | | ✅ |
-| 12 | 电源 | `0x66` | LALT + `0x3D`（Alt+F4） | | ✅ |
-| 13 | 语音 | **`0x3E`** | RALT + `0x36`（RAlt+,） | | ✅ |
+| 11 | 电视 | **`0x35`** | 键盘 `0x09`（F） | | ✅ |
+| 12 | 电源 | `0x66` | 键盘 `0x29`（Esc） | | ✅ |
+| 13 | 语音 | **`0x3E`** | LCTRL + LGUI（Ctrl+Win） | | ✅ |
 
 **加粗的 4 个是"第三方记录里写错、实测纠正"的**：`0x4A`/`0x65`/`0x35`/`0x3E` 原本被列为备用码。
 已按实测值改主码，并把第三方那套留作同义词。详见 `KEYMAP.md` §1。

@@ -185,15 +185,16 @@ DEFAULT_TABLE: dict[int, dict] = {
     0x50: {"kind": KIND_KEYBOARD, "keycode": 0x50},
     0x4F: {"kind": KIND_KEYBOARD, "keycode": 0x4F},
     0x28: {"kind": KIND_KEYBOARD, "keycode": 0x28},
-    0x4A: {"kind": KIND_KEYBOARD, "modifier": 0x08, "keycode": 0x07},  # Home -> Win+D
+    0x4A: {"kind": KIND_KEYBOARD, "modifier": 0x08, "keycode": 0x2B},  # Home -> Win+Tab
     0x65: {"kind": KIND_KEYBOARD, "keycode": 0x2C},                    # Menu -> Space
-    0x35: {"kind": KIND_KEYBOARD, "keycode": 0x41},                    # TV   -> F8
+    0x35: {"kind": KIND_KEYBOARD, "keycode": 0x09},                    # TV   -> F
 }
 
 BACK_MODES = {
     "consumer_back": {"kind": KIND_CONSUMER, "consumer": 0x0224},
     "kb_esc": {"kind": KIND_KEYBOARD, "keycode": 0x29},
     "kb_alt_left": {"kind": KIND_KEYBOARD, "modifier": 0x04, "keycode": 0x50},
+    "kb_backspace": {"kind": KIND_KEYBOARD, "keycode": 0x2A},
 }
 POWER_MODES = {
     "kb_alt_f4": {"kind": KIND_KEYBOARD, "modifier": 0x04, "keycode": 0x3D},
@@ -204,15 +205,16 @@ POWER_MODES = {
 VOICE_MODES = {
     "kb_ralt_comma": {"kind": KIND_KEYBOARD, "modifier": 0x40, "keycode": 0x36},
     "consumer_mute": {"kind": KIND_CONSUMER, "consumer": 0x00E2},
+    "kb_lctrl_lgui": {"kind": KIND_KEYBOARD, "modifier": 0x09, "keycode": 0x00},
     "disabled": {"kind": KIND_NONE},
 }
 
 
 def keymap_lookup(
     code: int,
-    back: str = "consumer_back",
-    power: str = "kb_alt_f4",
-    voice: str = "kb_ralt_comma",
+    back: str = "kb_backspace",
+    power: str = "kb_esc",
+    voice: str = "kb_lctrl_lgui",
 ) -> dict:
     if code == 0xF1:
         return dict(BACK_MODES[back])

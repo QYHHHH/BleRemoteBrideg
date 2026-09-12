@@ -83,6 +83,7 @@
 // ===========================================================================
 #define HID_KEY_NONE         0x00
 #define HID_KEY_A            0x04
+#define HID_KEY_F            0x09
 #define HID_KEY_D            0x07
 #define HID_KEY_ENTER        0x28
 #define HID_KEY_ESC          0x29

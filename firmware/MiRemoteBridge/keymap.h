@@ -84,6 +84,7 @@ typedef enum {
   MAP_BACK_CONSUMER_BACK = 0,  // AC Back      (browser/app back)
   MAP_BACK_KEYBOARD_ESC,       // Esc
   MAP_BACK_KEYBOARD_ALT_LEFT,  // Alt + Left
+  MAP_BACK_KEYBOARD_BACKSPACE, // Backspace
   MAP_BACK_COUNT
 } keymap_back_mode_t;
 

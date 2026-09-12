@@ -52,17 +52,17 @@ RC003 复用了 HID 输入报告的格式，但**没有使用标准 HID Usage**�
 | --- | --- | --- | --- | --- | --- |
 | 1 | 音量 + | `0x80` | Consumer Volume Up `0x00E9` | 媒体键 | 共用 ID 1 |
 | 2 | 音量 − | `0x81` | Consumer Volume Down `0x00EA` | 媒体键 | 共用 ID 1 |
-| 3 | 返回 | `0xF1` | Consumer AC Back `0x0224`（可配置） | 媒体键 | 共用 ID 1 |
+| 3 | 返回 | `0xF1` | 键盘 Backspace `0x2A`（可配置） | 键盘 | 共用 ID 1 |
 | 4 | 上 | `0x52` | 键盘 ↑ `0x52` | 键盘 | 共用 ID 1 |
 | 5 | 下 | `0x51` | 键盘 ↓ `0x51` | 键盘 | 共用 ID 1 |
 | 6 | 左 | `0x50` | 键盘 ← `0x50` | 键盘 | 共用 ID 1 |
 | 7 | 右 | `0x4F` | 键盘 → `0x4F` | 键盘 | 共用 ID 1 |
 | 8 | 确定 | `0x28` | Enter `0x28` | 键盘 | 共用 ID 1 |
-| 9 | 主页 | `0x4A` | Win + D（`LGUI` + `0x07`） | 键盘 | 共用 ID 1 |
+| 9 | 主页 | `0x4A` | Win + Tab（`LGUI` + `0x2B`） | 键盘 | 共用 ID 1 |
 | 10 | 菜单 | `0x65` | 空格 `0x2C` | 键盘 | 共用 ID 1 |
-| 11 | 电视 | `0x35` | F8 `0x41` | 键盘 | 共用 ID 1 |
-| 12 | 电源 | `0x66` | Alt + F4（`LALT` + `0x3D`，可配置） | 键盘 | 共用 ID 1 |
-| 13 | 语音 | `0x3E` | 右 Alt + 逗号（可配置） | 键盘 | 共用 ID 1 |
+| 11 | 电视 | `0x35` | F `0x09` | 键盘 | 共用 ID 1 |
+| 12 | 电源 | `0x66` | Esc `0x29`（可配置） | 键盘 | 共用 ID 1 |
+| 13 | 语音 | `0x3E` | 左 Ctrl + 左 Win（可配置） | 键盘 | 共用 ID 1 |
 
 > 前 12 行是 2026-09-10 在本机 C3 + 真实 RC003 上**逐键实测**得到的码。四组同义词
 > （`0x24` 主页 / `0x5D` 菜单 / `0xC0` 电视 / `0x04` 语音）来自第三方记录，在本机未出现，
@@ -73,7 +73,7 @@ RC003 复用了 HID 输入报告的格式，但**没有使用标准 HID Usage**�
 - **方向键/确定**直接用标准方向键与 Enter，桌面环境下最通用。
 - **音量 ±** 走 Consumer Control 页，而不是键盘按键，这样不会干扰正在输入的文本框 —— 这正是
   "标准媒体控制设备"应有的行为。
-- **主页 = Win+D**、**电视 = F8**、**菜单 = 空格** 是实用默认值。
+- **主页 = Win+Tab**、**电视 = F**、**菜单 = 空格** 是实用默认值。
 
 ---
 
@@ -85,9 +85,10 @@ RC003 复用了 HID 输入报告的格式，但**没有使用标准 HID Usage**�
 
 | 模式名 | 输出 | 适用场景 |
 | --- | --- | --- |
-| `consumer_back`（默认） | Consumer AC Back `0x0224` | 浏览器/应用内返回 |
+| `consumer_back` | Consumer AC Back `0x0224` | 浏览器/应用内返回 |
 | `kb_esc` | Esc `0x29` | 关闭对话框、退出全屏、多数浏览器的上一页 |
 | `kb_alt_left` | Alt + ← | 资源管理器/浏览器返回 |
+| `kb_backspace`（默认） | 键盘 Backspace `0x2A` | 删除字符、返回 |
 
 ```
 map back kb_esc
@@ -97,10 +98,10 @@ map back kb_esc
 
 | 模式名 | 输出 |
 | --- | --- |
-| `kb_alt_f4`（默认） | Alt + F4 |
+| `kb_alt_f4` | Alt + F4 |
 | `consumer_sleep` | Consumer Sleep `0x0032` |
 | `consumer_power` | Consumer Power `0x0030` |
-| `kb_esc` | Esc `0x29` |
+| `kb_esc`（默认） | Esc `0x29` |
 
 ```
 map power consumer_sleep
@@ -113,9 +114,9 @@ map power consumer_sleep
 
 | 模式名 | 输出 |
 | --- | --- |
-| `kb_ralt_comma`（出厂默认） | 右 Alt + 逗号（微信/QQ 语音输入热键） |
+| `kb_ralt_comma` | 右 Alt + 逗号（微信/QQ 语音输入热键） |
 | `consumer_mute` | Consumer Mute `0x00E2` |
-| `kb_lctrl_lgui` | **左 Ctrl + 左 Win 同时按下**（纯修饰键和弦，无主键——适合给支持自定义 `Ctrl+Win+X` 热键的软件当触发前缀） |
+| `kb_lctrl_lgui`（默认） | **左 Ctrl + 左 Win 同时按下**（纯修饰键和弦，无主键——适合给支持自定义 `Ctrl+Win+X` 热键的软件当触发前缀） |
 | `disabled` | 不转发（按下时只打印一行日志） |
 
 ```map

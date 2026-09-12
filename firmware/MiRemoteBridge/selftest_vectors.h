@@ -148,33 +148,35 @@ static const st_keymap_vec_t kKeymapVectors[] = {
   { 80, "LEFT", { 1, 0, 80, 0 } },
   { 79, "RIGHT", { 1, 0, 79, 0 } },
   { 40, "OK", { 1, 0, 40, 0 } },
-  { 36, "HOME_ALT", { 1, 8, 7, 0 } },
+  { 36, "HOME_ALT", { 1, 8, 43, 0 } },
   { 93, "MENU_ALT", { 1, 0, 44, 0 } },
-  { 192, "TV_ALT", { 1, 0, 65, 0 } },
-  { 241, "BACK", { 2, 0, 0, 548 } },
-  { 102, "POWER", { 1, 4, 61, 0 } },
-  { 4, "VOICE_ALT", { 1, 64, 54, 0 } },
-  { 62, "VOICE", { 1, 64, 54, 0 } },
-  { 74, "HOME", { 1, 8, 7, 0 } },
+  { 192, "TV_ALT", { 1, 0, 9, 0 } },
+  { 241, "BACK", { 1, 0, 42, 0 } },
+  { 102, "POWER", { 1, 0, 41, 0 } },
+  { 4, "VOICE_ALT", { 1, 9, 0, 0 } },
+  { 62, "VOICE", { 1, 9, 0, 0 } },
+  { 74, "HOME", { 1, 8, 43, 0 } },
   { 101, "MENU", { 1, 0, 44, 0 } },
-  { 53, "TV", { 1, 0, 65, 0 } },
-  { 255, "POWER_ALT", { 1, 4, 61, 0 } },
+  { 53, "TV", { 1, 0, 9, 0 } },
+  { 255, "POWER_ALT", { 1, 0, 41, 0 } },
   { 233, "UNKNOWN_0xE9", { 0, 0, 0, 0 } },
   { 1, "UNKNOWN_0x01", { 0, 0, 0, 0 } },
 };
 static const size_t kKeymapVectorCount = 20;
 
 static const st_mode_vec_t kModeVectors[] = {
+  { 0, 3, 241, { 1, 0, 42, 0 } },
   { 0, 1, 241, { 1, 0, 41, 0 } },
   { 0, 2, 241, { 1, 4, 80, 0 } },
   { 0, 0, 241, { 2, 0, 0, 548 } },
-  { 2, 2, 4, { 0, 0, 0, 0 } },
+  { 2, 2, 4, { 1, 9, 0, 0 } },
+  { 2, 3, 4, { 0, 0, 0, 0 } },
   { 2, 1, 4, { 2, 0, 0, 226 } },
   { 1, 1, 102, { 2, 0, 0, 50 } },
   { 1, 2, 102, { 2, 0, 0, 48 } },
   { 1, 3, 102, { 1, 0, 41, 0 } },
 };
-static const size_t kModeVectorCount = 8;
+static const size_t kModeVectorCount = 10;
 
 static const uint8_t kAllKeyCodes[] = {128, 129, 241, 102, 36, 93, 192, 82, 81, 80, 79, 40, 4};
 static const size_t kAllKeyCodeCount = 13;

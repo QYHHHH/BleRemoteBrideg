@@ -178,13 +178,13 @@ void clearRc003() {
 
 void loadKeymapModes() {
   if (!s_ready) return;
-  keymap_back_mode_t back = MAP_BACK_CONSUMER_BACK;
-  keymap_power_mode_t power = MAP_POWER_ALT_F4;
-  keymap_voice_mode_t voice = MAP_VOICE_RALT_COMMA;
+  keymap_back_mode_t back = MAP_BACK_KEYBOARD_BACKSPACE;
+  keymap_power_mode_t power = MAP_POWER_KEYBOARD_ESC;
+  keymap_voice_mode_t voice = MAP_VOICE_KB_LCTRL_LGUI;
 
-  keymap_back_mode_parse(s_prefs.getString(kKeyMapBack, "consumer_back").c_str(), &back);
-  keymap_power_mode_parse(s_prefs.getString(kKeyMapPower, "kb_alt_f4").c_str(), &power);
-  keymap_voice_mode_parse(s_prefs.getString(kKeyMapVoice, "kb_ralt_comma").c_str(), &voice);
+  keymap_back_mode_parse(s_prefs.getString(kKeyMapBack, "kb_backspace").c_str(), &back);
+  keymap_power_mode_parse(s_prefs.getString(kKeyMapPower, "kb_esc").c_str(), &power);
+  keymap_voice_mode_parse(s_prefs.getString(kKeyMapVoice, "kb_lctrl_lgui").c_str(), &voice);
 
   keymap_set_back_mode(back);
   keymap_set_power_mode(power);

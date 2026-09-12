@@ -24,7 +24,7 @@
 //  * VOL+ / VOL- use the Consumer Control page, which is exactly what Windows
 //    expects for a media device. They are *not* forwarded as keyboard keys,
 //    so they will not disturb a focused text field.
-//  * HOME = Win+D (show desktop), TV = F8, MENU = Space.
+//  * HOME = Win+Tab, TV = F, MENU = Space.
 //  * BACK / POWER / VOICE are runtime-selectable, see keymap_set_*_mode().
 // ---------------------------------------------------------------------------
 static bool s_preset = true;
@@ -39,13 +39,13 @@ static const keymap_entry_t kDefaultTable[] = {
     { MI_KEY_LEFT,     { HID_ACT_KEYBOARD, HID_MOD_NONE, HID_KEY_LEFT,  0                    } },
     { MI_KEY_RIGHT,    { HID_ACT_KEYBOARD, HID_MOD_NONE, HID_KEY_RIGHT, 0                    } },
     { MI_KEY_OK,       { HID_ACT_KEYBOARD, HID_MOD_NONE, HID_KEY_ENTER, 0                    } },
-    { MI_KEY_HOME,     { HID_ACT_KEYBOARD, HID_MOD_LGUI, HID_KEY_D,     0                    } },
+    { MI_KEY_HOME,     { HID_ACT_KEYBOARD, HID_MOD_LGUI, HID_KEY_TAB,   0                    } },
     { MI_KEY_MENU,     { HID_ACT_KEYBOARD, HID_MOD_NONE, HID_KEY_SPACE, 0                    } },
-    { MI_KEY_TV,       { HID_ACT_KEYBOARD, HID_MOD_NONE, HID_KEY_F8,    0                    } },
+    { MI_KEY_TV,       { HID_ACT_KEYBOARD, HID_MOD_NONE, HID_KEY_F,     0                    } },
     // Filled in by keymap_lookup() from the runtime mode selection:
-    { MI_KEY_BACK,     { HID_ACT_CONSUMER, HID_MOD_NONE, HID_KEY_NONE,  HID_CONSUMER_AC_BACK  } },
-    { MI_KEY_POWER,    { HID_ACT_KEYBOARD, HID_MOD_LALT, HID_KEY_F4,    0                    } },
-    { MI_KEY_VOICE,    { HID_ACT_KEYBOARD, HID_MOD_RALT, HID_KEY_COMMA, 0                    } },
+    { MI_KEY_BACK,     { HID_ACT_KEYBOARD, HID_MOD_NONE, HID_KEY_BACKSPACE, 0                } },
+    { MI_KEY_POWER,    { HID_ACT_KEYBOARD, HID_MOD_NONE, HID_KEY_ESC,   0                    } },
+    { MI_KEY_VOICE,    { HID_ACT_KEYBOARD, HID_MOD_LCTRL | HID_MOD_LGUI, HID_KEY_NONE, 0     } },
 };
 
 #define DEFAULT_TABLE_COUNT (sizeof(kDefaultTable) / sizeof(kDefaultTable[0]))
@@ -61,9 +61,9 @@ const keymap_entry_t *keymap_default_table(void) {
 // ---------------------------------------------------------------------------
 // Runtime mode selection
 // ---------------------------------------------------------------------------
-static keymap_back_mode_t  s_back_mode  = MAP_BACK_CONSUMER_BACK;
-static keymap_power_mode_t s_power_mode = MAP_POWER_ALT_F4;
-static keymap_voice_mode_t s_voice_mode = MAP_VOICE_RALT_COMMA;
+static keymap_back_mode_t  s_back_mode  = MAP_BACK_KEYBOARD_BACKSPACE;
+static keymap_power_mode_t s_power_mode = MAP_POWER_KEYBOARD_ESC;
+static keymap_voice_mode_t s_voice_mode = MAP_VOICE_KB_LCTRL_LGUI;
 
 void keymap_set_back_mode(keymap_back_mode_t m) {
   if (m >= 0 && m < MAP_BACK_COUNT) s_back_mode = m;
@@ -83,6 +83,7 @@ static const char *const kBackNames[MAP_BACK_COUNT] = {
     "consumer_back",  // MAP_BACK_CONSUMER_BACK
     "kb_esc",         // MAP_BACK_KEYBOARD_ESC
     "kb_alt_left",    // MAP_BACK_KEYBOARD_ALT_LEFT
+    "kb_backspace",   // MAP_BACK_KEYBOARD_BACKSPACE
 };
 
 static const char *const kPowerNames[MAP_POWER_COUNT] = {
@@ -238,6 +239,10 @@ static hid_action_t resolve_dynamic(uint8_t raw_code) {  hid_action_t a = none_a
         a.kind = HID_ACT_KEYBOARD;
         a.modifier = HID_MOD_LALT;
         a.keycode = HID_KEY_LEFT;
+        break;
+      case MAP_BACK_KEYBOARD_BACKSPACE:
+        a.kind = HID_ACT_KEYBOARD;
+        a.keycode = HID_KEY_BACKSPACE;
         break;
       default:
         break;

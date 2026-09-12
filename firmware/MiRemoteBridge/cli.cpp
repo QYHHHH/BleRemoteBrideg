@@ -86,9 +86,9 @@ void printHelp() {
   Serial.println("  key <hex> press|release      inject a synthetic key (HID path test)");
   Serial.println("  channel <report|consumer> <hex>  raw report write test");
   Serial.println("  map                          show the runtime key selections");
-  Serial.println("  map back  <consumer_back|kb_esc|kb_alt_left>");
+  Serial.println("  map back  <consumer_back|kb_esc|kb_alt_left|kb_backspace>");
   Serial.println("  map power <kb_alt_f4|consumer_sleep|consumer_power|kb_esc>");
-  Serial.println("  map voice <kb_ralt_comma|consumer_mute|disabled>");
+  Serial.println("  map voice <kb_ralt_comma|consumer_mute|kb_lctrl_lgui|disabled>");
   Serial.println("  raw on|off                   raw report logging");
   Serial.println("  lat on|off                   latency logging");
   Serial.println("  log <0-4>                    log level (0 off .. 4 debug)");

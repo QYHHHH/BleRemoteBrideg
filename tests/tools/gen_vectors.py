@@ -187,11 +187,11 @@ def main() -> int:
     out.append("static const st_mode_vec_t kModeVectors[] = {")
     for vec in mode_vectors:
         if "back" in vec:
-            axis, mode_index = 0, {"consumer_back": 0, "kb_esc": 1, "kb_alt_left": 2}[vec["back"]]
+            axis, mode_index = 0, {"consumer_back": 0, "kb_esc": 1, "kb_alt_left": 2, "kb_backspace": 3}[vec["back"]]
         elif "power" in vec:
             axis, mode_index = 1, {"kb_alt_f4": 0, "consumer_sleep": 1, "consumer_power": 2, "kb_esc": 3}[vec["power"]]
         elif "voice" in vec:
-            axis, mode_index = 2, {"kb_ralt_comma": 0, "consumer_mute": 1, "disabled": 2}[vec["voice"]]
+            axis, mode_index = 2, {"kb_ralt_comma": 0, "consumer_mute": 1, "kb_lctrl_lgui": 2, "disabled": 3}[vec["voice"]]
         else:
             raise SystemExit(f"mode vector without axis: {vec}")
         out.append(f'  {{ {axis}, {mode_index}, {int(vec["code"])}, {action_fields(vec)} }},')
