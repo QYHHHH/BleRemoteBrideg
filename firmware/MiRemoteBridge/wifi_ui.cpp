@@ -720,10 +720,11 @@ void wsSendStatus() {
   char buf[320];
   Json out(buf, sizeof(buf));
   out.add("{\"type\":\"status\",\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,"
-          "\"remoteConnected\":%s,\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u}",
+          "\"remoteConnected\":%s,\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
       (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
       boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
-      settings::batteryLevel(), (unsigned)keymap_binding_count());
+      settings::batteryLevel(), (unsigned)keymap_binding_count(),
+      (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);
 }
 
@@ -1189,7 +1190,6 @@ void pollHttp() {
     if (s_wsOutSent >= s_wsOutLen) {
       if (bridge::keyPresses() != s_wsLastKeyCount) {
         s_wsLastKeyCount = bridge::keyPresses();
-        s_wsLastStatusMs = now;
         char buf[256];
         Json out(buf, sizeof(buf));
         out.add("{\"type\":\"key\",\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u}",

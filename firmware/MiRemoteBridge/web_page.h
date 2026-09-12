@@ -29,16 +29,16 @@ button{font:inherit;color:inherit;cursor:pointer}button:disabled{cursor:not-allo
 .pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
 .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--line);background:#fff}
 .bar b{font-size:14px}.bar .grow{flex:1}
-main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
+main{max-width:1680px;margin:0 auto;padding:12px 18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 18px #26324904}
-.hero{display:flex;align-items:center;gap:18px;padding:18px 20px;margin-bottom:14px}
+.hero{display:flex;align-items:center;gap:18px;padding:10px 16px;margin-bottom:10px}
 .hero .t{flex:1;min-width:0}.hero h1{margin-bottom:4px}.hero p{font-size:12px;color:var(--mut)}
 .btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 14px;border:1px solid #dfe3e9;border-radius:7px;background:#fff;font-size:12px;white-space:nowrap}
 .btn:hover{background:#f8fafc}.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}.btn.p:hover{background:#0966d9}
 .btn.d{color:#b45345}
 .head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr) 300px minmax(0,1fr);gap:12px;align-items:center;position:relative}
-.col{display:flex;flex-direction:column;gap:14px;position:relative;z-index:1}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 190px minmax(0,1fr);gap:12px;align-items:center;position:relative}
+.col{display:flex;flex-direction:column;gap:6px;position:relative;z-index:1}
 #wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;overflow:visible}
 #wires path{fill:none;stroke:#aeb4bf;stroke-opacity:.75;stroke-width:1.2;transition:stroke .1s}
 #wires path.live{stroke:#327ede;stroke-width:2.5}
@@ -48,16 +48,16 @@ main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
 .k.live .act,.rb.live{color:#1257b5}
 .rb.live{color:#fff;background:#327ede}
 .k:hover{border-color:#b2c9e6}
-.k button{display:block;width:100%;text-align:left;background:none;border:0;padding:9px 11px;min-height:96px}
+.k button{display:block;width:100%;text-align:left;background:none;border:0;padding:5px 9px;min-height:46px;line-height:1.25}
 .k .r1{display:flex;align-items:center;gap:6px;font-size:12px;color:#67717d}
 .k .r1 b{color:var(--ink);font-weight:600}
 .k .tg{margin-left:auto;font-size:9px;color:#8d96a1}
 .k.cus .tg{color:var(--blue)}
-.k .r2{display:flex;justify-content:space-between;gap:8px;align-items:center;padding-top:5px}
+.k .r2{display:flex;justify-content:space-between;gap:8px;align-items:center;padding-top:1px}
 .k .act{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .k .ed{font-size:10px;color:#9aa3af}
 .rm{display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;z-index:1}
-.rm .body{width:132px;height:540px;border:1px solid #969898;border-radius:12px / 5px;background:linear-gradient(90deg,#575b5c,#d4d5d3 4%,#a8aaa9 8%,#cfd0ce 14%,#bdbfbd 70%,#f0f1ef 94%,#8c908f 98%,#b4b8b8);position:relative;box-shadow:inset 0 1px 2px #fff9;flex:none}
+.rm .body{width:132px;height:360px;border:1px solid #969898;border-radius:12px / 5px;background:linear-gradient(90deg,#575b5c,#d4d5d3 4%,#a8aaa9 8%,#cfd0ce 14%,#bdbfbd 70%,#f0f1ef 94%,#8c908f 98%,#b4b8b8);position:relative;box-shadow:inset 0 1px 2px #fff9;flex:none}
 .rm .body:before{content:"";position:absolute;left:10px;top:58px;width:110px;height:110px;border:1px solid #111;border-radius:50%;background:linear-gradient(135deg,#353636,#242525);box-shadow:inset 0 0 0 2px #ffffff18}
 .rb{position:absolute;display:grid;place-items:center;width:43px;height:43px;padding:0;border:1px solid #101010;border-radius:50%;background:linear-gradient(135deg,#414242,#202121);box-shadow:inset 0 0 0 1px #ffffff25;color:#eee;font-size:13px}
 .rb:hover{filter:brightness(1.2)}.rb.sel{box-shadow:inset 0 0 0 2px #327ede;color:#9dc7ff}
@@ -74,7 +74,7 @@ main{max-width:1180px;margin:0 auto;padding:18px 18px 24px}
 .rb.do.sel{color:transparent}.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .k .ico{color:#625be3}.rb .ico{width:19px;height:19px}
 .cap{text-align:center;font-size:9px;color:#97a0aa;line-height:1.8}.cap b{display:block;color:#6d7781;font-size:10px;letter-spacing:2px;font-weight:500}
-.foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 18px;margin-top:14px;flex-wrap:wrap}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 14px;margin-top:10px;flex-wrap:wrap}
 .foot p{font-size:11px;color:var(--mut)}.foot .bs{display:flex;gap:8px}
 .note{font-size:11px;color:#919aa4;margin-top:10px}
 dialog{border:1px solid var(--line);border-radius:14px;padding:0;width:min(460px,calc(100vw - 24px));max-height:calc(100dvh - 30px);overflow:auto;color:var(--ink);box-shadow:0 22px 70px #1d2e442b}
@@ -105,6 +105,10 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
    hidden pad glyph is shown again, or the disc lights up empty. */
 .rm .body .rb.sel{background:#d7ecff;border-color:#327ede;box-shadow:inset 0 0 0 2px #327ede;color:#1257b5}
 .rm .body .rb.live,.rm .body .rb.pulse{background:#327ede;border-color:#327ede;box-shadow:0 0 0 3px #327ede40;color:#fff}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:14px;align-items:start}.board{padding:14px}.board svg{display:block;width:100%;height:130px;margin:6px 0}.board p{font-size:12px;margin-top:6px}.memory{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}.memory strong{display:block;font:600 20px Consolas,monospace}.memory small{color:var(--mut)}
+@media(max-width:1100px){.workspace{grid-template-columns:minmax(0,1fr) 260px}.grid{grid-template-columns:minmax(0,1fr) 150px minmax(0,1fr);gap:8px}.k .ed{display:none}}
+@media(max-width:900px){.workspace{grid-template-columns:1fr}.board{display:grid;grid-template-columns:150px 1fr;gap:0 16px}.board svg{grid-row:1/7;height:250px}.board h2{grid-column:2}.memory{grid-column:1/-1}.hero{flex-direction:row}.grid{grid-template-columns:minmax(0,1fr) 170px minmax(0,1fr)}}
+@media(max-width:620px){.grid{grid-template-columns:1fr 1fr}.rm{grid-row:1}.rm .body{margin:-110px -40px}.hero{flex-wrap:wrap}.hero .t{flex-basis:100%}.board{display:block}.board svg{height:210px}}
 </style></head><body>
 <div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span>
 <span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
@@ -112,7 +116,7 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 <div class="warn" id="off" hidden><span>无法连接桥接器<span id="offWhy">（连接断开，自动重连中）</span></span><button id="retry">重新连接</button></div>
 <div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">与桥接器连接同一路由器，即可配置。</p><p id="diag" aria-live="polite"></p></div>
 <button class="btn p" id="goMap">编辑按键映射</button><button class="btn" id="refresh">刷新</button></div>
-<div class="head"><h2>按键映射</h2><span class="mut" style="font-size:11px"><span id="cnt">—</span> 项自定义 · 点卡片或遥控器按键编辑</span></div>
+<div class="workspace"><section><div class="head"><h2>按键映射</h2><span class="mut" style="font-size:11px"><span id="cnt">—</span> 项自定义 · 点卡片或遥控器按键编辑</span></div>
 <div class="card" style="padding:14px 16px"><div class="grid" id="grid">
 <svg id="wires" aria-hidden="true"></svg>
 <div class="col" id="colL"></div>
@@ -122,7 +126,23 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 <div class="card foot"><div><h3>按下即转发，松开即释放</h3><p>保存后立即生效并写入 NVS，重启后保留。不改变遥控器原有转发时序。</p></div>
 <div class="bs"><button class="btn" id="refresh2">刷新映射</button><button class="btn d" id="resetAll" disabled>恢复默认映射</button></div></div>
 <p class="note">本固件不区分单击、双击与长按，不提供音频或宏。恢复默认仅清除自定义绑定，保留串口 <b>map</b> 基础模式与蓝牙配对。</p>
-</main>
+</section><aside class="card board"><h2>开发板 · CORE-ESP32</h2>
+<svg viewBox="0 0 270 240" role="img" aria-label="开发板正面示意：左侧 RST 和 D5，右侧 BOOT 和 D4，底部 USB">
+<rect x="83" y="5" width="104" height="230" rx="5" fill="#087aab"/>
+<path d="M93 39V16h13v22h15V16h14v22h15V16h24v29" fill="none" stroke="#45b0d5" stroke-width="5"/>
+<path d="M85 57v160m100-160v160" stroke="#e1c994" stroke-width="7" stroke-dasharray="5 7"/>
+<g fill="#303b43" stroke="#9aadb5"><rect x="113" y="65" width="42" height="40"/><rect x="111" y="116" width="48" height="24"/><rect x="127" y="159" width="18" height="19"/></g>
+<g fill="#e8e8dc" stroke="#a9afb1"><rect x="92" y="150" width="25" height="26"/><rect x="153" y="150" width="25" height="26"/><rect x="115" y="211" width="40" height="24" rx="3"/></g>
+<g fill="#fff4a9"><rect x="94" y="197" width="8" height="9"/><rect x="168" y="197" width="8" height="9"/></g>
+<g fill="none" stroke="#78818e"><path d="M92 163H50m128 0h42M94 201H50m126 0h44"/></g>
+<g fill="#252931" font-size="12" font-family="sans-serif"><text x="17" y="167">RST</text><text x="222" y="167">BOOT</text><text x="20" y="205">D5</text><text x="222" y="205">D4</text></g><text x="135" y="226" text-anchor="middle" font-size="9" fill="#404b50">USB</text>
+</svg>
+<p><b>D5 · 主机 / GPIO13</b><br>呼吸：未连接；快闪：HID 未就绪；常亮：键盘 HID 已就绪。</p>
+<p><b>D4 · 遥控器 / GPIO12</b><br>呼吸：等待或搜索；快闪：连接中；常亮：就绪。按住遥控器按键时熄灭。</p>
+<p><b>RST</b>：硬件复位重启。</p>
+<p><b>BOOT / GPIO9</b>：运行时短按无操作；<b>长按 5 秒清除全部设置与蓝牙配对并重启</b>。</p>
+<div class="memory"><h3>实时堆内存</h3><strong id="memFree">—</strong><p id="memDetail">等待设备数据</p><small id="memState">随设备状态更新</small></div>
+</aside></div></main>
 <dialog id="ed"><form id="edF">
 <div class="dh"><div><h2 id="edT">编辑按键</h2><span class="mono mut" id="edC"></span></div><button type="button" class="btn" id="edX" aria-label="关闭">✕</button></div>
 <div class="db">
@@ -174,7 +194,7 @@ function setSel(id,v){if(!Array.prototype.some.call($(id).options,function(o){re
 function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.querySelectorAll('[data-r],#resetAll'),function(e){e.disabled=!S.ok||!S.on||L});
 Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=S.busy});
 $('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
-function online(v,why){S.on=v;$('off').hidden=v;btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
+function online(v,why){S.on=v;if(!v)$('memState').textContent='连接已断开 · 数值为上次采样';$('off').hidden=v;btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
 /* The socket is push-only from here on: a key going down and a slow status
 heartbeat, both a few dozen bytes. Every query and write goes over plain HTTP
 instead, because an HTTP response is framed by Content-Length and can carry the
@@ -240,7 +260,10 @@ function highlight(raw){KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.cla
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('live',!!raw&&+e.dataset.r===raw)});
 Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)})}
 
-function stat(j){var rc=!!j.remoteConnected,h=!!j.hostConnected;
+function memory(j){function kb(n){return typeof n==='number'&&n>=0?(n/1024).toFixed(1)+' KiB':'—'}
+if(typeof j.heapFree!=='number')return;
+$('memFree').textContent=kb(j.heapFree)+' 可用';$('memDetail').textContent='历史最低 '+kb(j.heapMin)+' · 最大连续块 '+kb(j.heapLargest);$('memState').textContent='更新于 '+new Date().toLocaleTimeString()+' · 约 5 秒更新';}
+function stat(j){memory(j);var rc=!!j.remoteConnected,h=!!j.hostConnected;
 // Version and build stamp come from /api/status, i.e. from the running
 // firmware, not from the generated page bytes - so it can never go stale.
 $('ver').textContent=(j.fwVersion||'')+(j.buildTime?' · build '+j.buildTime:'');
