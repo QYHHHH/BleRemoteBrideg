@@ -24,7 +24,7 @@ static const char kIndexHtml[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 button{font:inherit;color:inherit;cursor:pointer}button:disabled{cursor:not-allowed;opacity:.45}a{color:var(--blue)}
 [hidden]{display:none!important}h1,h2,h3,p{margin:0}h1{font-size:22px}h2{font-size:15px}h3{font-size:13px;font-weight:600}
 .mut{color:var(--mut)}.mono{font:10px ui-monospace,Consolas,monospace;letter-spacing:1px}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:#fff;font-size:11px;color:var(--mut)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;background:#fff;font-size:11px;color:var(--mut)}button.pill{cursor:pointer}
 .pill.ok{color:var(--ok);border-color:#cfe9db}.pill.off{color:var(--warn);border-color:#f0dfc0}
 .pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
 .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--line);background:#fff}
@@ -111,7 +111,7 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 @media(max-width:620px){.grid{grid-template-columns:1fr 1fr}.rm{grid-row:1}.rm .body{margin:-110px -40px}.hero{flex-wrap:wrap}.hero .t{flex-basis:100%}.board{display:block}.board svg{height:210px}}
 main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:stretch}.mapping-panel{padding:16px;display:flex;flex-direction:column;min-height:min(790px,calc(100vh - 118px))}.mapping-panel .head{margin-bottom:14px}.grid{grid-template-columns:minmax(0,1fr) 230px minmax(0,1fr);gap:12px;align-items:center;flex:1}.col{align-self:stretch;justify-content:space-around;gap:12px;padding:12px 0}.k button{min-height:60px;padding:8px 10px;line-height:1.4}.k .r1,.k .act{font-size:13px}.k .ed{display:inline}.rm{padding:0;margin:0;border:0;flex-direction:column;gap:12px;align-self:center}.rm .body{width:132px;height:540px;transform:scale(.86);margin:-37.8px -9.24px}.cap{font-size:11px;text-align:center}.side{display:flex;flex-direction:column;gap:14px;height:100%}
 .rack{padding:14px}.rack-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.rack-heading span{font-size:12px}.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.slot{display:flex;flex-direction:column;align-items:start;gap:8px;text-align:left;padding:13px 11px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;min-width:0}.slot.selected{background:#edf5ff;border-color:#82b7f6;box-shadow:inset 0 3px #1674ed}.slot strong{font-size:18px}.slot-index,.slot-battery,.slot-link{font-size:12px;color:var(--mut)}.slot-link.linked{color:var(--ok)}.rack-actions{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px}.rack-actions>div{flex:1;font-size:12px}.rack-actions small{display:block;color:var(--mut);margin-top:3px}.rack-actions .btn{padding:7px 10px}
-.side .board{display:block;flex:1 0 auto;position:relative;align-content:start;padding:16px}.board>h2{margin-bottom:14px}.board>#pH{float:right;margin-top:0}.board-body{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(140px,.8fr);gap:16px;align-items:stretch}.hardware{display:flex;gap:14px;align-items:center}.board .hardware svg{width:220px;height:300px;flex:none;margin:0}.legend{flex:1;min-width:0}.board .legend p{display:block;margin:0;padding:11px 0;border-bottom:1px solid #edf0f3;font-size:13px;line-height:1.7}.board .legend p:last-child{border-bottom:0}.board .memory{border-top:0;border-left:1px solid var(--line);padding:10px 0 10px 16px;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;grid-column:auto}.memory h3{align-self:stretch;text-align:left;margin-bottom:8px}.memory strong{font-size:18px}.board .memory p{font-size:10px;margin:7px 0;line-height:1.7}.memory small{font-size:11px;line-height:1.6}.board .memory #memDetail{white-space:pre-line}
+.side .board{display:block;flex:1 0 auto;position:relative;align-content:start;padding:16px}.board>h2{margin-bottom:14px}.board>#pH,.board>#pW{float:right;margin:0 0 0 6px}.board-body{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(140px,.8fr);gap:16px;align-items:stretch}.hardware{display:flex;gap:14px;align-items:center}.board .hardware svg{width:220px;height:300px;flex:none;margin:0}.legend{flex:1;min-width:0}.board .legend p{display:block;margin:0;padding:11px 0;border-bottom:1px solid #edf0f3;font-size:13px;line-height:1.7}.board .legend p:last-child{border-bottom:0}.board .memory{border-top:0;border-left:1px solid var(--line);padding:10px 0 10px 16px;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;grid-column:auto}.memory h3{align-self:stretch;text-align:left;margin-bottom:8px}.memory strong{font-size:18px}.board .memory p{font-size:10px;margin:7px 0;line-height:1.7}.memory small{font-size:11px;line-height:1.6}.board .memory #memDetail{white-space:pre-line}
 .empty-remote{min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;color:var(--mut)}.empty-remote h2{color:var(--ink)}.empty-remote p{font-size:12px}.empty-remote small{font-size:10px}.empty-icon{font-size:32px;color:#86a8cf;border:1px dashed #c2d5e9;border-radius:14px;padding:6px 24px}.learn-banner{border-bottom:1px solid var(--line);padding:8px 0 16px}.learn-banner b,.learn-banner span{display:block}.learn-banner span{font-size:13px;color:var(--mut);margin-top:4px}.simulator{display:flex;align-items:center;gap:8px;margin:15px 0;flex-wrap:wrap}.simulator>span{font-size:12px;color:var(--mut)}.learned-keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.learned-key button{min-height:60px;padding:8px 10px}.learned-key.heard{background:#edf5ff;border-color:#1674ed}#slotName{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;border:1px solid #dce1e8;border-radius:7px;background:#fff;color:var(--ink);font:inherit}
 #wires path{stroke:#a6afbc;stroke-opacity:.85;stroke-width:1}#memRing{--used:0%;width:94px;height:94px;flex:none;border-radius:50%;background:conic-gradient(#327ede var(--used),#e9eef2 0);padding:8px;margin:2px 0 10px;display:grid;place-items:center;transform:rotate(-90deg)}#memRing>div{width:100%;height:100%;border-radius:50%;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(90deg)}#memRing b{font:600 19px Consolas,monospace;color:var(--ink)}#memRing span{font-size:10px;color:var(--mut);margin-top:1px}#memTotal{margin-top:3px}.repo-placeholder{font-size:12px;color:var(--blue);padding:4px 9px;border:1px dashed #b9d1ee;border-radius:6px;text-decoration:none;cursor:default}.mapping-panel .head span,.memory #memDetail,.memory #memState{font-size:11px!important}
 @media(max-width:1250px) and (min-width:901px){main{padding:12px}.workspace{gap:12px}.mapping-panel{padding:12px}.grid{grid-template-columns:minmax(0,1fr) 184px minmax(0,1fr);gap:8px}.k .r1,.k .act{font-size:12px}.board-body{grid-template-columns:minmax(0,1fr) 145px;gap:10px}.board .hardware svg{width:170px;height:260px}.rack-actions{flex-wrap:wrap}.rack-actions>div{flex-basis:100%}}
@@ -120,7 +120,7 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
 .mobile-map-fix{display:none}@media(max-width:560px){.mapping-panel{padding:12px}.grid{grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr);gap:5px;align-items:center}.grid #colL{grid-column:1;grid-row:1}.grid .rm{grid-column:2;grid-row:1;flex-direction:column;justify-content:center;gap:6px;padding:0;border:0;margin:0}.grid #colR{grid-column:3;grid-row:1}.grid .col{grid-row:1;gap:8px;padding:0;align-self:stretch;justify-content:space-around}.grid .rm .body{transform:scale(.64);margin:-97.2px -23.76px}.grid .cap{text-align:center;font-size:8px}.grid .k button{min-height:58px;padding:6px}.grid .k .r1,.grid .k .act{font-size:10px}.grid .k .ico{width:13px;height:13px}}
 </style></head><body>
 <div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span><a class="repo-placeholder" aria-disabled="true">代码仓库 · 地址待填写</a>
-<span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
+<span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>被控蓝牙…</span></span><button class="pill off" id="pW" type="button" title="点击重新连接并夺回控制权"><i></i><span>网页控制连接中…</span></button><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
 <main>
 <div class="warn" id="off" hidden><span>无法连接桥接器<span id="offWhy">（连接断开，自动重连中）</span></span><button id="retry">重新连接</button></div>
 <div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">与桥接器连接同一路由器，即可配置。</p><p id="diag" aria-live="polite"></p></div>
@@ -200,10 +200,10 @@ opt('key',KB);opt('cons',CS);
 MD.forEach(function(m){var b=document.createElement('button');b.type='button';b.className='m';b.dataset.bit=m[0];b.textContent=m[1];b.setAttribute('aria-pressed','false');
 b.onclick=function(){S.mods^=m[0];draft()};$('mods').appendChild(b)});
 function setSel(id,v){if(!Array.prototype.some.call($(id).options,function(o){return +o.value===v}))$(id).add(new Option('HID 0x'+hx(v),String(v)));$(id).value=String(v)}
-function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.querySelectorAll('[data-r],#resetAll'),function(e){e.disabled=!S.ok||!S.on||L});
+function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.querySelectorAll('[data-r],#resetAll,#uiReset,#simulateBind,#simulateKey,#simulateRepeat,#slotEditor input,#slotEditor select,#slotEditor .m,#slotDelete'),function(e){e.disabled=!S.ok||!S.on||L});
 Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=S.busy});
 $('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
-function online(v,why){S.on=v;if(!v)$('memState').textContent='连接已断开 · 数值为上次采样';$('off').hidden=v;btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
+function online(v,why){S.on=v;if(!v)$('memState').textContent='连接已断开 · 数值为上次采样';$('off').hidden=v;var p=$('pW');if(p){p.className='pill '+(v?'ok':'off');p.lastChild.textContent=v?'网页控制已连接':'网页控制已断开';p.title=v?'网页已获得开发板控制权':'点击重新连接并夺回控制权'}btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
 /* The socket is push-only from here on: a key going down and a slow status
 heartbeat, both a few dozen bytes. Every query and write goes over plain HTTP
 instead, because an HTTP response is framed by Content-Length and can carry the
@@ -225,11 +225,9 @@ if(j.lastKey)pulse(j.lastKey);
 if(typeof j.activeKey==='number')highlight(j.activeKey);return}
 if(j.type==='status'){stat(j);if(!S.on)load();return}}
 function wsOpen(){S.wsRetry=0;load()}
-function wsClosed(){online(false);
-if(S.wsTimer)clearTimeout(S.wsTimer);
-var d=Math.min(8000,600*(S.wsRetry=(S.wsRetry||0)+1));
-S.wsTimer=setTimeout(connectWS,d)}
+function wsClosed(){online(false,'控制连接已断开，点击可重新连接并夺回控制权');if(S.wsTimer)clearTimeout(S.wsTimer);S.wsTimer=null}
 function connectWS(){
+if(S.ws&&S.ws.readyState===1)return;
 /* the socket cannot carry an Authorization header, so fetch the token first
 over an authenticated request and hand it over in the URL */
 fetch('/api/token',{cache:'no-store'}).then(function(r){
@@ -238,11 +236,9 @@ return r.json()}).then(function(j){
 if(!j||typeof j.token!=='string'||!j.token)throw Error('no token');
 openSocket(j.token)}).catch(function(e){
 if(e&&e.relogin){location.href='/login';return}   /* session gone: sign in again */
-online(false,'登录会话无效，请重新登录');
-if(S.wsTimer)clearTimeout(S.wsTimer);
-S.wsTimer=setTimeout(connectWS,2500)})}
+online(false,'登录会话无效，请重新登录')})}
 function openSocket(token){
-try{if(S.ws)S.ws.close()}catch(e){}
+try{if(S.ws){S.ws.onclose=null;S.ws.close()}}catch(e){}
 var proto=(location.protocol==='https:')?'wss://':'ws://';
 try{S.ws=new WebSocket(proto+location.host+'/ws?token='+encodeURIComponent(token))}catch(e){wsClosed();return}
 S.ws.onopen=wsOpen;S.ws.onclose=wsClosed;S.ws.onerror=function(){};
@@ -320,7 +316,7 @@ $('ed').addEventListener('cancel',function(e){if(S.busy)e.preventDefault()});
 $('rd').addEventListener('cancel',function(e){if(S.busy)e.preventDefault()});
 $('resetAll').onclick=function(){$('rdE').hidden=true;$('rd').showModal()};
 $('rdC').onclick=function(){$('rd').close()};$('rdY').onclick=reset;
-$('refresh').onclick=$('refresh2').onclick=$('retry').onclick=function(){load(true)};
+$('refresh').onclick=$('refresh2').onclick=function(){load(true)};$('retry').onclick=$('pW').onclick=function(){connectWS()};
 $('goMap').onclick=function(){document.querySelector('.head').scrollIntoView({behavior:'smooth',block:'start'})};
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.ws&&S.ws.readyState===1)load()});
 window.addEventListener('resize',drawWires);new ResizeObserver(drawWires).observe($('grid'));
@@ -330,7 +326,7 @@ const side=document.createElement('div');side.className='side';workspace.append(
 section.className='card mapping-panel';const shell=$('grid').parentElement;shell.replaceWith($('grid'));
 const legacy=document.createElement('div');legacy.hidden=true;document.body.append(legacy);
 legacy.append(document.querySelector('.hero'),document.querySelector('.foot'),document.querySelector('.note'),$('pR'),$('pB'));
-const board=document.querySelector('.board');side.append(board);board.prepend($('pH'));
+const board=document.querySelector('.board');side.append(board);board.prepend($('pH'),$('pW'));
 const boardTitle=board.querySelector('h2'), art=board.querySelector('svg'), memoryBox=board.querySelector('.memory');
 const ring=document.createElement('div');ring.id='memRing';ring.setAttribute('role','img');ring.innerHTML='<div><b id="memPct">—</b><span>已使用</span></div>';memoryBox.querySelector('h3').after(ring);const total=document.createElement('small');total.id='memTotal';$('memFree').after(total);
 const hardware=document.createElement('div');hardware.className='hardware';const legend=document.createElement('div');legend.className='legend';
@@ -364,6 +360,7 @@ function drawSlots(){
  $('grid').hidden=selectedSlot!==0;discovered.hidden=selectedSlot===0;
  if(selectedSlot===0){slots[0].keys.forEach(k=>{const e=$('k'+k.raw);if(e)e.querySelector('.act').textContent=slotFmt(k.action)});drawWires()}
  else drawDiscovered();
+ btns();
 }
 function drawDiscovered(){const s=slots[selectedSlot];
  discovered.innerHTML=(s.bound?'<div class="learn-banner"><b>等待遥控器按键</b><span>逐个按下遥控器按键，对应的编辑卡片会出现在下方。</span></div><div class="simulator"><span>预览演示</span><button class="btn" id="simulateKey">模拟按下新按键</button><button class="btn" id="simulateRepeat" '+(!s.keys.length?'disabled':'')+'>模拟重复按键</button></div>':'<div class="empty-remote"><span class="empty-icon">＋</span><h2>添加另一只遥控器</h2><p>绑定后，逐个按下按键以建立这套配置。</p><button class="btn p" id="simulateBind">模拟绑定蓝牙</button><small>仅演示界面，不扫描或连接设备</small></div>')+'<div class="learned-keys">'+s.keys.map((k,i)=>'<div class="k learned-key" data-learned="'+i+'"><button type="button"><span class="r1">'+keyIcon(k.raw)+'<b>'+esc(k.name)+'</b><span class="tg">已发现</span></span><span class="r2"><span class="act">'+slotFmt(k.action)+'</span><span class="ed">编辑 ›</span></span></button></div>').join('')+'</div>';
@@ -373,12 +370,12 @@ function drawDiscovered(){const s=slots[selectedSlot];
 }
 function discoverKey(raw){const s=slots[selectedSlot];if(!s.bound||selectedSlot===0)return;let i=s.keys.findIndex(k=>k.raw===raw);if(i<0){var known=knownKey(raw);s.keys.push({raw,name:known?known[1]:'按键 0x'+hx(raw),action:{kind:0,mod:0,key:0,cons:0}});i=s.keys.length-1;persist();drawSlots()}const e=discovered.querySelectorAll('.learned-key')[i];if(e){e.classList.add('heard');setTimeout(()=>e.classList.remove('heard'),500)}}
 $('slots').onclick=e=>{const b=e.target.closest('[data-slot]');if(b){selectedSlot=+b.dataset.slot;drawSlots()}};
-discovered.onclick=e=>{const b=e.target.closest('[data-learned]');if(b)openSlotEditor(+b.dataset.learned)};
+discovered.onclick=e=>{const b=e.target.closest('[data-learned]');if(b&&S.on)openSlotEditor(+b.dataset.learned)};
 section.addEventListener('click',e=>{const b=e.target.closest('[data-r]');if(b&&selectedSlot===0){e.preventDefault();e.stopPropagation();const i=slots[0].keys.findIndex(k=>k.raw===+b.dataset.r);if(i>=0)openSlotEditor(i)}},true);
 MD.forEach(m=>{const b=document.createElement('button');b.className='m';b.textContent=m[1];b.dataset.bit=m[0];b.onclick=()=>{editingMods^=m[0];autoSave()};$('slotMods').append(b)});
 function openSlotEditor(i){editingKey=i;if(selectedSlot===0){S.sel=slots[0].keys[i].raw;document.querySelectorAll('.k,#rmArt [data-r]').forEach(e=>e.classList.toggle('sel',e.id==='k'+S.sel||+e.dataset.r===S.sel))}const k=slots[selectedSlot].keys[i],a=k.action;editingMods=a.mod||0;$('slotEdTitle').textContent=slots[selectedSlot].name+' · '+k.name;$('learnedControls').hidden=selectedSlot===0;$('slotDelete').hidden=selectedSlot===0;$('slotDelete').dataset.confirm='';$('slotDelete').textContent='删除此按键';$('slotName').value=k.name;$('slotKind').value=String(a.kind);setSel('slotKey',a.key||0);setSel('slotCons',a.cons||233);$('slotSaved').textContent='所有修改仅保存在当前浏览器';paintEditor();editor.showModal()}
 function paintEditor(){const kind=+$('slotKind').value;$('slotKeyboard').hidden=kind!==1;$('slotMedia').hidden=kind!==2;[...$('slotMods').children].forEach(b=>b.setAttribute('aria-pressed',String(!!(editingMods&+b.dataset.bit))));$('slotValue').textContent=kind===0?'不转发':fmt({kind,mod:editingMods,key:+$('slotKey').value,cons:+$('slotCons').value})}
-function autoSave(){paintEditor();const kind=+$('slotKind').value;if(kind===1&&!editingMods&&!+$('slotKey').value){$('slotSaved').textContent='请选择主键或修饰键后保存';return}slots[selectedSlot].keys[editingKey].action={kind,mod:kind===1?editingMods:0,key:kind===1?+$('slotKey').value:0,cons:kind===2?+$('slotCons').value:0};$('slotSaved').textContent=persist()?'已自动保存到 '+slots[selectedSlot].name:'浏览器存储不可用，本次修改仅保留到关闭页面';drawSlots()}
+function autoSave(){if(!S.on)return;paintEditor();const kind=+$('slotKind').value;if(kind===1&&!editingMods&&!+$('slotKey').value){$('slotSaved').textContent='请选择主键或修饰键后保存';return}slots[selectedSlot].keys[editingKey].action={kind,mod:kind===1?editingMods:0,key:kind===1?+$('slotKey').value:0,cons:kind===2?+$('slotCons').value:0};$('slotSaved').textContent=persist()?'已自动保存到 '+slots[selectedSlot].name:'浏览器存储不可用，本次修改仅保留到关闭页面';drawSlots()}
 ['slotKind','slotKey','slotCons'].forEach(id=>$(id).onchange=autoSave);$('slotName').oninput=()=>{if(selectedSlot===0||editingKey===null)return;const name=$('slotName').value.trim();if(!name){$('slotSaved').textContent='按键名称不能为空';return}slots[selectedSlot].keys[editingKey].name=name;$('slotEdTitle').textContent=slots[selectedSlot].name+' · '+name;persist();drawSlots();$('slotSaved').textContent='名称已自动保存'};$('slotDelete').onclick=()=>{if(selectedSlot===0||editingKey===null)return;if($('slotDelete').dataset.confirm!=='yes'){$('slotDelete').dataset.confirm='yes';$('slotDelete').textContent='再次点击确认删除';$('slotSaved').textContent='再次点击删除按钮确认';return}slots[selectedSlot].keys.splice(editingKey,1);persist();editingKey=null;editor.close();drawSlots();toast('按键已删除')};$('slotEdClose').hidden=true;$('slotEdDone').onclick=()=>editor.close();
 $('uiRefresh').onclick=()=>{drawSlots();toast('预览已刷新')};
 $('uiReset').onclick=()=>{$('rd').querySelector('h2').textContent='恢复 '+slots[selectedSlot].name+' 默认设置？';$('rd').querySelector('.db h3').textContent=selectedSlot===0?'这将恢复小米预设的全部快捷键。':'这将清除当前槽位的快捷键设置，保留已发现的按键。';$('rd').querySelector('.db .hint').textContent='仅影响当前槽位，其他两个槽位保持不变。确认后无法撤销。';$('rdY').disabled=false;$('rd').showModal()};

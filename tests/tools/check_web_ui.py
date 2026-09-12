@@ -42,7 +42,7 @@ FLASH_BUDGET = 18500
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 132
+EXPECTED_CHECKS = 136
 
 TESTS = r"""(async () => {
   const results=[];
@@ -57,7 +57,13 @@ TESTS = r"""(async () => {
   assert($('memFree').textContent.includes('10.0 KiB'),'heartbeat updates memory');
   assert($('memPct').textContent==='50.0%','heartbeat updates used heap percentage');
   assert($('ver').textContent.includes('v0.0.1'),'compact heartbeat preserves version and build stamp');
-  online(false);assert(!$('memState').textContent.includes('5'),'disconnect removes live update claim');online(true);
+  online(false);
+  assert($('pW').textContent.includes('已断开')&&$('pW').classList.contains('off'),'board shows web control disconnected');
+  assert($('uiReset').disabled&&document.querySelector('#k40 button').disabled,'disconnect locks all mutation controls');
+  wsClosed();assert(S.wsTimer===null,'socket loss waits for manual reconnect');
+  let reconnects=0,oldConnect=connectWS;connectWS=()=>reconnects++;$('pW').click();connectWS=oldConnect;
+  assert(reconnects===1,'board connection pill manually reclaims control');
+  assert(!$('memState').textContent.includes('5'),'disconnect removes live update claim');online(true);
   __demo.status.fwVersion='v9.9.9';__demo.status.buildTime='Jan  1 2030 00:00:00';await load();
   assert($('ver').textContent==='v9.9.9 · build Jan  1 2030 00:00:00','version and build stamp come from /api/status');
   delete __demo.status.fwVersion;delete __demo.status.buildTime;await load();
