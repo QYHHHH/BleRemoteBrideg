@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | L1 编译验证 | `esp32:esp32:esp32c3:FlashMode=dio,PartitionScheme=huge_app` | **通过**（2026-09-11 新版 UI 编译，非本次真机验证） | flash 1392931 B (44%)，全局 RAM 41220 B (12%)；CLI exit 0，无 stderr |
 | L2 宿主端模型验证 | 解析器/状态机/键表/HID 描述符/随机不变量 | **通过** | `python tests/model/check_vectors.py` → `checks passed: 11098, failed: 0` |
-| L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `139 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
+| L3 设备端自检 | 在真机 MCU 上跑同一套向量 + 分发仿真 | **通过** | `selftest` → `143 passed, 0 failed` + `44 passed, 0 failed`，`RESULT: PASS` |
 | L4 上游（RC003 → C3） | 扫描、直连、配对加密、服务发现、订阅通知、逐键解析 | **通过** | 13/13 键识别，0 未知码；延迟 min 190 / median 215 / max 361 µs（§5.1、§5.2）|
 | L4 下游（C3 → Windows） | 键盘 + 媒体键 | **通过**（用户实测 13 键全部可用） | 两集合两报告 ID + 自建服务层（§4.6、§4.7）；蓝牙关→开自动重连 |
 | L4 下游（C3 → iPhone） | iOS BLE HID | **通过**（音量键、方向键实测；iOS 订阅了键盘/Consumer/电池全部三条通知） | §4.9 |
@@ -130,7 +130,7 @@ python tests/model/check_vectors.py
 
 ```
 [TEST   ] --- vector suite ---
-[TEST   ] vector suite: 139 passed, 0 failed
+[TEST   ] vector suite: 143 passed, 0 failed
 [TEST   ] --- dispatch simulation ---
 [TEST   ] dispatch simulation: 44 passed, 0 failed
 [TEST   ] selftest total: 0 failure(s)
