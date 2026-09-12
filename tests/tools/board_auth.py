@@ -22,6 +22,7 @@ resets the board, so a per-call open would restart the device mid-test.
 """
 
 import gzip
+import os
 import re
 import sys
 import time
@@ -45,6 +46,31 @@ _SER = None
 
 # --- serial console ----------------------------------------------------------
 
+def _import_pyserial():
+    """Make pyserial importable, or say plainly why not.
+
+    Where pyserial lives depends on the machine. Normal installs need nothing.
+    Failing that, MRB_PYSERIAL can name the directory, and as a last resort the
+    WorkBuddy-managed copy is looked up *relative to the home directory* - never
+    hardcoded, because one user's path in a shared repository helps nobody.
+    """
+    extra = os.environ.get('MRB_PYSERIAL')
+    candidates = [extra] if extra else []
+    candidates.append(os.path.join(os.path.expanduser('~'), '.workbuddy', 'binaries',
+                                   'python', 'pylibs'))
+    for path in candidates:
+        if path and os.path.isdir(path):
+            sys.path.insert(0, path)
+    try:
+        import serial  # noqa: F401,PLC0415
+        return
+    except ImportError:
+        pass
+    raise SystemExit(
+        "pyserial is not importable. Install it (pip install pyserial) or set "
+        "MRB_PYSERIAL to the directory that contains it.")
+
+
 def ser(port=DEFAULT_PORT, baud=DEFAULT_BAUD):
     """Open the console port once and keep it.
 
@@ -56,7 +82,7 @@ def ser(port=DEFAULT_PORT, baud=DEFAULT_BAUD):
     """
     global _SER
     if _SER is None:
-        sys.path.insert(0, r'C:\Users\<user>\.workbuddy\binaries\python\pylibs')
+        _import_pyserial()
         import serial  # noqa: PLC0415
         _SER = serial.Serial(port, baud, timeout=0.3, dsrdtr=False, rtscts=False)
         _SER.dtr = False

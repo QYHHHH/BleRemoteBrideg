@@ -108,13 +108,18 @@ def find_page(port, tries=40):
     return None
 
 
-def board_ip(default='192.168.1.100'):
+def board_ip(default=None):
     """The board is on DHCP, so its address moves. `wifi on` records the real one
-    in build/.boardip; prefer that over a constant - a stale address here looks
-    exactly like a broken device and wastes a lot of time."""
+    in build/.boardip; prefer that.
+
+    No address is guessed when neither that file nor MRB_IP is available: a
+    stale address here looks exactly like a broken device and wastes a lot of
+    time, and one machine's LAN address has no business being in the repo.
+    """
     if os.environ.get('MRB_IP'):
         return os.environ['MRB_IP']
-    cached = r'C:\code\MiRemoteBridge\build\.boardip'
+    tools = os.path.dirname(os.path.abspath(__file__))          # <repo>/tests/tools
+    cached = os.path.join(os.path.dirname(os.path.dirname(tools)), 'build', '.boardip')
     try:
         with open(cached) as f:
             found = re.search(r'(\d+\.\d+\.\d+\.\d+)', f.read())
@@ -122,7 +127,10 @@ def board_ip(default='192.168.1.100'):
             return found.group(1)
     except OSError:
         pass
-    return default
+    if default:
+        return default
+    raise SystemExit("no board address: run the step that writes build/.boardip "
+                     "(wifi on prints the URL) or set MRB_IP=192.168.x.x")
 
 
 class Cdp:

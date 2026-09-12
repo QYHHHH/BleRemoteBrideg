@@ -4,6 +4,9 @@ board_manager:
 directories:
   # Espressif's Windows RISC-V linker cannot reliably resolve non-ASCII paths.
   # Keep the toolchain in an ASCII-only local path outside the Chinese repo path.
+  # This is the one machine-specific setting: point it at your own ASCII-only
+  # directory (the Arduino-ESP32 package is ~1.5 GB and is not part of this
+  # repository - see README "编译与烧录").
   data: C:/code/arduino-c3-data/data
   downloads: C:/code/arduino-c3-data/downloads
   user: C:/code/arduino-c3-data/user

@@ -147,4 +147,9 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 # 不接板子先跑宿主侧全套（含页面断言，约 1 秒，只需要 Chrome + Python）：
 #   .\scripts\test.ps1
 #   python tests/tools/check_web_ui.py            # 闪存预算 + 125 项页面断言
+#
+# 两个可选环境变量（都没配时脚本会明确报错，不会猜）：
+#   MRB_IP=<板子地址>        板子走 DHCP，地址会变；`wifi on` 会写入 build/.boardip
+#   MRB_PYSERIAL=<目录>      pyserial 不在默认 site-packages 时指一下
+#   MRB_PW=<密码>            browser_check 用的测试密码（默认 mrbtest99，只用于测试）
 ```

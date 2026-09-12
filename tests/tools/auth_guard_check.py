@@ -32,7 +32,6 @@ import socket
 import sys
 import time
 
-sys.path.insert(0, r'C:\Users\<user>\.workbuddy\binaries\python\pylibs')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import board_auth as ba  # noqa: E402
 
