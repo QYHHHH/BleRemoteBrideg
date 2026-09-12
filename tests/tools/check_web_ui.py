@@ -42,7 +42,7 @@ FLASH_BUDGET = 18500
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 136
+EXPECTED_CHECKS = 137
 
 TESTS = r"""(async () => {
   const results=[];
@@ -60,9 +60,10 @@ TESTS = r"""(async () => {
   online(false);
   assert($('pW').textContent.includes('已断开')&&$('pW').classList.contains('off'),'board shows web control disconnected');
   assert($('uiReset').disabled&&document.querySelector('#k40 button').disabled,'disconnect locks all mutation controls');
-  wsClosed();assert(S.wsTimer===null,'socket loss waits for manual reconnect');
-  let reconnects=0,oldConnect=connectWS;connectWS=()=>reconnects++;$('pW').click();connectWS=oldConnect;
-  assert(reconnects===1,'board connection pill manually reclaims control');
+  wsClosed({code:1006});assert(S.wsTimer!==null,'unexpected socket loss schedules automatic reconnect');clearTimeout(S.wsTimer);S.wsTimer=null;
+  S.claimed=true;wsClosed({code:1006});assert(S.wsTimer===null&&$('offWhy').textContent.includes('被另一网页接管'),'claimed socket does not reconnect');
+  let reconnects=0,claimed=false,oldConnect=connectWS;connectWS=m=>{reconnects++;claimed=m};$('pW').click();connectWS=oldConnect;
+  assert(reconnects===1&&claimed,'board connection pill manually reclaims control');
   assert(!$('memState').textContent.includes('5'),'disconnect removes live update claim');online(true);
   __demo.status.fwVersion='v9.9.9';__demo.status.buildTime='Jan  1 2030 00:00:00';await load();
   assert($('ver').textContent==='v9.9.9 · build Jan  1 2030 00:00:00','version and build stamp come from /api/status');

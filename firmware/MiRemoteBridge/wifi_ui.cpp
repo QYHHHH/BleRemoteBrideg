@@ -183,6 +183,7 @@ constexpr uint32_t kWsDeadAfterMs = 30000;
 void wsQueue(const uint8_t *payload, size_t len);
 void wsConsume();
 void wsClose();
+void wsCloseClaimed();
 
 void closeExchange(bool complete) {
   if (s_http.fd >= 0) {
@@ -676,6 +677,19 @@ void wsClose() {
   s_wsOutLen = s_wsOutSent = 0;
 }
 
+// Tell the old page why it is losing control. This tiny close frame normally
+// fits in one nonblocking send; if the peer has already vanished, wsClose()
+// still releases the only slot and the claiming page proceeds.
+void wsCloseClaimed() {
+  if (s_ws && s_wsFd >= 0) {
+    static const char reason[] = "claimed";
+    uint8_t frame[11] = {0x88, 9, 0x0F, 0xA1};  // close code 4001 + reason
+    memcpy(frame + 4, reason, sizeof(reason) - 1);
+    send(s_wsFd, frame, sizeof(frame), MSG_DONTWAIT);
+  }
+  wsClose();
+}
+
 // Queue one unmasked text frame. Refuses while the previous frame is still
 // draining: callers are event handlers, not queues.
 bool wsQueueRaw(const uint8_t *payload, size_t len, uint8_t opcode) {
@@ -966,9 +980,10 @@ void dispatch() {
 
   if (isWs) {
     if (settings::hasWebPassword()) {
-      const char *tok = query ? strstr(query, "token=") : nullptr;
+      char token[64] = {};
       const String expected = settings::webToken();
-      if (!tok || expected.length() == 0 || expected != String(tok + 6)) {
+      if (!queryValue(query, "token", token, sizeof(token)) ||
+          expected.length() == 0 || expected != String(token)) {
         errorResponse(401, "Unauthorized", "websocket token required");
         return;
       }
@@ -1069,8 +1084,9 @@ void dispatch() {
       // allows setup mode regardless of the token value).
       const String tok = settings::hasWebPassword() ? settings::webToken()
                                                     : String("setup");
-      const int n = snprintf(s_http.io, sizeof(s_http.io), "{\"token\":\"%s\"}",
-                             tok.c_str());
+      const int n = snprintf(s_http.io, sizeof(s_http.io),
+                             "{\"token\":\"%s\",\"occupied\":%s}",
+                             tok.c_str(), s_ws ? "true" : "false");
       respond(200, "OK", "application/json", s_http.io, n > 0 ? (size_t)n : 0);
     }
     else if (strcmp(target, "/ws") == 0 && get) {
@@ -1084,8 +1100,19 @@ void dispatch() {
         if (strncasecmp(line, "Sec-WebSocket-Key:", 18) == 0) sscanf(line + 18, "%63s", key);
         *end = saved; line = end;
       }
-      if (!key[0]) errorResponse(400, "Bad Request", "missing Sec-WebSocket-Key");
-      else wsHandshake(key);
+      if (!key[0]) {
+        errorResponse(400, "Bad Request", "missing Sec-WebSocket-Key");
+      } else {
+        char action[12] = {};
+        const bool claim = queryValue(query, "action", action, sizeof(action)) &&
+                           strcmp(action, "claim") == 0;
+        if (s_ws && !claim) {
+          errorResponse(409, "Conflict", "another page already controls the websocket");
+        } else {
+          if (s_ws) wsCloseClaimed();
+          wsHandshake(key);
+        }
+      }
     }
     else if (strcmp(target, "/favicon.ico") == 0) respond(204, "No Content", "image/x-icon", "", 0);
     else if (strcmp(target, "/api/set") == 0 || strcmp(target, "/api/reset") == 0)

@@ -181,7 +181,7 @@ for(i=0;i<10;i++)KB.push([30+i,String((i+1)%10)]);
 for(i=0;i<12;i++)KB.push([58+i,'F'+(i+1)]);
 var CS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
 var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
-var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null};
+var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null,wsOpened:false,claimed:false};
 function hx(v){return v.toString(16).toUpperCase().padStart(2,'0')}
 function pick(l,v,d){for(var i=0;i<l.length;i++)if(l[i][0]===v)return l[i][1];return d}
 function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return pick(CS,a.cons,'媒体 0x'+hx(a.cons));
@@ -223,10 +223,11 @@ if(!j||typeof j.type!=='string')return;
 if(j.type==='key'){if(typeof j.keyPresses==='number')S.keyPress=j.keyPresses;
 if(j.lastKey)pulse(j.lastKey);
 if(typeof j.activeKey==='number')highlight(j.activeKey);return}
-if(j.type==='status'){stat(j);if(!S.on)load();return}}
-function wsOpen(){S.wsRetry=0;load()}
-function wsClosed(){online(false,'控制连接已断开，点击可重新连接并夺回控制权');if(S.wsTimer)clearTimeout(S.wsTimer);S.wsTimer=null}
-function connectWS(){
+if(j.type==='status'){stat(j);if(!S.on)load();return}
+if(j.type==='claimed'){S.claimed=true;return}}
+function wsOpen(){S.wsRetry=0;S.wsOpened=true;S.claimed=false;load()}
+function wsClosed(e){var taken=S.claimed||(e&&e.code===4001);online(false,taken?'控制权已被另一网页接管，点击可夺回':'连接意外断开，正在自动重连');if(S.wsTimer)clearTimeout(S.wsTimer);S.wsTimer=null;if(!taken){var d=Math.min(8000,600*(S.wsRetry=(S.wsRetry||0)+1));S.wsTimer=setTimeout(function(){connectWS(false)},d)}}
+function connectWS(manual){
 if(S.ws&&S.ws.readyState===1)return;
 /* the socket cannot carry an Authorization header, so fetch the token first
 over an authenticated request and hand it over in the URL */
@@ -234,13 +235,14 @@ fetch('/api/token',{cache:'no-store'}).then(function(r){
 if(r.status===401){var e=new Error('relogin');e.relogin=true;throw e}
 return r.json()}).then(function(j){
 if(!j||typeof j.token!=='string'||!j.token)throw Error('no token');
-openSocket(j.token)}).catch(function(e){
+if(j.occupied&&!manual){online(false,'另一网页正在控制，点击可夺回控制权');return}
+openSocket(j.token,manual)}).catch(function(e){
 if(e&&e.relogin){location.href='/login';return}   /* session gone: sign in again */
-online(false,'登录会话无效，请重新登录')})}
-function openSocket(token){
+online(false,'连接意外断开，正在自动重连');if(S.wsTimer)clearTimeout(S.wsTimer);S.wsTimer=setTimeout(function(){connectWS(false)},2500)})}
+function openSocket(token,manual){
 try{if(S.ws){S.ws.onclose=null;S.ws.close()}}catch(e){}
 var proto=(location.protocol==='https:')?'wss://':'ws://';
-try{S.ws=new WebSocket(proto+location.host+'/ws?token='+encodeURIComponent(token))}catch(e){wsClosed();return}
+try{S.ws=new WebSocket(proto+location.host+'/ws?token='+encodeURIComponent(token)+(manual?'&action=claim':''))}catch(e){wsClosed();return}
 S.ws.onopen=wsOpen;S.ws.onclose=wsClosed;S.ws.onerror=function(){};
 S.ws.onmessage=function(ev){var j=null;try{j=JSON.parse(ev.data)}catch(e){return}wsMessage(j)}}
 function idx(l){var o={};(l||[]).forEach(function(a){o[a.raw]=a});return o}
@@ -316,11 +318,11 @@ $('ed').addEventListener('cancel',function(e){if(S.busy)e.preventDefault()});
 $('rd').addEventListener('cancel',function(e){if(S.busy)e.preventDefault()});
 $('resetAll').onclick=function(){$('rdE').hidden=true;$('rd').showModal()};
 $('rdC').onclick=function(){$('rd').close()};$('rdY').onclick=reset;
-$('refresh').onclick=$('refresh2').onclick=function(){load(true)};$('retry').onclick=$('pW').onclick=function(){connectWS()};
+$('refresh').onclick=$('refresh2').onclick=function(){load(true)};$('retry').onclick=$('pW').onclick=function(){connectWS(true)};
 $('goMap').onclick=function(){document.querySelector('.head').scrollIntoView({behavior:'smooth',block:'start'})};
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.ws&&S.ws.readyState===1)load()});
 window.addEventListener('resize',drawWires);new ResizeObserver(drawWires).observe($('grid'));
-connectWS();
+connectWS(false);
 const workspace=document.querySelector('.workspace'), section=workspace.querySelector('section');
 const side=document.createElement('div');side.className='side';workspace.append(side);
 section.className='card mapping-panel';const shell=$('grid').parentElement;shell.replaceWith($('grid'));
@@ -332,7 +334,7 @@ const ring=document.createElement('div');ring.id='memRing';ring.setAttribute('ro
 const hardware=document.createElement('div');hardware.className='hardware';const legend=document.createElement('div');legend.className='legend';
 [...board.children].filter(e=>e.tagName==='P').forEach(e=>legend.append(e));hardware.append(art,legend);
 const boardBody=document.createElement('div');boardBody.className='board-body';boardBody.append(hardware,memoryBox);board.append(boardBody);
-const rack=document.createElement('section');rack.className='card rack';rack.innerHTML='<div class="rack-heading"><h2>遥控器配置</h2><span class="mut">3 个槽位 · 独立保存</span></div><div class="slots" id="slots"></div><div class="rack-actions"><div><b>按下即转发，松开即释放</b><small id="slotSummary">快捷键修改后自动保存</small></div><button class="btn" id="uiRefresh">刷新</button><button class="btn d" id="uiReset">恢复默认设置</button></div>';
+const rack=document.createElement('section');rack.className='card rack';rack.innerHTML='<div class="rack-heading"><h2>遥控器配置</h2><span class="mut">3 个槽位 · 独立保存</span></div><div class="slots" id="slots"></div><div class="rack-actions"><div><b>按下即转发，松开即释放</b><small id="slotSummary">快捷键修改后自动保存</small></div><button class="btn d" id="uiReset">恢复默认设置</button></div>';
 side.prepend(rack);
 const discovered=document.createElement('div');discovered.id='discovered';discovered.hidden=true;section.append(discovered);
 const editor=document.createElement('dialog');editor.id='slotEditor';editor.innerHTML='<div class="dh"><div><h2 id="slotEdTitle">编辑按键</h2><small class="mut">修改后自动保存到当前槽位</small></div><button class="btn" id="slotEdClose">完成</button></div><div class="db"><div id="learnedControls"><label class="f">按键名称<input id="slotName" maxlength="24" autocomplete="off"></label></div><label class="f">动作类型<select id="slotKind"><option value="1">键盘快捷键</option><option value="2">媒体 / 系统控制</option><option value="0">不转发</option></select></label><div id="slotKeyboard"><p class="mut">修饰键 · 可多选</p><div class="ms" id="slotMods"></div><label class="f">主键<select id="slotKey"></select></label></div><label class="f" id="slotMedia">媒体 / 系统动作<select id="slotCons"></select></label><div class="pv" id="slotValue"></div><p class="hint" id="slotSaved" role="status"></p></div><div class="da"><button type="button" class="btn d" id="slotDelete">删除此按键</button><button type="button" class="btn" id="slotEdDone">完成</button></div>';
@@ -377,7 +379,6 @@ function openSlotEditor(i){editingKey=i;if(selectedSlot===0){S.sel=slots[0].keys
 function paintEditor(){const kind=+$('slotKind').value;$('slotKeyboard').hidden=kind!==1;$('slotMedia').hidden=kind!==2;[...$('slotMods').children].forEach(b=>b.setAttribute('aria-pressed',String(!!(editingMods&+b.dataset.bit))));$('slotValue').textContent=kind===0?'不转发':fmt({kind,mod:editingMods,key:+$('slotKey').value,cons:+$('slotCons').value})}
 function autoSave(){if(!S.on)return;paintEditor();const kind=+$('slotKind').value;if(kind===1&&!editingMods&&!+$('slotKey').value){$('slotSaved').textContent='请选择主键或修饰键后保存';return}slots[selectedSlot].keys[editingKey].action={kind,mod:kind===1?editingMods:0,key:kind===1?+$('slotKey').value:0,cons:kind===2?+$('slotCons').value:0};$('slotSaved').textContent=persist()?'已自动保存到 '+slots[selectedSlot].name:'浏览器存储不可用，本次修改仅保留到关闭页面';drawSlots()}
 ['slotKind','slotKey','slotCons'].forEach(id=>$(id).onchange=autoSave);$('slotName').oninput=()=>{if(selectedSlot===0||editingKey===null)return;const name=$('slotName').value.trim();if(!name){$('slotSaved').textContent='按键名称不能为空';return}slots[selectedSlot].keys[editingKey].name=name;$('slotEdTitle').textContent=slots[selectedSlot].name+' · '+name;persist();drawSlots();$('slotSaved').textContent='名称已自动保存'};$('slotDelete').onclick=()=>{if(selectedSlot===0||editingKey===null)return;if($('slotDelete').dataset.confirm!=='yes'){$('slotDelete').dataset.confirm='yes';$('slotDelete').textContent='再次点击确认删除';$('slotSaved').textContent='再次点击删除按钮确认';return}slots[selectedSlot].keys.splice(editingKey,1);persist();editingKey=null;editor.close();drawSlots();toast('按键已删除')};$('slotEdClose').hidden=true;$('slotEdDone').onclick=()=>editor.close();
-$('uiRefresh').onclick=()=>{drawSlots();toast('预览已刷新')};
 $('uiReset').onclick=()=>{$('rd').querySelector('h2').textContent='恢复 '+slots[selectedSlot].name+' 默认设置？';$('rd').querySelector('.db h3').textContent=selectedSlot===0?'这将恢复小米预设的全部快捷键。':'这将清除当前槽位的快捷键设置，保留已发现的按键。';$('rd').querySelector('.db .hint').textContent='仅影响当前槽位，其他两个槽位保持不变。确认后无法撤销。';$('rdY').disabled=false;$('rd').showModal()};
 $('rdY').onclick=()=>{if(selectedSlot===0)slots[0].keys=presetKeys();else slots[selectedSlot].keys.forEach(k=>k.action={kind:0,mod:0,key:0,cons:0});persist();$('rd').close();drawSlots();toast('当前槽位已恢复默认设置')};
 S.sel=0;drawSlots();
