@@ -33,6 +33,7 @@
  */
 
 #include "rc003_client.h"
+#include "native_subscription.h"
 
 #include <BLEClient.h>
 #include <BLEDevice.h>
@@ -94,6 +95,10 @@ BLERemoteCharacteristic *s_charReport = nullptr;
 BLERemoteCharacteristic *s_charAtvvCtl = nullptr;
 BLERemoteCharacteristic *s_charBattery = nullptr;
 
+struct NotifyHandle {uint16_t handle;bool atvv;};
+NotifyHandle s_notifyHandles[8];
+volatile uint8_t s_notifyHandleCount=0;
+bool s_refreshServices=false;
 String s_connectedAddr;
 String s_newPeer;
 uint8_t s_newPeerType=0;
@@ -388,6 +393,7 @@ class ClientCallbacks : public BLEClientCallbacks {
     s_batteryReadPending=false;
     s_remoteBatteryValid = false;
     s_subscribed = false;
+    s_notifyHandleCount=0;
     rc003_tracker_reset(&s_tracker);
     // The charge is no longer known. It is deliberately not cleared to a
     // default: the host keeps showing the last real value instead of jumping to
@@ -589,9 +595,9 @@ bool discoverAndSubscribe() {
   // the same saved peer; switching devices or failed subscription rediscover.
   static std::map<std::string, BLERemoteService *> *cached=nullptr;
   static String cachedPeer;
-  const bool reuse=cached && cachedPeer==s_connectedAddr && !s_newPeer.length();
+  const bool reuse=cached && cachedPeer==s_connectedAddr && !s_newPeer.length() && !s_refreshServices;
   std::map<std::string, BLERemoteService *> *services = reuse ? cached : s_client->getServices();
-  cached=services;cachedPeer=s_connectedAddr;
+  cached=services;cachedPeer=s_connectedAddr;s_refreshServices=false;
   BR_LOGI(kTagGatt,"service cache %s",reuse?"reused":"refreshed");
   if (!services || services->empty()) {
     BR_LOGE(kTagGatt, "service discovery returned nothing");
@@ -601,6 +607,7 @@ bool discoverAndSubscribe() {
           (unsigned)services->size(), (unsigned)ESP.getFreeHeap());
 
   int subscribed = 0;
+  s_notifyHandleCount=0;
 
   // Two passes over the discovered services, and the order is not cosmetic:
   // the service map is a std::map keyed by the UUID *string*, which sorts
@@ -631,13 +638,15 @@ bool discoverAndSubscribe() {
       if (!isHidService && !isAtvvService) continue; // Battery is read asynchronously by UUID.
 
       BR_LOGI(kTagGatt, "service %s", svcUuid.c_str());
-      std::map<std::string, BLERemoteCharacteristic *> *chars = svc->getCharacteristics();
+      auto *chars = svc->getCharacteristicsByHandle();
       if (!chars) continue;
 
       for (auto &kc : *chars) {
         BLERemoteCharacteristic *ch = kc.second;
         if (!ch) continue;
 
+        auto next=chars->upper_bound(ch->getHandle());
+        const uint16_t endHandle=next==chars->end()?0xffff:next->first-1;
         const String uuid = ch->getUUID().toString();
         BR_LOGD(kTagGatt, "  char %s n=%d i=%d w=%d", uuid.c_str(), ch->canNotify() ? 1 : 0,
                 ch->canIndicate() ? 1 : 0, (ch->canWrite() || ch->canWriteNoResponse()) ? 1 : 0);
@@ -645,7 +654,8 @@ bool discoverAndSubscribe() {
         // ---- HOGP report characteristic (0x2A4D) -------------------------
         if (isHidService && uuid.indexOf(RC003_HID_REPORT_UUID) >= 0) {
           if (ch->canNotify() || ch->canIndicate()) {
-            if (ch->subscribe(/*notifications=*/ch->canNotify(), onHogpNotify, /*response=*/true)) {
+            if (s_notifyHandleCount<8 && subscribeNative(s_client->getConnId(),ch->getHandle(),endHandle,ch->canNotify())) {
+              s_notifyHandles[s_notifyHandleCount++]={ch->getHandle(),false};
               s_charReport = ch;
               subscribed++;
               BR_LOGI(kTagGatt, "subscribed to HID report %s", uuid.c_str());
@@ -671,7 +681,7 @@ bool discoverAndSubscribe() {
         // ---- HOGP control point (0x2A4C): exit suspend --------------------
         if (isHidService && uuid.indexOf(RC003_HID_CTRL_POINT_UUID) >= 0) {
           if (ch->canWrite() || ch->canWriteNoResponse()) {
-            uint8_t exitSuspend = 0x00;
+            uint8_t exitSuspend = 0x01; // HOGP: 0x00 suspends, 0x01 exits suspend.
             ch->writeValue(&exitSuspend, 1, false);
             BR_LOGD(kTagGatt, "hid control point: exit suspend");
           }
@@ -681,7 +691,8 @@ bool discoverAndSubscribe() {
         // ---- ATVV control channel: voice button only ---------------------
         if (BRIDGE_ATVV_CTL_ENABLE && isAtvvService && uuid.indexOf("ab5e0004") >= 0) {
           if (ch->canNotify() || ch->canIndicate()) {
-            if (ch->subscribe(/*notifications=*/true, onAtvvCtlNotify, /*response=*/false)) {
+            if (s_notifyHandleCount<8 && subscribeNative(s_client->getConnId(),ch->getHandle(),endHandle,ch->canNotify())) {
+              s_notifyHandles[s_notifyHandleCount++]={ch->getHandle(),true};
               s_charAtvvCtl = ch;
               subscribed++;
               BR_LOGI(kTagGatt, "subscribed to ATVV control (voice button only, no audio)");
@@ -896,6 +907,7 @@ void handleRequests() {
   }
 
   if (doReconnect) {
+    s_refreshServices=true;
     BR_LOGI(kTag, "console requested reconnect");
     if (s_client && s_client->isConnected()) {
       s_client->disconnect();
@@ -1108,6 +1120,15 @@ void taskEntry(void *arg) {
 }  // namespace
 
 namespace rc003_client {
+
+void handleNotification(uint16_t conn,uint16_t handle,uint8_t *data,size_t length) {
+  if(s_slotBusy || !s_client || s_client->getConnId()!=conn)return;
+  for(uint8_t i=0;i<s_notifyHandleCount;i++) if(s_notifyHandles[i].handle==handle) {
+    if(s_notifyHandles[i].atvv)onAtvvCtlNotify(nullptr,data,length,true);
+    else onHogpNotify(nullptr,data,length,true);
+    return;
+  }
+}
 
 bool discardUnassigned(const String &address, uint8_t type) {
   if(address.length()!=17 || type>1) return false;

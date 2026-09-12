@@ -16,6 +16,7 @@ namespace rc003_client {
 
 // Starts the background central task. Assumes ble_core::begin() has run.
 bool begin();
+void handleNotification(uint16_t conn, uint16_t handle, uint8_t *data, size_t length);
 bool restoreActiveSlot();
 // Slot operation: 0 select, 1 enable discovery, 2 delete device. Loop services
 // the NVS/map handoff only after the central task has disconnected and paused.

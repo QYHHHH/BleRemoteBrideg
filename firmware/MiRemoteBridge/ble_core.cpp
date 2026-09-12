@@ -13,12 +13,19 @@
 #include <BLESecurity.h>
 
 #include "log.h"
+#include "rc003_client.h"
+#include <os/os_mbuf.h>
 
 namespace {
 
 static const char *kTag = "BLE";
 bool s_started = false;
 int diagnosticGap(ble_gap_event *event, void *) {
+  if(event->type==BLE_GAP_EVENT_NOTIFY_RX) {
+    uint8_t data[32];size_t length=OS_MBUF_PKTLEN(event->notify_rx.om);
+    if(length<=sizeof(data) && !os_mbuf_copydata(event->notify_rx.om,0,length,data))
+      rc003_client::handleNotification(event->notify_rx.conn_handle,event->notify_rx.attr_handle,data,length);
+  }
   if(event->type==BLE_GAP_EVENT_DISCONNECT)
     BR_LOGW(kTag,"disconnect handle=%u reason=%d",event->disconnect.conn.conn_handle,event->disconnect.reason);
   if(event->type==BLE_GAP_EVENT_ENC_CHANGE)
