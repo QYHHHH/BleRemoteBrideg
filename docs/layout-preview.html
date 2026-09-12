@@ -341,7 +341,7 @@ $('refresh').onclick=$('refresh2').onclick=function(){load(true)};$('retry').onc
 $('goMap').onclick=function(){document.querySelector('.head').scrollIntoView({behavior:'smooth',block:'start'})};
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.ws&&S.ws.readyState===1)load()});
 window.addEventListener('resize',drawWires);new ResizeObserver(drawWires).observe($('grid'));
-connectWS(false);
+connectWS(true);
 const workspace=document.querySelector('.workspace'), section=workspace.querySelector('section');
 const side=document.createElement('div');side.className='side';workspace.append(side);
 section.className='card mapping-panel';const shell=$('grid').parentElement;shell.replaceWith($('grid'));
