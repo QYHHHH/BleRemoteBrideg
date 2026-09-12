@@ -66,8 +66,17 @@ try {
         Write-Host ("Probing {0} for an Espressif chip (read-only, nothing is written)..." -f $Port) -ForegroundColor Cyan
         $probe = & $esptool --port $Port --baud 115200 chip-id 2>&1 | Out-String
         Write-Host $probe
-        if ($probe -match 'Chip is (ESP32-[A-Za-z0-9]+)') {
-            $chip = $Matches[1]
+        # esptool 4.x prints "Chip is ESP32-C3"; 5.x prints "Chip type: ESP32-C3
+        # (QFN32)" (and warns that the C3 has no chip ID, reading the MAC
+        # instead). Matching only the 4.x form made every probe fail on 5.x with
+        # "no Espressif chip answered", on a board that was fine.
+        $chip = $null
+        foreach ($pattern in @('Chip is (ESP32-[A-Za-z0-9]+)',
+                               'Chip type:\s*(ESP32-[A-Za-z0-9]+)',
+                               'Detecting chip type\.+\s*(ESP32-[A-Za-z0-9]+)')) {
+            if ($probe -match $pattern) { $chip = $Matches[1]; break }
+        }
+        if ($chip) {
             Write-Host ("Chip detected: {0}" -f $chip) -ForegroundColor Green
             if ($chip -ne 'ESP32-C3') {
                 Set-FlashStatus ("NOT FLASHED: {0} answers on {1}, but this firmware targets ESP32-C3." -f $chip, $Port)
