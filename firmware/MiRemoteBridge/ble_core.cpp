@@ -64,8 +64,11 @@ bool begin(const char *deviceName) {
   // Just Works bonding, no MITM: the RC003 has no input/output capability and
   // neither does a keyboard-only peripheral. Bonding=true is required so both
   // peers can reconnect from a stored long-term key without re-pairing.
-  // Keep bonding and Just Works, but disable Secure Connections for older HOGP remotes.
-  BLESecurity::setAuthenticationMode(/*bonding=*/true, /*mitm=*/false, /*sc=*/false);
+  // Keep the standard Secure Connections path for the Xiaomi RC003 baseline.
+  // The older HOGP compatibility probe is isolated to its report subscriptions;
+  // changing the security negotiation globally made the known-good RC003
+  // reconnect less predictable without fixing the CMCC MIC failure.
+  BLESecurity::setAuthenticationMode(/*bonding=*/true, /*mitm=*/false, /*sc=*/true);
   BLESecurity::setCapability(ESP_IO_CAP_NONE);
   BLESecurity::setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
   BLESecurity::setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
