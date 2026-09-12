@@ -32,6 +32,8 @@ uint8_t activeRawCode();
 // The Web UI compares the counter between status polls, so a press shorter
 // than the poll interval still produces a visible flash instead of vanishing.
 uint32_t keyPresses();
+// Count every recognized press/release transition, including unmapped keys.
+uint32_t keyEvents();
 uint8_t lastKeyRaw();
 
 // Print the multi-line status block used by `status` and at boot.

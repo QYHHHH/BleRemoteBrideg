@@ -39,6 +39,7 @@ bool s_activeDown = false;
 
 uint32_t s_eventsHandled = 0;
 uint32_t s_keyPresses = 0;   // forwarded key-downs, for the Web UI's live feedback
+uint32_t s_keyEvents = 0;  // every recognized press/release transition
 uint8_t s_lastKeyRaw = 0;
 uint32_t s_reportsSent = 0;
 uint32_t s_unknownKeys = 0;
@@ -49,23 +50,43 @@ uint32_t s_lastDropReportMs = 0;
 // ---------------------------------------------------------------------------
 void releaseActive(const char *why) {
   if (!s_activeDown) return;
-  hid_server::releaseAction(s_activeAction);
+  const bool forwarded = s_activeAction.kind != HID_ACT_NONE;
+  if (forwarded) hid_server::releaseAction(s_activeAction);
   BR_LOGI(kTagKey, "release 0x%02X (%s) [%s]", s_activeRaw, keymap_raw_name(s_activeRaw), why ? why : "");
+  s_keyEvents++;
   s_activeDown = false;
   s_activeRaw = 0;
   memset(&s_activeAction, 0, sizeof(s_activeAction));
 }
-
 void handleKeyEvent(uint8_t rawCode, bool pressed, uint32_t tsUs) {
   if (pressed) {
     if (rawCode == 0) return;
-    if(settings::activeSlot()==0) {
-      bool fixed=false;const keymap_entry_t *defs=keymap_default_table();
-      for(size_t i=0;i<keymap_default_count();i++) if(defs[i].raw_code==rawCode)fixed=true;
-      if(!fixed)return; // Fixed template never forwards extra keys.
-    }
-    s_keyPresses++; s_lastKeyRaw = rawCode;
 
+    // A new physical key always ends the previous one, even when this key is
+    // deliberately not forwarded. The same state drives the LED and the page
+    // highlight, so an unmapped button still gets visible feedback.
+    releaseActive("new key");
+    s_keyEvents++;
+    s_lastKeyRaw = rawCode;
+
+    bool fixed = false;
+    if (settings::activeSlot() == 0) {
+      const keymap_entry_t *defs = keymap_default_table();
+      for (size_t i = 0; i < keymap_default_count(); i++) {
+        if (defs[i].raw_code == rawCode) { fixed = true; break; }
+      }
+    }
+    const bool mayForward = settings::activeSlot() != 0 || fixed;
+    if (!mayForward) {
+      // Slot 0 intentionally keeps its fixed 13-key template. It still counts
+      // as heard so the indicator can acknowledge a real but discarded key.
+      BR_LOGI(kTagKey, "0x%02X (%s) ignored by fixed RC003 template", rawCode, keymap_raw_name(rawCode));
+      s_activeRaw = rawCode;
+      s_activeDown = true;
+      return;
+    }
+
+    s_keyPresses++;
     const hid_action_t action = keymap_lookup(rawCode);
 
     if (action.kind == HID_ACT_NONE) {
@@ -80,19 +101,21 @@ void handleKeyEvent(uint8_t rawCode, bool pressed, uint32_t tsUs) {
         passthrough.kind = HID_ACT_KEYBOARD;
         passthrough.modifier = HID_MOD_NONE;
         passthrough.keycode = rawCode;
-        releaseActive("passthrough");
         hid_server::pressAction(passthrough);
         s_activeAction = passthrough;
         s_activeRaw = rawCode;
         s_activeDown = true;
+#else
+        s_activeRaw = rawCode;
+        s_activeDown = true;
 #endif
+      }
+      if (keymap_is_known(rawCode)) {
+        s_activeRaw = rawCode;
+        s_activeDown = true;
       }
       return;
     }
-
-    // A second key going down before the first was released: release the old
-    // one first so the host never sees an inconsistent state.
-    releaseActive("new key");
 
     hid_server::pressAction(action);
     const uint32_t dt = (uint32_t)(micros() - tsUs);
@@ -115,8 +138,9 @@ void handleKeyEvent(uint8_t rawCode, bool pressed, uint32_t tsUs) {
   // Release. The code carried by the release event is authoritative; fall back
   // to whatever is currently tracked if it does not match.
   if (s_activeDown && (rawCode == 0 || rawCode == s_activeRaw)) {
+    const bool forwarded = s_activeAction.kind != HID_ACT_NONE;
     releaseActive("key up");
-    s_reportsSent++;
+    if (forwarded) s_reportsSent++;
   }
 }
 
@@ -260,6 +284,7 @@ void loop() {
 }
 
 void releaseAllKeys() {
+  if (s_activeDown) s_keyEvents++;
   s_activeDown = false;
   s_activeRaw = 0;
   memset(&s_activeAction, 0, sizeof(s_activeAction));
@@ -269,6 +294,7 @@ void releaseAllKeys() {
 uint8_t activeRawCode() { return s_activeDown ? s_activeRaw : 0; }
 
 uint32_t keyPresses() { return s_keyPresses; }
+uint32_t keyEvents() { return s_keyEvents; }
 uint8_t lastKeyRaw() { return s_lastKeyRaw; }
 
 void printStatus() {

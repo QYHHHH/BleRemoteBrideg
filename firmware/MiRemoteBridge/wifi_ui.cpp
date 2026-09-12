@@ -168,7 +168,7 @@ size_t s_wsInLen = 0;
 uint8_t s_wsOutBuf[kWsOut];
 size_t s_wsOutLen = 0;
 size_t s_wsOutSent = 0;
-uint32_t s_wsLastKeyCount = 0;
+uint32_t s_wsLastKeyEvents = 0;
 uint32_t s_wsLastStatusMs = 0;
 // Keepalive. The socket owns the single service slot, so a peer that vanishes
 // without a FIN (laptop sleeping, script killed, Wi-Fi drop) would otherwise
@@ -369,8 +369,8 @@ void handleStatus(bool head) {
       (unsigned)ESP.getMaxAllocHeap(), bridge::activeRawCode());
   // keyPresses is a monotonic counter: the page flashes the key whenever it
   // changes, so a press shorter than the poll interval is still shown.
-  out.add(",\"keyPresses\":%lu,\"lastKey\":%u", (unsigned long)bridge::keyPresses(),
-      bridge::lastKeyRaw());
+  out.add(",\"keyPresses\":%lu,\"keyEvents\":%lu,\"lastKey\":%u",
+      (unsigned long)bridge::keyPresses(), (unsigned long)bridge::keyEvents(), bridge::lastKeyRaw());
   out.add(",\"notifications\":%lu,\"events\":%lu,\"queuePending\":%u,\"queueDropped\":%lu",
       (unsigned long)rc003_client::notifyCount(), (unsigned long)bridge::eventsHandled(),
       (unsigned)event_bus::pending(), (unsigned long)event_bus::dropped());
@@ -786,9 +786,9 @@ void wsQueue(const char *payload) { wsQueueRaw((const uint8_t *)payload, strlen(
 void wsSendStatus() {
   char buf[320];
   Json out(buf, sizeof(buf));
-  out.add("{\"type\":\"status\",\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,"
+  out.add("{\"type\":\"status\",\"keyPresses\":%lu,\"keyEvents\":%lu,\"lastKey\":%u,\"activeKey\":%u,"
           "\"remoteConnected\":%s,\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
-      (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
+      (unsigned long)bridge::keyPresses(), (unsigned long)bridge::keyEvents(), bridge::lastKeyRaw(), bridge::activeRawCode(),
       boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
       rc003_client::batteryLevel(), (unsigned)keymap_binding_count(),
       (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
@@ -940,7 +940,7 @@ void wsHandshake(const char *key) {
   s_pendingUpgrade = true;
   s_ws = false;
   s_wsInLen = s_wsOutLen = s_wsOutSent = 0;
-  s_wsLastKeyCount = bridge::keyPresses();
+  s_wsLastKeyEvents = bridge::keyEvents();
   s_wsLastStatusMs = millis();
   s_wsLastRecvMs = millis();
   s_wsLastPingMs = s_wsLastRecvMs;
@@ -951,9 +951,10 @@ void wsHandshake(const char *key) {
 // link states so a disconnect shows up here too.
 void wsSendKeyEvent() {
   Json out(s_http.io, sizeof(s_http.io));
-  out.add("{\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,\"remoteConnected\":%s,"
+  out.add("{\"keyEvents\":%lu,\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,\"pressed\":%s,\"remoteConnected\":%s,"
           "\"hostConnected\":%s,\"battery\":%d}",
-      (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
+      (unsigned long)bridge::keyEvents(), (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
+      boolean(bridge::activeRawCode() != 0),
       boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
       rc003_client::batteryLevel());
   jsonResult(out);
@@ -1326,12 +1327,14 @@ void pollHttp() {
     // 3) Push events: a key the instant it is forwarded, plus a slow status
     //    heartbeat so the page sees link changes and knows we are alive.
     if (s_wsOutSent >= s_wsOutLen) {
-      if (bridge::keyPresses() != s_wsLastKeyCount) {
-        s_wsLastKeyCount = bridge::keyPresses();
+      if (bridge::keyEvents() != s_wsLastKeyEvents) {
+        s_wsLastKeyEvents = bridge::keyEvents();
         char buf[256];
         Json out(buf, sizeof(buf));
-        out.add("{\"type\":\"key\",\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u}",
-            (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode());
+        const uint8_t active = bridge::activeRawCode();
+        out.add("{\"type\":\"key\",\"keyEvents\":%lu,\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,\"pressed\":%s}",
+            (unsigned long)bridge::keyEvents(), (unsigned long)bridge::keyPresses(),
+            bridge::lastKeyRaw(), active, boolean(active != 0));
         if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);
       } else if (now - s_wsLastStatusMs >= kWsStatusEveryMs) {
         s_wsLastStatusMs = now;

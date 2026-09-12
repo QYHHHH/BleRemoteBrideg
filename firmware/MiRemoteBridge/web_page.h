@@ -221,7 +221,9 @@ if(+e.dataset.r===raw){e.classList.add('pulse');setTimeout(function(){e.classLis
 function wsMessage(j){
 if(!j||typeof j.type!=='string')return;
 if(j.type==='key'){if(typeof j.keyPresses==='number')S.keyPress=j.keyPresses;
-if(j.lastKey){pulse(j.lastKey);if(selectedSlot)load()}
+var down=j.pressed===undefined?!!j.activeKey:!!j.pressed,raw=+j.lastKey||0;
+if(raw&&down){pulse(raw);
+if(selectedSlot&& !learned.some(function(k){return k.raw===raw})){load().then(function(){highlight(typeof j.activeKey==='number'&&j.activeKey?j.activeKey:raw)})}}
 if(typeof j.activeKey==='number')highlight(j.activeKey);return}
 if(j.type==='status'){const changed=!S.lastStatus||j.remoteConnected!==S.lastStatus.remoteConnected;stat(j);if(!S.on||S.slotBusy||changed)load();return}
 if(j.type==='claimed'){S.claimed=true;return}}
@@ -263,10 +265,12 @@ var x2=(k[3]==='L'?cb.right+9:cb.left-9)-gb.left,y2=cb.top+cb.height/2-gb.top;
 var dx=(x2-x1)*0.42;
 out+='<path marker-end="url(#tip)" data-r="'+k[0]+'" d="M'+x1.toFixed(1)+','+y1.toFixed(1)+' C'+(x1+dx).toFixed(1)+','+y1.toFixed(1)+' '+(x2-dx).toFixed(1)+','+y2.toFixed(1)+' '+x2.toFixed(1)+','+y2.toFixed(1)+'"/>';});
 svg.innerHTML=out}
-function highlight(raw){KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.classList.toggle('live',!!raw&&k[0]===raw)});
+function highlight(raw){
+KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.classList.toggle('live',!!raw&&k[0]===raw)});
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('live',!!raw&&+e.dataset.r===raw)});
-Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)})}
-
+Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)});
+Array.prototype.forEach.call(document.querySelectorAll('.learned-key'),function(e){var b=e.querySelector('[data-learned]');e.classList.toggle('heard',!!raw&&!!b&&+b.dataset.learned===raw)})
+}
 function memory(j){function kb(n){return typeof n==='number'&&n>=0?(n/1024).toFixed(1)+' KiB':'—'}
 if(typeof j.heapFree!=='number')return;
 $('memFree').textContent=kb(j.heapFree)+' 可用';$('memDetail').textContent='历史最低 '+kb(j.heapMin)+' · 最大连续块 '+kb(j.heapLargest);$('memState').textContent='更新于 '+new Date().toLocaleTimeString()+' · 约 5 秒更新';var valid=typeof j.heapTotal==='number'&&j.heapTotal>0&&j.heapFree>=0&&j.heapFree<=j.heapTotal,used=valid?100*(j.heapTotal-j.heapFree)/j.heapTotal:null;if($('memRing')){$('memRing').style.setProperty('--used',used===null?'0%':used+'%');$('memPct').textContent=used===null?'—':used.toFixed(1)+'%';$('memTotal').textContent=valid?'总堆内存 '+kb(j.heapTotal):'总堆内存未知';$('memRing').setAttribute('aria-label',used===null?'已使用内存比例未知':'已使用堆内存 '+used.toFixed(1)+'%')}}
@@ -278,7 +282,7 @@ var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%
 function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
 pill('pR',rc,rc?'遥控器已连接':'遥控器未连接');pill('pH',h,h?'被控蓝牙已连接':'被控蓝牙未连接');pill('pB',bat!=='未知',bat==='未知'?'电量未知':'电量 '+bat);
 $('h1').textContent=(rc&&h)?'RC003 已就绪':(rc?'遥控器已连接，等待主机':'等待遥控器连接');
-$('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。');if(typeof drawSlots==='function')drawSlots()}
+$('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。');if(typeof drawSlots==='function')drawSlots();if(typeof j.activeKey==='number')highlight(j.activeKey)}
 function load(manual){if(S.load||S.busy||$('ed').open||$('rd').open)return;S.load=true;const socket=S.ws;btns();
 return req('/api/slots').then(applySlots).then(function(){return req('/api/bindings')}).then(apply).then(function(){return req('/api/status')}).then(function(j){stat(j);online(socket===S.ws&&!!socket&&socket.readyState===1);if(manual)toast('已刷新')})
 .catch(function(e){if(e&&e.relogin){location.href='/login';return}
