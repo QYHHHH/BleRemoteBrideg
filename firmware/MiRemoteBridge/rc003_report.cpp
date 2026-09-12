@@ -118,7 +118,8 @@ size_t rc003_parse_atvv_ctl(const uint8_t *data, size_t len,
 
   if (!recognised) return 0;
 
-  out[0].raw_code = MI_KEY_VOICE;
+  // ATVV uses the alternate raw code; the HID report path uses MI_KEY_VOICE.
+  out[0].raw_code = MI_KEY_VOICE_ALT;
   out[0].pressed = pressed;
   out[0].report_mod = 0;
   out[0].frame_kind = RC003_FRAME_ATVV_CTL;

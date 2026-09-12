@@ -29,6 +29,7 @@
 // ---------------------------------------------------------------------------
 static bool s_preset = true;
 void keymap_use_preset(bool enabled) { s_preset = enabled; }
+bool keymap_preset_enabled(void) { return s_preset; }
 
 static const keymap_entry_t kDefaultTable[] = {
     // raw code            action kind        modifier       keycode        consumer

@@ -83,6 +83,45 @@ bool sameAction(const hid_action_t &a, const st_action_expect_t &e) {
   return (uint8_t)a.kind == e.kind && a.modifier == e.modifier && a.keycode == e.keycode && a.consumer == e.consumer;
 }
 
+struct BindingSnapshot {
+  uint8_t raw[KEYMAP_MAX_BINDINGS];
+  hid_action_t action[KEYMAP_MAX_BINDINGS];
+  size_t count;
+  bool preset;
+  keymap_back_mode_t back;
+  keymap_power_mode_t power;
+  keymap_voice_mode_t voice;
+};
+
+BindingSnapshot isolateKeymapForVectors() {
+  BindingSnapshot saved{};
+  saved.count = keymap_get_bindings(saved.raw, saved.action, KEYMAP_MAX_BINDINGS);
+  saved.preset = keymap_preset_enabled();
+  saved.back = keymap_get_back_mode();
+  saved.power = keymap_get_power_mode();
+  saved.voice = keymap_get_voice_mode();
+  for (unsigned raw = 1; raw < 256; ++raw) keymap_set_binding((uint8_t)raw, KEYMAP_BIND_KIND_NONE, 0, 0, 0);
+  keymap_use_preset(true);
+  keymap_set_back_mode(MAP_BACK_KEYBOARD_BACKSPACE);
+  keymap_set_power_mode(MAP_POWER_KEYBOARD_ESC);
+  keymap_set_voice_mode(MAP_VOICE_KB_LCTRL_LGUI);
+  return saved;
+}
+
+void restoreKeymapAfterVectors(const BindingSnapshot &saved) {
+  for (unsigned raw = 1; raw < 256; ++raw) keymap_set_binding((uint8_t)raw, KEYMAP_BIND_KIND_NONE, 0, 0, 0);
+  for (size_t i = 0; i < saved.count; ++i) {
+    const hid_action_t &a = saved.action[i];
+    const uint8_t kind = a.kind == HID_ACT_CONSUMER ? KEYMAP_BIND_KIND_CONS :
+                         (a.kind == HID_ACT_KEYBOARD ? KEYMAP_BIND_KIND_KB : KEYMAP_BIND_KIND_NONE);
+    keymap_set_binding(saved.raw[i], kind, a.modifier, a.keycode, a.consumer);
+  }
+  keymap_use_preset(saved.preset);
+  keymap_set_back_mode(saved.back);
+  keymap_set_power_mode(saved.power);
+  keymap_set_voice_mode(saved.voice);
+}
+
 // ---------------------------------------------------------------------------
 // Vector suites
 // ---------------------------------------------------------------------------
@@ -222,7 +261,7 @@ void suiteDescriptorConstants() {
   ok(HID_REPORT_ID_KEYBOARD != HID_REPORT_ID_CONSUMER, "the two reports must use different report IDs");
   ok(kHidReportMap[0] == 0x05 && kHidReportMap[1] == 0x01, "report map must start with Usage Page (Generic Desktop)");
   ok(kHidReportMap[HID_REPORT_MAP_LEN - 1] == 0xC0, "report map must end with End Collection");
-  ok(HID_REPORT_MAP_LEN > 80 && HID_REPORT_MAP_LEN < 200, "report map size is implausible");
+  ok(HID_REPORT_MAP_LEN > 60 && HID_REPORT_MAP_LEN < 100, "report map size is implausible");
 }
 
 // ---------------------------------------------------------------------------
@@ -277,8 +316,10 @@ int runVectors() {
   suiteParse();
   suiteAtvv();
   suiteTracker();
+  const BindingSnapshot savedKeymap = isolateKeymapForVectors();
   suiteKeymap();
   suiteModes();
+  restoreKeymapAfterVectors(savedKeymap);
   suiteQueue();
   suiteDescriptorConstants();
 
@@ -367,14 +408,14 @@ int runSimulation() {
   const uint8_t atvvStart[4] = {0x04, 0x03, 0x00, 0x00};
   rc003_key_event_t raw[1];
   const size_t n = rc003_parse_atvv_ctl(atvvStart, sizeof(atvvStart), raw, 1);
-  ok(n == 1 && raw[0].raw_code == MI_KEY_VOICE && raw[0].pressed, "ATVV AUDIO_START must parse as a voice press");
+  ok(n == 1 && raw[0].raw_code == MI_KEY_VOICE_ALT && raw[0].pressed, "ATVV AUDIO_START must parse as a voice press");
   if (n == 1) {
     rc003_key_event_t norm[3];
     const size_t m = rc003_tracker_apply(&s_simTracker, &raw[0], norm, 3);
     for (size_t k = 0; k < m; k++) event_bus::post(BR_EV_RC_KEY, norm[k].raw_code, norm[k].pressed);
     bridge::loop();
   }
-  ok(bridge::activeRawCode() == MI_KEY_VOICE, "voice button should be active after ATVV press");
+  ok(bridge::activeRawCode() == MI_KEY_VOICE_ALT, "voice button should be active after ATVV press");
   const uint8_t atvvStop[1] = {0x00};
   if (rc003_parse_atvv_ctl(atvvStop, sizeof(atvvStop), raw, 1) == 1) {
     rc003_key_event_t norm[3];
