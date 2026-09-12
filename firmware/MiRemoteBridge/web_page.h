@@ -200,7 +200,7 @@ opt('key',KB);opt('cons',CS);
 MD.forEach(function(m){var b=document.createElement('button');b.type='button';b.className='m';b.dataset.bit=m[0];b.textContent=m[1];b.setAttribute('aria-pressed','false');
 b.onclick=function(){S.mods^=m[0];draft()};$('mods').appendChild(b)});
 function setSel(id,v){if(!Array.prototype.some.call($(id).options,function(o){return +o.value===v}))$(id).add(new Option('HID 0x'+hx(v),String(v)));$(id).value=String(v)}
-function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.querySelectorAll('[data-r],#resetAll,#uiReset,#simulateBind,#simulateKey,#simulateRepeat,#slotEditor input,#slotEditor select,#slotEditor .m,#slotDelete'),function(e){e.disabled=!S.ok||!S.on||L});
+function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.querySelectorAll('[data-r],#resetAll,#uiReset,#pairRemote,#simulateBind,#simulateKey,#simulateRepeat,#slotEditor input,#slotEditor select,#slotEditor .m,#slotDelete'),function(e){e.disabled=!S.ok||!S.on||L});
 Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=S.busy});
 $('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
 function online(v,why){S.on=v;if(!v)$('memState').textContent='连接已断开 · 数值为上次采样';$('off').hidden=v;var p=$('pW');if(p){p.className='pill '+(v?'ok':'off');p.lastChild.textContent=v?'网页控制已连接':'网页控制已断开';p.title=v?'网页已获得开发板控制权':'点击重新连接并夺回控制权'}btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
@@ -334,8 +334,10 @@ const ring=document.createElement('div');ring.id='memRing';ring.setAttribute('ro
 const hardware=document.createElement('div');hardware.className='hardware';const legend=document.createElement('div');legend.className='legend';
 [...board.children].filter(e=>e.tagName==='P').forEach(e=>legend.append(e));hardware.append(art,legend);
 const boardBody=document.createElement('div');boardBody.className='board-body';boardBody.append(hardware,memoryBox);board.append(boardBody);
-const rack=document.createElement('section');rack.className='card rack';rack.innerHTML='<div class="rack-heading"><h2>遥控器配置</h2><span class="mut">3 个槽位 · 独立保存</span></div><div class="slots" id="slots"></div><div class="rack-actions"><div><b>按下即转发，松开即释放</b><small id="slotSummary">快捷键修改后自动保存</small></div><button class="btn d" id="uiReset">恢复默认设置</button></div>';
+const rack=document.createElement('section');rack.className='card rack';rack.innerHTML='<div class="rack-heading"><h2>遥控器配置</h2><span class="mut">3 个槽位 · 独立保存</span></div><div class="slots" id="slots"></div><div class="rack-actions"><div><b>按下即转发，松开即释放</b><small id="slotSummary">快捷键修改后自动保存</small></div><button class="btn" id="pairRemote">重新配对</button><button class="btn d" id="uiReset">恢复默认设置</button></div>';
 side.prepend(rack);
+$('pairRemote').onclick=async()=>{if(!S.on||S.busy)return;if(!confirm('清除原遥控器配对并重新搜索？请先让小米遥控器进入配对模式。保留快捷键和被控端配对。'))return;S.busy=true;btns();try{await req('/api/pair','POST');toast('正在重新配对，请保持遥控器处于配对模式')}catch(e){toast(err(e))}finally{S.busy=false;btns()}};
+
 const discovered=document.createElement('div');discovered.id='discovered';discovered.hidden=true;section.append(discovered);
 const editor=document.createElement('dialog');editor.id='slotEditor';editor.innerHTML='<div class="dh"><div><h2 id="slotEdTitle">编辑按键</h2><small class="mut">修改后自动保存到当前槽位</small></div><button class="btn" id="slotEdClose">完成</button></div><div class="db"><div id="learnedControls"><label class="f">按键名称<input id="slotName" maxlength="24" autocomplete="off"></label></div><label class="f">动作类型<select id="slotKind"><option value="1">键盘快捷键</option><option value="2">媒体 / 系统控制</option><option value="0">不转发</option></select></label><div id="slotKeyboard"><p class="mut">修饰键 · 可多选</p><div class="ms" id="slotMods"></div><label class="f">主键<select id="slotKey"></select></label></div><label class="f" id="slotMedia">媒体 / 系统动作<select id="slotCons"></select></label><div class="pv" id="slotValue"></div><p class="hint" id="slotSaved" role="status"></p></div><div class="da"><button type="button" class="btn d" id="slotDelete">删除此按键</button><button type="button" class="btn" id="slotEdDone">完成</button></div>';
 document.body.append(editor);
@@ -356,6 +358,7 @@ function keyIcon(raw){const k=knownKey(raw);return k?icon(k)+' ':''}
 function nextSimRaw(keys){return SIM_KEYS.find(raw=>!keys.some(k=>k.raw===raw))||Math.min(255,0x93+keys.length)}
 function syncDefault(){if(!slots[0].keys.length){slots[0].keys=presetKeys();persist()}drawSlots()}
 function drawSlots(){
+ $('pairRemote').hidden=selectedSlot!==0;
  $('slots').innerHTML=slots.map((s,i)=>'<button class="slot '+(i===selectedSlot?'selected':'')+'" data-slot="'+i+'" aria-pressed="'+(i===selectedSlot)+'"><span class="slot-index">槽位 0'+(i+1)+(i===0?' · 默认预设':'')+'</span><strong>'+s.name+'</strong><span class="slot-link '+(slotConnected(s,i)?'linked':'')+'">'+(slotConnected(s,i)?'● 遥控器已连接':'○ 尚未添加')+'</span><span class="slot-battery">'+(slotConnected(s,i)?'电量 '+slotBattery(s,i)+'%':'添加其他蓝牙遥控器')+'</span></button>').join('');
  $('slotSummary').textContent=slots[selectedSlot].name+' · '+slots[selectedSlot].keys.length+' 个按键 · 修改后自动保存';
  section.querySelector('.head').innerHTML='<h2>'+slots[selectedSlot].name+' · 按键映射</h2><span class="mut" style="font-size:11px">'+(selectedSlot===0?'小米默认预设 · 点击按键编辑':'按一次发现一个按键 · 点击编辑快捷键')+'</span>';

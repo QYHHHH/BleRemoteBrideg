@@ -1118,6 +1118,9 @@ void dispatch() {
     else if (strcmp(target, "/api/set") == 0 || strcmp(target, "/api/reset") == 0)
       errorResponse(405, "Method Not Allowed", "writes require POST");
     else errorResponse(404, "Not Found", "not found");
+  } else if (strcmp(target, "/api/pair") == 0) {
+    rc003_client::requestForget();
+    respond(202, "Accepted", "application/json", "{\"ok\":true}", 11);
   } else if (strcmp(target, "/api/set") == 0) {
     if (!query) errorResponse(400, "Bad Request", "binding parameters required");
     else handleSet(query);

@@ -47,6 +47,7 @@ def demo_html():
     if (method !== 'POST') return json({error:'not found'},404);
     if (control.fault === 'write') return json({error:'模拟：设备拒绝保存'},400);
     if (control.fault === 'mismatch') return json({ok:true});
+    if (u.pathname === '/api/pair') return json({ok:true});
     if (u.pathname === '/api/set') {
       const raw = parseInt(u.searchParams.get('raw'),16), kind = Number(u.searchParams.get('kind'));
       const mod = Number(u.searchParams.get('mod')), key = Number(u.searchParams.get('key')), cons = Number(u.searchParams.get('cons'));

@@ -96,6 +96,7 @@ bool s_subscribed = false;
 // genuine 0%.
 uint8_t s_remoteBattery = 0;
 bool s_remoteBatteryValid = false;
+uint32_t s_lastBatteryReadMs = 0;
 
 rc003_tracker_t s_tracker;
 
@@ -346,6 +347,7 @@ class ClientCallbacks : public BLEClientCallbacks {
     s_charReport = nullptr;
     s_charAtvvCtl = nullptr;
     s_charBattery = nullptr;
+    s_remoteBatteryValid = false;
     s_subscribed = false;
     rc003_tracker_reset(&s_tracker);
     // The charge is no longer known. It is deliberately not cleared to a
@@ -610,6 +612,8 @@ bool discoverAndSubscribe() {
         // blocking read is fine here - unlike in a BLE callback.
         if (BRIDGE_BATTERY_PASSTHROUGH && isBatteryService &&
             uuid.indexOf(RC003_BATTERY_LEVEL_UUID) >= 0) {
+          s_charBattery = ch;
+          s_lastBatteryReadMs = nowMs();
           if (ch->canRead()) {
             const String v = ch->readValue();
             if (v.length() >= 1 && (uint8_t)v[0] <= 100) {
@@ -964,6 +968,20 @@ void taskLoop() {
         // BR_EV_RC_LINK_DOWN event.
         setState(St::SCANNING, "link gone");
         break;
+      }
+      // Read on the central task: some remotes never send battery notifications.
+      // No timer task or retained payload; unchanged values do not reach NVS.
+      if (BRIDGE_BATTERY_PASSTHROUGH && s_charBattery &&
+          nowMs() - s_lastBatteryReadMs >= 60000) {
+        s_lastBatteryReadMs = nowMs();
+        BLERemoteCharacteristic *ch = s_charBattery;
+        if (ch->canRead()) {
+          const String value = ch->readValue();
+          if (s_client->isConnected() && value.length() == 1) {
+            uint8_t level = (uint8_t)value[0];
+            onBatteryNotify(ch, &level, 1, false);
+          }
+        }
       }
       // Keep the link parameters favourable for latency without hammering the
       // remote with requests. Timeout stays at 1 s (see discoverAndSubscribe):

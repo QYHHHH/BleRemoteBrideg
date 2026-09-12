@@ -42,13 +42,22 @@ FLASH_BUDGET = 18500
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 137
+EXPECTED_CHECKS = 140
 
 TESTS = r"""(async () => {
   const results=[];
   const assert=(condition,name)=>{if(!condition)throw Error(name);results.push(name);};
   await load();
   assert(S.on && S.ok,'initial API load');
+  const oldConfirm=window.confirm,pairCalls=()=>__demo.calls.filter(c=>c.path==='/api/pair');
+  window.confirm=()=>false;await $('pairRemote').onclick();
+  assert(pairCalls().length===0,'pair cancellation sends no request');
+  window.confirm=()=>true;await $('pairRemote').onclick();
+  assert(pairCalls().length===1&&pairCalls()[0].method==='POST','confirmed pairing queues POST');
+  online(false);await $('pairRemote').onclick();
+  assert(pairCalls().length===1&&$('pairRemote').disabled,'offline pairing is blocked');
+  online(true);window.confirm=oldConfirm;
+
   stat({...__demo.status,heapTotal:20480,heapFree:15360,heapMin:12288,heapLargest:8192});
   assert($('memFree').textContent.includes('15.0 KiB'),'free heap rendered in KiB');
   assert($('memPct').textContent==='25.0%'&&$('memTotal').textContent.includes('20.0 KiB'),'used heap percentage and total rendered');
