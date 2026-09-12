@@ -117,6 +117,7 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
 @media(max-width:1250px) and (min-width:901px){main{padding:12px}.workspace{gap:12px}.mapping-panel{padding:12px}.grid{grid-template-columns:minmax(0,1fr) 184px minmax(0,1fr);gap:8px}.k .r1,.k .act{font-size:12px}.board-body{grid-template-columns:minmax(0,1fr) 145px;gap:10px}.board .hardware svg{width:170px;height:260px}.rack-actions{flex-wrap:wrap}.rack-actions>div{flex-basis:100%}}
 @media(max-width:900px){.workspace{grid-template-columns:1fr}.mapping-panel{min-height:560px}.side{height:auto}.board-body{grid-template-columns:minmax(0,1.65fr) minmax(155px,1fr)}.board .hardware svg{width:180px}.grid{grid-template-columns:minmax(0,1fr) 140px minmax(0,1fr)}}
 @media(max-width:560px){main{padding:10px}.grid{grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr);gap:5px}.rm .body{transform:scale(.64);margin:-97.2px -23.76px}.slots{gap:5px}.slot-link{font-size:10px}.slot strong{font-size:14px}.slot-index,.slot-battery{font-size:9px}.board-body{grid-template-columns:1fr}.board .memory{border-left:0;border-top:1px solid var(--line);padding:12px 0}.k .r1,.k .act{font-size:11px}.k .ed,.k .tg{display:none}}
+.mobile-map-fix{display:none}@media(max-width:560px){.mapping-panel{padding:12px}.grid{grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr);gap:5px;align-items:center}.grid #colL{grid-column:1;grid-row:1}.grid .rm{grid-column:2;grid-row:1;flex-direction:column;justify-content:center;gap:6px;padding:0;border:0;margin:0}.grid #colR{grid-column:3;grid-row:1}.grid .col{grid-row:1;gap:8px;padding:0;align-self:stretch;justify-content:space-around}.grid .rm .body{transform:scale(.64);margin:-97.2px -23.76px}.grid .cap{text-align:center;font-size:8px}.grid .k button{min-height:58px;padding:6px}.grid .k .r1,.grid .k .act{font-size:10px}.grid .k .ico{width:13px;height:13px}}
 </style></head><body>
 <div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span><a class="repo-placeholder" aria-disabled="true">代码仓库 · 地址待填写</a>
 <span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
@@ -255,7 +256,7 @@ c.querySelector('.act').textContent=fmt(cur(r))});
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('sel',+e.dataset.r===S.sel)});
 var count=$('cnt');if(count)count.textContent=n;btns();drawWires()}
 function drawWires(){var g=$('grid'),svg=$('wires');if(!g||!svg)return;
-var gb=g.getBoundingClientRect(),out='<defs><marker id="tip" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8Z" style="fill:#aeb4bf;stroke:none"/></marker></defs>';if(innerWidth<=620){svg.innerHTML='';return}
+var gb=g.getBoundingClientRect(),out='<defs><marker id="tip" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8Z" style="fill:#aeb4bf;stroke:none"/></marker></defs>';if(innerWidth<=320){svg.innerHTML='';return}
 KEYS.forEach(function(k){var card=$('k'+k[0]),btn=document.querySelector('#rmArt [data-r="'+k[0]+'"]');
 if(!card||!btn)return;
 var cb=card.getBoundingClientRect(),bb=btn.getBoundingClientRect();
@@ -274,7 +275,7 @@ $('memFree').textContent=kb(j.heapFree)+' 可用';$('memDetail').textContent='�
 function stat(j){S.lastStatus=j;memory(j);var rc=!!j.remoteConnected,h=!!j.hostConnected;
 // Version and build stamp come from /api/status, i.e. from the running
 // firmware, not from the generated page bytes - so it can never go stale.
-$('ver').textContent=(j.fwVersion||'')+(j.buildTime?' · build '+j.buildTime:'');
+if(j.type!=='status'||Object.prototype.hasOwnProperty.call(j,'fwVersion')||Object.prototype.hasOwnProperty.call(j,'buildTime'))$('ver').textContent=(j.fwVersion||'')+(j.buildTime?' · build '+j.buildTime:'');
 var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
 function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
 pill('pR',rc,rc?'遥控器已连接':'遥控器未连接');pill('pH',h,h?'被控蓝牙已连接':'被控蓝牙未连接');pill('pB',bat!=='未知',bat==='未知'?'电量未知':'电量 '+bat);

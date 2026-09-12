@@ -42,7 +42,7 @@ FLASH_BUDGET = 18500
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 131
+EXPECTED_CHECKS = 132
 
 TESTS = r"""(async () => {
   const results=[];
@@ -56,6 +56,7 @@ TESTS = r"""(async () => {
   wsMessage({type:'status',...__demo.status,heapTotal:20480,heapFree:10240,heapMin:9216,heapLargest:6144});
   assert($('memFree').textContent.includes('10.0 KiB'),'heartbeat updates memory');
   assert($('memPct').textContent==='50.0%','heartbeat updates used heap percentage');
+  assert($('ver').textContent.includes('v0.0.1'),'compact heartbeat preserves version and build stamp');
   online(false);assert(!$('memState').textContent.includes('5'),'disconnect removes live update claim');online(true);
   __demo.status.fwVersion='v9.9.9';__demo.status.buildTime='Jan  1 2030 00:00:00';await load();
   assert($('ver').textContent==='v9.9.9 · build Jan  1 2030 00:00:00','version and build stamp come from /api/status');
