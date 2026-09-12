@@ -102,6 +102,14 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
 @media(max-width:1200px){main{padding:12px}.workspace{gap:12px}.mapping-panel{padding:12px}.mapping-panel .head{flex-wrap:wrap;gap:4px}.grid{grid-template-columns:minmax(0,1fr) 144px minmax(0,1fr);gap:6px}.k button{padding:7px}.k .ed{display:none}.side .hero{gap:8px}.hero .t{flex-basis:100%}.side .board{grid-template-columns:130px minmax(0,1fr);gap:0 10px}.board svg{width:130px}.side .hero,.side .board,.foot{padding:12px}}
 @media(max-width:900px){.workspace{grid-template-columns:1fr}.side .hero{flex-direction:row}.hero .t{flex-basis:auto}.grid{grid-template-columns:minmax(0,1fr) 170px minmax(0,1fr)}.side .board{grid-template-columns:180px minmax(0,1fr)}.board svg{width:180px}.rm{grid-row:auto;grid-column:auto}}
 @media(max-width:620px){.grid{grid-template-columns:minmax(0,1fr) 112px minmax(0,1fr);gap:5px}.rm .body{transform:scale(.75);margin:-67.5px -16.5px}.k button{padding:6px;min-height:62px}.k .tg{display:none}.k .r1{font-size:11px}.k .ico{width:14px}.head{flex-wrap:wrap}.cap{font-size:8px}.side .board{grid-template-columns:110px minmax(0,1fr)}.board svg{width:110px}}
+
+.workspace{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch}.mapping-panel{min-height:600px}.grid{grid-template-columns:minmax(0,1fr) 140px minmax(0,1fr);gap:10px}.rm .body{transform:scale(.86);margin:-37.8px -9.24px}.k button{min-height:68px;padding:10px;font-size:14px}.k .r1,.k .act{font-size:13px}.col{gap:8px}.cap{font-size:9px}
+.rack{padding:14px}.rack-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.rack-heading span{font-size:11px}.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.slot{display:flex;flex-direction:column;align-items:start;gap:8px;text-align:left;padding:13px 11px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;min-width:0}.slot.selected{background:#edf5ff;border-color:#82b7f6;box-shadow:inset 0 3px #1674ed}.slot strong{font-size:18px}.slot-index,.slot-battery{font-size:10px;color:var(--mut)}.slot-link{font-size:11px;color:var(--mut)}.slot-link.linked{color:var(--ok)}.rack-actions{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px}.rack-actions>div{flex:1;font-size:11px}.rack-actions small{display:block;color:var(--mut);margin-top:3px}.rack-actions .btn{padding:7px 10px}
+.side .board{display:block;flex:1;position:relative}.board>h2{margin-bottom:14px}.board>#pH{float:right;margin-top:0}.board-body{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(155px,1fr);gap:16px;align-items:stretch}.hardware{display:flex;gap:10px;align-items:center}.board .hardware svg{width:116px;height:245px;flex:none;margin:0}.legend{flex:1;min-width:0}.board .legend p{display:block;margin:0;padding:10px 0;border-bottom:1px solid #edf0f3;font-size:11px;line-height:1.7}.board .legend p:last-child{border-bottom:0}.board .legend b{display:inline-block;margin-bottom:3px}.board .memory{border-top:0;border-left:1px solid var(--line);padding:10px 0 10px 16px;margin:0;display:flex;flex-direction:column;justify-content:center;grid-column:auto}.memory h3{margin-bottom:12px}.memory strong{font-size:22px}.board .memory p{font-size:11px;margin:10px 0;line-height:2}.memory small{font-size:10px;line-height:1.7}
+.empty-remote{min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;color:var(--mut)}.empty-remote h2{color:var(--ink)}.empty-remote p{font-size:12px}.empty-remote small{font-size:10px}.empty-icon{font-size:32px;color:#86a8cf;border:1px dashed #c2d5e9;border-radius:14px;padding:6px 24px}.learn-banner{border-bottom:1px solid var(--line);padding:8px 0 16px}.learn-banner b,.learn-banner span{display:block}.learn-banner span{font-size:12px;color:var(--mut);margin-top:4px}.simulator{display:flex;align-items:center;gap:8px;margin:15px 0;flex-wrap:wrap}.simulator>span{font-size:10px;color:var(--mut)}.learned-keys{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.learned-key{display:flex;flex-direction:column;text-align:left;gap:9px;background:#f9fafb;border:1px solid var(--line);border-radius:9px;padding:15px;min-height:108px}.learned-key small{color:var(--mut);font-size:10px}.learned-key.heard{background:#edf5ff;border-color:#1674ed}.learned-key strong{font-size:14px}.board .memory #memDetail{white-space:pre-line}
+@media(max-width:1250px){.grid{grid-template-columns:minmax(0,1fr) 105px minmax(0,1fr);gap:6px}.k button{padding:8px}.k .ed{display:none}.board-body{grid-template-columns:minmax(0,1fr) 150px;gap:10px}.hardware{display:block}.board .hardware svg{float:left;width:95px;height:190px;margin:0 8px 2px 0}.board .memory{padding-left:10px}.slot{padding:10px 8px}.slot strong{font-size:16px}.rack-actions{flex-wrap:wrap}.rack-actions>div{flex-basis:100%}}
+@media(max-width:900px){.workspace{grid-template-columns:1fr}.mapping-panel{min-height:560px}.side{display:flex}.board-body{grid-template-columns:minmax(0,1.65fr) minmax(155px,1fr)}.hardware{display:flex}.board .hardware svg{float:none;width:116px}.grid{grid-template-columns:minmax(0,1fr) 140px minmax(0,1fr)}}
+@media(max-width:560px){.grid{grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr)}.rm .body{transform:scale(.64);margin:-97.2px -23.76px}.slots{gap:5px}.slot-link{font-size:10px}.slot strong{font-size:14px}.slot-index,.slot-battery{font-size:9px}.board-body{grid-template-columns:1fr}.board .memory{border-left:0;border-top:1px solid var(--line);padding:12px 0}.k .r1,.k .act{font-size:11px}}
 </style></head><body>
 <div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span>
 <span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
@@ -119,7 +127,7 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
 <div class="card foot"><div><h3>按下即转发，松开即释放</h3><p>保存后立即生效并写入 NVS，重启后保留。不改变遥控器原有转发时序。</p></div>
 <div class="bs"><button class="btn" id="refresh2">刷新映射</button><button class="btn d" id="resetAll" disabled>恢复默认映射</button></div></div>
 <p class="note">本固件不区分单击、双击与长按，不提供音频或宏。恢复默认仅清除自定义绑定，保留串口 <b>map</b> 基础模式与蓝牙配对。</p>
-</section><aside class="card board"><h2>开发板 · CORE-ESP32</h2>
+</section><aside class="card board"><h2>开发板 · ESP32-C3</h2>
 <svg viewBox="0 0 270 240" role="img" aria-label="开发板正面示意：左侧 RST 和 D5，右侧 BOOT 和 D4，底部 USB">
 <rect x="83" y="5" width="104" height="230" rx="5" fill="#087aab"/>
 <path d="M93 39V16h13v22h15V16h14v22h15V16h24v29" fill="none" stroke="#45b0d5" stroke-width="5"/>
@@ -342,16 +350,57 @@ $('refresh').onclick=$('refresh2').onclick=$('retry').onclick=function(){load(tr
 $('goMap').onclick=function(){document.querySelector('.head').scrollIntoView({behavior:'smooth',block:'start'})};
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.ws&&S.ws.readyState===1)load()});
 window.addEventListener('resize',drawWires);new ResizeObserver(drawWires).observe($('grid'));
-load();
-
-
 
 </script>
 <script>
-const workspace=document.querySelector('.workspace'), section=workspace.querySelector('section'), rm=document.querySelector('.rm');
+const workspace=document.querySelector('.workspace'), section=workspace.querySelector('section');
 const side=document.createElement('div');side.className='side';workspace.append(side);
-const foot=document.querySelector('.foot');foot.append(document.querySelector('.note'));side.append(document.querySelector('.hero'),document.querySelector('.board'),foot);
 section.className='card mapping-panel';const shell=$('grid').parentElement;shell.replaceWith($('grid'));
-$('memState').textContent='模拟采样 · 仅供布局预览';
-</script></body>
-</html>
+const legacy=document.createElement('div');legacy.hidden=true;document.body.append(legacy);
+legacy.append(document.querySelector('.hero'),document.querySelector('.foot'),document.querySelector('.note'),$('pR'),$('pB'));
+const board=document.querySelector('.board');side.append(board);board.prepend($('pH'));
+const boardTitle=board.querySelector('h2'), art=board.querySelector('svg'), memoryBox=board.querySelector('.memory');
+const hardware=document.createElement('div');hardware.className='hardware';const legend=document.createElement('div');legend.className='legend';
+[...board.children].filter(e=>e.tagName==='P').forEach(e=>legend.append(e));hardware.append(art,legend);
+const boardBody=document.createElement('div');boardBody.className='board-body';boardBody.append(hardware,memoryBox);board.append(boardBody);
+const rack=document.createElement('section');rack.className='card rack';rack.innerHTML='<div class="rack-heading"><h2>遥控器配置</h2><span class="mut">3 个槽位 · 独立保存</span></div><div class="slots" id="slots"></div><div class="rack-actions"><div><b>按下即转发，松开即释放</b><small id="slotSummary">快捷键修改后自动保存</small></div><button class="btn" id="uiRefresh">刷新</button><button class="btn d" id="uiReset">恢复默认设置</button></div>';
+side.prepend(rack);
+const discovered=document.createElement('div');discovered.id='discovered';discovered.hidden=true;section.append(discovered);
+const editor=document.createElement('dialog');editor.id='slotEditor';editor.innerHTML='<div class="dh"><div><h2 id="slotEdTitle">编辑按键</h2><small class="mut">修改后自动保存到当前槽位</small></div><button class="btn" id="slotEdClose">完成</button></div><div class="db"><label class="f">动作类型<select id="slotKind"><option value="1">键盘快捷键</option><option value="2">媒体 / 系统控制</option><option value="0">不转发</option></select></label><div id="slotKeyboard"><p class="mut">修饰键 · 可多选</p><div class="ms" id="slotMods"></div><label class="f">主键<select id="slotKey"></select></label></div><label class="f" id="slotMedia">媒体 / 系统动作<select id="slotCons"></select></label><div class="pv" id="slotValue"></div><p class="hint" id="slotSaved" role="status"></p></div>';
+document.body.append(editor);
+opt('slotKey',KB);opt('slotCons',CS);
+let selectedSlot=0,editingKey=null,editingMods=0;
+const storageKey='mrb-three-slot-ui-v1';let slots;
+try{slots=JSON.parse(localStorage.getItem(storageKey))}catch(e){}
+if(!Array.isArray(slots)||slots.length!==3)slots=[{name:'RC003',bound:true,keys:[]},{name:'遥控器 02',bound:false,keys:[]},{name:'遥控器 03',bound:false,keys:[]}];
+function persist(){try{localStorage.setItem(storageKey,JSON.stringify(slots));return true}catch(e){return false}}
+function presetKeys(){return KEYS.map(k=>({raw:k[0],name:k[1],action:{...cur(k[0])}}))}
+function slotFmt(a){return a.kind===0?'不转发':fmt(a)}
+function drawSlots(){
+ $('slots').innerHTML=slots.map((s,i)=>'<button class="slot '+(i===selectedSlot?'selected':'')+'" data-slot="'+i+'" aria-pressed="'+(i===selectedSlot)+'"><span class="slot-index">槽位 0'+(i+1)+(i===0?' · 默认预设':'')+'</span><strong>'+s.name+'</strong><span class="slot-link '+(s.bound?'linked':'')+'">'+(s.bound?'● 遥控器已连接':'○ 尚未添加')+'</span><span class="slot-battery">'+(s.bound?'电量 '+(i===0?'97':'85')+'%':'添加其他蓝牙遥控器')+'</span></button>').join('');
+ $('slotSummary').textContent=slots[selectedSlot].name+' · '+slots[selectedSlot].keys.length+' 个按键 · 修改后自动保存';
+ section.querySelector('.head').innerHTML='<h2>'+slots[selectedSlot].name+' · 按键映射</h2><span class="mut" style="font-size:11px">'+(selectedSlot===0?'小米默认预设 · 点击按键编辑':'按一次发现一个按键 · 点击编辑快捷键')+'</span>';
+ $('grid').hidden=selectedSlot!==0;discovered.hidden=selectedSlot===0;
+ if(selectedSlot===0){slots[0].keys.forEach(k=>{const e=$('k'+k.raw);if(e)e.querySelector('.act').textContent=slotFmt(k.action)});drawWires()}
+ else drawDiscovered();
+}
+function drawDiscovered(){const s=slots[selectedSlot];
+ discovered.innerHTML=(s.bound?'<div class="learn-banner"><b>等待遥控器按键</b><span>逐个按下遥控器按键，对应的编辑卡片会出现在下方。</span></div><div class="simulator"><span>预览演示</span><button class="btn" id="simulateKey">模拟按下新按键</button><button class="btn" id="simulateRepeat" '+(!s.keys.length?'disabled':'')+'>模拟重复按键</button></div>':'<div class="empty-remote"><span class="empty-icon">＋</span><h2>添加另一只遥控器</h2><p>绑定后，逐个按下按键以建立这套配置。</p><button class="btn p" id="simulateBind">模拟绑定蓝牙</button><small>仅演示界面，不扫描或连接设备</small></div>')+'<div class="learned-keys">'+s.keys.map((k,i)=>'<button class="learned-key" data-learned="'+i+'"><span>'+k.name+'</span><strong>'+slotFmt(k.action)+'</strong><small>编辑快捷键 ›</small></button>').join('')+'</div>';
+ if($('simulateBind'))$('simulateBind').onclick=()=>{s.bound=true;persist();drawSlots()};
+ if($('simulateKey'))$('simulateKey').onclick=()=>discoverKey(s.keys.length+1);
+ if($('simulateRepeat'))$('simulateRepeat').onclick=()=>discoverKey(s.keys.length);
+}
+function discoverKey(raw){const s=slots[selectedSlot];if(!s.bound||selectedSlot===0)return;let i=s.keys.findIndex(k=>k.raw===raw);if(i<0){s.keys.push({raw,name:'按键 '+String(raw).padStart(2,'0'),action:{kind:0,mod:0,key:0,cons:0}});i=s.keys.length-1;persist();drawSlots()}const e=discovered.querySelectorAll('.learned-key')[i];if(e){e.classList.add('heard');setTimeout(()=>e.classList.remove('heard'),500)}}
+$('slots').onclick=e=>{const b=e.target.closest('[data-slot]');if(b){selectedSlot=+b.dataset.slot;drawSlots()}};
+discovered.onclick=e=>{const b=e.target.closest('[data-learned]');if(b)openSlotEditor(+b.dataset.learned)};
+section.addEventListener('click',e=>{const b=e.target.closest('[data-r]');if(b&&selectedSlot===0){e.preventDefault();e.stopPropagation();const i=slots[0].keys.findIndex(k=>k.raw===+b.dataset.r);if(i>=0)openSlotEditor(i)}},true);
+MD.forEach(m=>{const b=document.createElement('button');b.className='m';b.textContent=m[1];b.dataset.bit=m[0];b.onclick=()=>{editingMods^=m[0];autoSave()};$('slotMods').append(b)});
+function openSlotEditor(i){editingKey=i;if(selectedSlot===0){S.sel=slots[0].keys[i].raw;document.querySelectorAll('.k,#rmArt [data-r]').forEach(e=>e.classList.toggle('sel',e.id==='k'+S.sel||+e.dataset.r===S.sel))}const k=slots[selectedSlot].keys[i],a=k.action;editingMods=a.mod||0;$('slotEdTitle').textContent=slots[selectedSlot].name+' · '+k.name;$('slotKind').value=String(a.kind);setSel('slotKey',a.key||0);setSel('slotCons',a.cons||233);$('slotSaved').textContent='所有修改仅保存在当前浏览器';paintEditor();editor.showModal()}
+function paintEditor(){const kind=+$('slotKind').value;$('slotKeyboard').hidden=kind!==1;$('slotMedia').hidden=kind!==2;[...$('slotMods').children].forEach(b=>b.setAttribute('aria-pressed',String(!!(editingMods&+b.dataset.bit))));$('slotValue').textContent=kind===0?'不转发':fmt({kind,mod:editingMods,key:+$('slotKey').value,cons:+$('slotCons').value})}
+function autoSave(){paintEditor();const kind=+$('slotKind').value;if(kind===1&&!editingMods&&!+$('slotKey').value){$('slotSaved').textContent='请选择主键或修饰键后保存';return}slots[selectedSlot].keys[editingKey].action={kind,mod:kind===1?editingMods:0,key:kind===1?+$('slotKey').value:0,cons:kind===2?+$('slotCons').value:0};$('slotSaved').textContent=persist()?'已自动保存到 '+slots[selectedSlot].name:'浏览器存储不可用，本次修改仅保留到关闭页面';drawSlots()}
+['slotKind','slotKey','slotCons'].forEach(id=>$(id).onchange=autoSave);$('slotEdClose').onclick=()=>editor.close();
+$('uiRefresh').onclick=()=>{drawSlots();toast('预览已刷新')};
+$('uiReset').onclick=()=>{$('rd').querySelector('h2').textContent='恢复 '+slots[selectedSlot].name+' 默认设置？';$('rd').querySelector('.db h3').textContent=selectedSlot===0?'这将恢复小米预设的全部快捷键。':'这将清除当前槽位的快捷键设置，保留已发现的按键。';$('rd').querySelector('.db .hint').textContent='仅影响当前槽位，其他两个槽位保持不变。确认后无法撤销。';$('rdY').disabled=false;$('rd').showModal()};
+$('rdY').onclick=()=>{if(selectedSlot===0)slots[0].keys=presetKeys();else slots[selectedSlot].keys.forEach(k=>k.action={kind:0,mod:0,key:0,cons:0});persist();$('rd').close();drawSlots();toast('当前槽位已恢复默认设置')};
+Promise.resolve(load()).then(()=>{if(!slots[0].keys.length)slots[0].keys=presetKeys();drawSlots()});
+</script></body></html>
