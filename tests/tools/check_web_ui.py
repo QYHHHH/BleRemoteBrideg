@@ -1,21 +1,48 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Browser regression for the firmware page, without a board.
+"""Page regression for the firmware page, without a board.
 
 Extracts the page from web_page.h, injects a PREVIEW-ONLY fetch simulator
-(never shipped in firmware) and runs assertions in a real Chromium.
+(never shipped in firmware) and runs the assertions below in the Chrome that is
+installed here, driven over CDP by cdp.py - the same client the board-facing
+checks use. Nothing has to be installed beyond Chrome and Python.
+
+Two things are covered:
+  * the flash budget - the three gzip assets are what is actually compiled in
+  * the page logic - registration, editing, readback, offline and reset paths
 
 Usage:
-  python tests/tools/web_ui_preview.py                      # build the preview
-  python tests/tools/check_web_ui.py --emit-js out.js       # export assertions
-  <chromium driver> --json eval --stdin < out.js             # run them
+  python tests/tools/check_web_ui.py                  # budget + assertions
+  python tests/tools/check_web_ui.py --check-size     # budget only (fast)
+  python tests/tools/check_web_ui.py --emit-js out.js # write the assertions out
 
 This covers page logic only: not the ESP32 HTTP stack, NVS durability,
-Wi-Fi/BLE coexistence headroom or real phone browsers (docs/TESTING.md 4.12).
+Wi-Fi/BLE coexistence headroom or a real phone browser (docs/TESTING.md 4.12).
+Those need a board - see browser_check.py and mobile_login_check.py.
 """
 import argparse
 import json
+import os
+import sys
+import time
 from pathlib import Path
-from web_ui_preview import ROOT, demo_html
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gen_web_page  # noqa: E402
+from cdp import CHROME, Cdp, find_page, fresh_profile, launch_chrome  # noqa: E402
+from web_ui_preview import ROOT, demo_html  # noqa: E402
+
+# Reviewed total of the three gzip payloads on 2026-09-12: 10785 B.
+#
+# The old budget watched the SOURCE page instead (26956 B and growing), which is
+# not what the device stores - the page is served gzipped, so only the packed
+# assets are compiled into flash. A tripwire that fires on a number the device
+# never sees just goes red and gets ignored, which is exactly what happened.
+# This one fires on flash growth, which is the real cost, with room to grow.
+FLASH_BUDGET = 14000
+
+# How many assertions TESTS is expected to report. A drop means assertions were
+# deleted or silently stopped running - both worth failing over.
+EXPECTED_CHECKS = 82
 
 TESTS = r"""(async () => {
   const results=[];
@@ -96,52 +123,107 @@ TESTS = r"""(async () => {
 })()"""
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--browser", help="agent-browser executable (optional)")
-    parser.add_argument("--emit-js", type=Path, help="write the assertions to a file")
-    parser.add_argument("--check-size", action="store_true",
-                        help="print the page size and fail if it grew past the budget")
-    args = parser.parse_args()
+def flash_parts():
+    """The three assets exactly as gen_web_page would emit them: (name, raw, gz)."""
+    parts = gen_web_page.split(gen_web_page.firmware_html())
+    return [(name, len(text.encode("utf-8")), len(gen_web_page.compress(text)))
+            for name, text in zip(("html", "css", "js"), parts)]
 
+
+def check_budget():
+    """Compare the compiled-in gzip payloads against the reviewed budget."""
+    parts = flash_parts()
+    total = sum(gz for _, _, gz in parts)
+    print("flash budget: %d B in gzip assets (limit %d B)" % (total, FLASH_BUDGET))
+    for name, raw, gz in parts:
+        print("    %-5s %6d raw -> %5d gzip" % (name, raw, gz))
+    if total > FLASH_BUDGET:
+        print("FAILED: the page is %d B over the reviewed flash budget"
+              % (total - FLASH_BUDGET))
+        return 1
+    return 0
+
+
+def run_assertions():
+    """Run TESTS in the installed Chrome, against the generated preview page.
+
+    This used to require an `agent-browser` executable passed in as --browser -
+    a tool that is not part of this repo's toolchain, so in practice the
+    assertions were unreachable: scripts/test.ps1 only ever wired up
+    --check-size. cdp.py already drives the installed Chrome over its debugging
+    port, so this carries its own runner and needs nothing extra.
+    """
     out = ROOT / "outputs"
     out.mkdir(exist_ok=True)
-    if args.check_size:
-        from web_ui_preview import firmware_html
-        size = len(firmware_html().encode("utf-8"))
-        print(f"source page size: {size} bytes (generated into split gzip assets)")
-        if size > 24000:
-            raise SystemExit("source page exceeded the reviewed Web UI budget")
-        if not args.emit_js and not args.browser:
-            return
-    if args.emit_js:
-        args.emit_js.write_text(TESTS, encoding="utf-8")
-        print(f"Browser assertions: {args.emit_js.resolve()}")
-        return
-    if not args.browser:
-        parser.error("--browser or --emit-js is required")
-    import subprocess
     preview = out / "web-ui-preview.html"
     preview.write_text(demo_html(), encoding="utf-8")
-    base = [args.browser, "--session", "mrb-regression"]
 
-    def run(*command):
-        r = subprocess.run(base + list(command), capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=120)
-        if r.returncode:
-            raise RuntimeError(f"{command[0]}: {r.stdout}\n{r.stderr}")
-        return r.stdout.strip()
-
+    proc, port = launch_chrome(fresh_profile("page"))
     try:
-        run("open", preview.as_uri())
-        run("set", "viewport", "1440", "1080")
-        raw = run("--json", "eval", TESTS)
-        report = json.loads(raw).get("data", {})
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        (out / "web-ui-test-results.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        ws_url = find_page(port)
+        if not ws_url:
+            print("Chrome never exposed a page target - is it installed at %s?" % CHROME)
+            return 2
+        cdp = Cdp(ws_url)
+        cdp.call("Page.enable")
+        cdp.call("Runtime.enable")
+        cdp.call("Page.navigate", {"url": preview.as_uri()})
+
+        # The assertions drive the page's own load()/btns(), so wait for the
+        # script to define them. Evaluating earlier reports "load is not
+        # defined", which is a race, not a page defect.
+        ready = False
+        for _ in range(60):
+            if cdp.evaluate("typeof load") == "function":
+                ready = True
+                break
+            time.sleep(0.25)
+        if not ready:
+            print("the page never defined load() - the preview did not execute")
+            return 1
+
+        r = cdp.call("Runtime.evaluate",
+                     {"expression": TESTS, "returnByValue": True, "awaitPromise": True},
+                     timeout=120)
+        if "exceptionDetails" in r:
+            detail = (r["exceptionDetails"].get("exception") or {})
+            print("assertion FAILED: %s" % detail.get("description", r["exceptionDetails"]))
+            return 1
+
+        # returnByValue hands the object back already decoded; older clients
+        # returned it as a JSON string, so accept both.
+        value = r["result"].get("value")
+        result = json.loads(value) if isinstance(value, str) else (value or {})
+        passed = result.get("passed", 0)
+        print("page assertions: %d passed" % passed)
+        for name in result.get("checks", [])[-5:]:
+            print("    ok  %s" % name)
+        if EXPECTED_CHECKS is not None and passed != EXPECTED_CHECKS:
+            print("FAILED: expected %d assertions, %d ran - assertions went missing"
+                  % (EXPECTED_CHECKS, passed))
+            return 1
+        return 0
     finally:
-        subprocess.run(base + ["close"], capture_output=True, timeout=30)
+        proc.kill()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--emit-js", type=Path,
+                        help="write the assertions to a file instead of running them")
+    parser.add_argument("--check-size", action="store_true",
+                        help="check the flash budget only")
+    args = parser.parse_args()
+
+    if args.emit_js:
+        args.emit_js.write_text(TESTS, encoding="utf-8")
+        print("Browser assertions: %s" % args.emit_js.resolve())
+        return 0
+
+    code = check_budget()
+    if code == 0 and not args.check_size:
+        code = run_assertions()
+    sys.exit(code)
 
 
 if __name__ == "__main__":

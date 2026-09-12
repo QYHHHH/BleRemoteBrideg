@@ -11,8 +11,8 @@ The screenshot it saves at the end is for a human to eyeball, not an assertion.
 This is the only check that covers the full browser path end to end, so it lives
 here in the repo rather than in the gitignored build/ scratch dir.
 
-Needs: the board reachable over Wi-Fi (serial `wifi on`, STA IP in IP below), the
-CH343 serial port free, and Chrome installed at CHROME.
+Needs: the board reachable over Wi-Fi (serial `wifi on`, address from
+build/.boardip), the CH343 serial port free, and Chrome installed at cdp.CHROME.
 
 Run: python tests/tools/browser_check.py
 """
@@ -22,13 +22,13 @@ import os
 import sys
 import time
 
-sys.path.insert(0, r'C:\Users\<user>\.workbuddy\binaries\python\pylibs')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import serial  # noqa: E402
-from cdp import Cdp, board_ip, find_page, fresh_profile, launch_chrome  # noqa: E402
+import board_auth as ba  # noqa: E402
+from cdp import Cdp, find_page, fresh_profile, launch_chrome  # noqa: E402
 
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PW = os.environ.get('MRB_PW', 'mrbtest99')
-IP = board_ip()
+IP = ba.board_ip()
 
 PROBE_JS = """(() => {
   const t = id => { const e = document.getElementById(id); return e ? e.textContent.trim() : null; };
@@ -51,37 +51,8 @@ PROBE_JS = """(() => {
 })()"""
 
 
-SER = None
-
-
-def console(cmd):
-    """The port is opened once and kept open for the whole run. Opening it pulses
-    RTS, which resets the board - doing that between steps is how the earlier
-    scripts talked themselves into seeing an unreachable device."""
-    global SER
-    if SER is None:
-        SER = serial.Serial('COM3', 115200, timeout=0.3, dsrdtr=False, rtscts=False)
-        SER.dtr = False
-        SER.rts = False
-        time.sleep(0.4)
-    SER.reset_input_buffer()
-    SER.write(cmd)
-    time.sleep(1.2)
-    return SER.read(SER.in_waiting or 1).decode('utf-8', 'replace')
-
-
-FAILURES = []
-
-
-def check(label, ok, detail=''):
-    if not ok:
-        FAILURES.append(label)
-    print('    [%s] %s%s' % ('PASS' if ok else 'FAIL', label, (' - ' + detail) if detail else ''))
-
-
 print('[1] clear any password left on the board, then wait for boot')
-console(b'pass clear\r')
-time.sleep(28)
+ba.clear_password()          # opens the console (= RTS reset) and waits for HTTP
 
 print('[2] launch the installed Chrome with a debugging port')
 proc, port = launch_chrome(fresh_profile('cdp'))
@@ -159,17 +130,17 @@ try:
     print('    after drain:', json.dumps(after, ensure_ascii=False))
 
     print('\n[5] verdict')
-    check('page rendered all 13 key cards', snapshot['totalCards'] == 13, str(snapshot['totalCards']))
-    check('no "cannot reach the bridge" banner', snapshot['offHidden'] is True,
-          'offWhy=%r' % snapshot['offWhy'])
-    check('header left the "reading device status" placeholder',
-          snapshot['h1'] not in (None, '正在读取设备状态'), repr(snapshot['h1']))
-    check('key cards got real actions (not "等待读取")',
-          snapshot['disabledCards'] == 0, '%d still disabled' % snapshot['disabledCards'])
-    check('custom-binding counter filled in', snapshot['customCount'] not in (None, '—'),
-          repr(snapshot['customCount']))
-    check('websocket reported open by the page', snapshot['wsReady'] is True,
-          'S.on=%r' % snapshot['wsReady'])
+    ba.check('page rendered all 13 key cards', snapshot['totalCards'] == 13, str(snapshot['totalCards']))
+    ba.check('no "cannot reach the bridge" banner', snapshot['offHidden'] is True,
+             'offWhy=%r' % snapshot['offWhy'])
+    ba.check('header left the "reading device status" placeholder',
+             snapshot['h1'] not in (None, '正在读取设备状态'), repr(snapshot['h1']))
+    ba.check('key cards got real actions (not "等待读取")',
+             snapshot['disabledCards'] == 0, '%d still disabled' % snapshot['disabledCards'])
+    ba.check('custom-binding counter filled in', snapshot['customCount'] not in (None, '—'),
+             repr(snapshot['customCount']))
+    ba.check('websocket reported open by the page', snapshot['wsReady'] is True,
+             'S.on=%r' % snapshot['wsReady'])
 
     print('\n[6] the actual product requirement: press a key, page reacts live')
     # S.keyPress is only ever assigned by a `key` frame - the 5 s `status`
@@ -190,37 +161,32 @@ try:
         print('    no key event yet this session (keyPress=%r) - treating as 0' % (before,))
         before = 0
     print('    baseline keyPress = %r' % (before,))
-    SER.reset_input_buffer()
-    SER.write(b'key 4a press\r')
+    ba.write(b'key 4a press\r')
     time.sleep(0.6)
-    SER.write(b'key 4a release\r')
+    ba.write(b'key 4a release\r')
     time.sleep(2.0)
     r = cdp.call('Runtime.evaluate', {'expression': PROBE_JS, 'returnByValue': True})
     live = json.loads(r['result']['value'])
     print('    keyPress %s -> %s' % (before, live.get('keyPress')))
-    tail = console(b'status\r')
+    tail = ba.console(b'status\r')
     for line in tail.splitlines():
         if 'keyPresses' in line or 'injected' in line:
             print('    device:', line.strip())
-    check('the page received the pushed key event',
-          isinstance(live.get('keyPress'), int) and live['keyPress'] > before,
-          'page key counter %s -> %s' % (before, live.get('keyPress')))
-    check('page still connected afterwards', live.get('wsReady') is True)
+    ba.check('the page received the pushed key event',
+             isinstance(live.get('keyPress'), int) and live['keyPress'] > before,
+             'page key counter %s -> %s' % (before, live.get('keyPress')))
+    ba.check('page still connected afterwards', live.get('wsReady') is True)
 
     print('\n[7] screenshot for the record')
     shot = cdp.call('Page.captureScreenshot', {'format': 'png'})
-    path = r'C:\code\MiRemoteBridge\outputs\web-ui-live.png'
+    path = os.path.join(ROOT, 'outputs', 'web-ui-live.png')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'wb') as f:
         f.write(base64.b64decode(shot['data']))
     print('    ', path)
 finally:
     proc.kill()
-    console(b'pass clear\r')
-    if SER:
-        SER.close()
+    ba.console(b'pass clear\r')
+    ba.close_console()
 
-print('\n' + '=' * 60)
-if FAILURES:
-    print('FAILED %d check(s): %s' % (len(FAILURES), ', '.join(FAILURES)))
-    sys.exit(1)
-print('REAL CHROME: ALL CHECKS PASSED')
+sys.exit(ba.report('REAL CHROME: ALL CHECKS PASSED'))

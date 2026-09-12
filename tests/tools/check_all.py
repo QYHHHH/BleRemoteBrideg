@@ -8,12 +8,14 @@ Four checks cover different layers and none of them subsumes the others:
   browser_check      - page level: does the real page wire up its own JS?
   mobile_login_check - phone level: do the real setup/login FORMS work?
 
-They all need the board reachable over Wi-Fi (serial `wifi on` first) and COM3
-free. Expect a few minutes: each check resets the board and waits for boot.
+All four need the board reachable over Wi-Fi (`wifi on` first); the three that
+drive the serial console also need COM3 free. Expect a few minutes.
 
-Every one of them finishes by CLEARING the board's web password, which leaves
-the device in setup mode - so /login rejects everything until a password is set
-again. This script therefore ends by stating the auth state it leaves behind.
+  * preconnect_probe speaks HTTP only. It neither reboots the board nor touches
+    the password, so it is the one check that leaves no trace behind.
+  * the other three clear the board's web password and finish with the device in
+    SETUP mode, where /login rejects every input. That reads as "my password
+    stopped working", so this script states the auth state it leaves behind.
 
 Run: python tests/tools/check_all.py
 """

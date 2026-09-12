@@ -1,12 +1,14 @@
 """Talking to the board's web auth surface from a test.
 
-Two jobs in one module:
+Three jobs in one module:
 
   * HTTP helpers that read the auth state WITHOUT following redirects - the
     redirect chain is the state machine we want to observe, so a client that
     follows it hides exactly the thing under test.
   * the serial console, because an auth check has to start from a known state
     ("no password stored") and `pass clear` is the only way to get there.
+  * the shared assertion harness (check / FAILURES / report). It used to be
+    copy-pasted into three check scripts, which is three places to fix a typo.
 
 And the rule this module exists to enforce: **a script that changes the board's
 password must say so when it ends.** Every auth check finishes with a board in
@@ -44,7 +46,14 @@ _SER = None
 # --- serial console ----------------------------------------------------------
 
 def ser(port=DEFAULT_PORT, baud=DEFAULT_BAUD):
-    """Open the console port once and keep it (opening pulses RTS = reset)."""
+    """Open the console port once and keep it.
+
+    Opening it pulses RTS into the board's auto-reset circuit, so this call
+    reboots the device. It therefore waits for the console to come back before
+    returning: a command written into a chip that is still in reset is lost, and
+    the old fixed 0.4 s sleep raced exactly that. Measured after the reset: the
+    banner is out at ~0.5 s, the console accepts commands from there.
+    """
     global _SER
     if _SER is None:
         sys.path.insert(0, r'C:\Users\<user>\.workbuddy\binaries\python\pylibs')
@@ -52,8 +61,39 @@ def ser(port=DEFAULT_PORT, baud=DEFAULT_BAUD):
         _SER = serial.Serial(port, baud, timeout=0.3, dsrdtr=False, rtscts=False)
         _SER.dtr = False
         _SER.rts = False
-        time.sleep(0.4)
+        _read_until('console ready', timeout=10.0)
     return _SER
+
+
+def _read_until(needle, timeout):
+    """Drain the console until `needle` appears. True if it did."""
+    deadline = time.time() + timeout
+    seen = ''
+    while time.time() < deadline:
+        if _SER.in_waiting:
+            seen += _SER.read(_SER.in_waiting).decode('utf-8', 'replace')
+            if needle in seen:
+                return True
+        else:
+            time.sleep(0.05)
+    return False
+
+
+def wait_http(ip=None, timeout=30.0, pause=0.4):
+    """Block until the config UI answers HTTP.
+
+    Measured on this board after the RTS reset: the console is ready at ~0.5 s
+    but the HTTP server only comes up at ~9.6 s ("config page: http://<ip>/" in
+    the boot log). Polling that real precondition beats sleeping a guess - the
+    old code always slept 28 s, which was both three times too long and still
+    a guess.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not state(ip).startswith('unknown'):
+            return True
+        time.sleep(pause)
+    return False
 
 
 def console(cmd, settle=1.2, port=DEFAULT_PORT):
@@ -150,8 +190,19 @@ def set_password(pw, ip=None, cookie=None):
 
 
 def clear_password(ip=None, port=DEFAULT_PORT):
+    """Clear the stored password, then wait only if this call reset the board.
+
+    `pass clear` does NOT reboot: the firmware command wipes NVS and returns
+    (cli.cpp). What reboots the board is OPENING the console port, because the
+    CH343 pulses RTS into the auto-reset circuit. So the wait belongs to the
+    first open, not to every call - the old unconditional 28 s sleep was dead
+    time on the second and later calls (mobile_login_check pays it per round).
+    """
+    global _SER
+    opening = _SER is None
     console(b'pass clear\r', port=port)
-    time.sleep(28)          # pass clear reboots the board
+    if opening:
+        wait_http(ip)
     return state(ip)
 
 
@@ -201,3 +252,36 @@ def _banner(ok, detail):
     print('!!  %s' % ('VERIFIED' if ok else 'NOT VERIFIED - check the board by hand'))
     print(bar + '\n')
     return ok
+
+
+# --- check harness -----------------------------------------------------------
+#
+# One copy, shared by every hardware check. `check()` and the FAILURES list used
+# to be defined verbatim in preconnect_probe, browser_check and
+# mobile_login_check, and the tail that turns FAILURES into an exit code was
+# written three times with two different formats.
+
+FAILURES = []
+
+
+def check(label, ok, detail=''):
+    if not ok:
+        FAILURES.append(label)
+    print('    [%s] %s%s' % ('PASS' if ok else 'FAIL', label, (' - ' + detail) if detail else ''))
+
+
+def report(headline):
+    """Print the verdict for one check script. Returns the process exit code."""
+    print('\n' + '=' * 60)
+    if FAILURES:
+        print('FAILED %d check(s): %s' % (len(FAILURES), '; '.join(FAILURES)))
+        return 1
+    print(headline)
+    return 0
+
+
+def write(cmd, port=DEFAULT_PORT):
+    """Send a console command and do not wait for its reply."""
+    s = ser(port)
+    s.reset_input_buffer()
+    s.write(cmd)

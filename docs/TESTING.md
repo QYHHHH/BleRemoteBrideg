@@ -545,15 +545,31 @@ Windows 动作"如需实现，唯一现实路径是给 C3 加 NFC 读卡模块�
 
 页面重做后需要在不接板子的前提下把浏览器逻辑跑一遍。做法是从 `web_page.h` 抽出页面，
 注入一个**只存在于预览文件**的 `fetch` 模拟器（`tests/tools/web_ui_preview.py`），
-再用真实 Chromium 执行断言（`tests/tools/check_web_ui.py`）。
+再用本机装的 Chrome 执行断言 —— 驱动方式是与真机检查同一套的 `cdp.py`（手写 CDP 客户端），
+**除了 Chrome 和 Python 之外不需要装任何东西**。
 
 ```bash
-python tests/tools/web_ui_preview.py            # 生成 outputs/web-ui-preview.html
-python tests/tools/check_web_ui.py --emit-js build/web-ui-assertions.js
-# 浏览器执行（任意 Chromium 自动化驱动均可）
+python tests/tools/check_web_ui.py                  # 闪存预算 + 82 项页面断言（约 1 秒）
+python tests/tools/check_web_ui.py --check-size     # 只看闪存预算
+python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，便于调试
 ```
 
-**已验证（85 项断言，全部通过）**：
+`scripts/test.ps1` 的第 3/4 步跑的就是第一条命令。
+
+**闪存预算口径（2026-09-12 修正）**：盯的是三个 **gzip 资产的实际字节数**（当前
+`html 3924→1774 / css 8444→2736 / js 14627→6276`，合计 **10786 B**，上限 14000 B），
+而不是源页面字节。旧口径盯源页面（已长到 26956 B）→ 上线即红，且**这个数字设备根本看不到**
+（页面是 gzip 传输、只有压缩包进 flash），于是一红到底、无人理会。
+
+**已验证（82 项断言，全部通过）**：
+
+> 修正记录：这层断言一度**跑不到也跑不对**，两个独立缺陷 ——
+> ① 执行入口要求传入外部 `agent-browser` 可执行文件，而它不在本仓库工具链里，
+> `scripts/test.ps1` 只接了 `--check-size`，所以断言实际从未被自动执行；
+> ② `web_ui_preview.demo_html()` 注入模拟器的锚点是 `<script>\n'use strict';`，
+> 页面在 `<script>` 后多了一个空行后 `str.replace` **静默变成空操作**，预览页根本没有
+> fetch 模拟器 → 所有断言都会因 "initial API load" 失败。
+> 现改为按标签定位注入（找不到就报错退出），且执行改走 `cdp.py`。
 
 | 类别 | 覆盖 |
 | --- | --- |

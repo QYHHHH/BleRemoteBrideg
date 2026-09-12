@@ -125,13 +125,14 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 # 四项硬件检查一次跑完（前提：板子 Wi-Fi 可达 —— 先 python build/wifi_on.py）：
 #   python tests/tools/check_all.py
 #     auth_guard_check   HTTP 层：认证路由/改密门/会话 cookie/token 门（不需要浏览器）
-#     preconnect_probe   socket 层：槽位是否及时释放
+#     preconnect_probe   socket 层：槽位是否及时释放（只发 HTTP，不重启板子、不碰密码）
 #     browser_check      页面层：真 Chrome 读 live DOM（渲染/绑定/WS/按键实时推送）
 #     mobile_login_check 手机层：模拟 iPhone 走真实表单完成设置密码与登录
-#   ⚠ 这些脚本都会 `pass clear` 板子上的密码，跑完板子处于"首次设置"状态，
+#   ⚠ 后三个会 `pass clear` 板子上的密码，跑完板子处于"首次设置"状态，
 #     /login 会拒绝一切输入。check_all.py 结尾会打印它留下的认证状态。
-# 不接板子先跑页面回归（浏览器逻辑 + 模拟 API，非真机）：
-#   python tests/tools/web_ui_preview.py
-#   python tests/tools/check_web_ui.py --emit-js build/web-ui-assertions.js
-#   （再用任意 Chromium 自动化驱动执行 build/web-ui-assertions.js，见 TESTING.md §4.12）
+#     （`pass clear` 本身不重启；重启是"打开串口"那一下的 RTS 脉冲造成的，
+#      所以只有开端口的那次调用需要等，见 tests/tools/board_auth.py）
+# 不接板子先跑宿主侧全套（含页面断言，约 1 秒，只需要 Chrome + Python）：
+#   .\scripts\test.ps1
+#   python tests/tools/check_web_ui.py            # 闪存预算 + 82 项页面断言
 ```

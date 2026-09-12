@@ -17,13 +17,20 @@ behind an idle one.
 Run: python tests/tools/preconnect_probe.py [ip]
 """
 
+import os
 import socket
 import sys
 import time
 
-IP = sys.argv[1] if len(sys.argv) > 1 else '192.168.1.100'
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import board_auth as ba  # noqa: E402
+
+# Default to the address `wifi on` recorded rather than a constant: the board is
+# on DHCP, and a stale address here looks exactly like a broken device.
+# This probe speaks only HTTP - it neither reboots the board nor touches the
+# password, so it is the one check that can run without a serial port.
+IP = sys.argv[1] if len(sys.argv) > 1 else ba.board_ip()
 BUDGET_S = 2.0          # generous: the fix should land near 0.1-0.5 s
-FAILURES = []
 
 
 def timed_get(path='/', timeout=40.0):
@@ -50,12 +57,6 @@ def silent_sockets(n):
     return [socket.create_connection((IP, 80), timeout=5) for _ in range(n)]
 
 
-def check(label, ok, detail=''):
-    if not ok:
-        FAILURES.append(label)
-    print('    [%s] %s%s' % ('PASS' if ok else 'FAIL', label, (' - ' + detail) if detail else ''))
-
-
 def main():
     print('board %s\n' % IP)
 
@@ -65,8 +66,8 @@ def main():
         secs, status = timed_get()
         base.append(secs)
         print('    %.2f s   %s' % (secs, status))
-    check('baseline GET answers quickly', max(base) < BUDGET_S,
-          'slowest %.2f s' % max(base))
+    ba.check('baseline GET answers quickly', max(base) < BUDGET_S,
+             'slowest %.2f s' % max(base))
 
     print('\n[2] a GET queued behind N silent preconnections')
     for n in (1, 2, 3, 4):
@@ -77,16 +78,11 @@ def main():
             for s in held:
                 s.close()
         print('    %d silent -> %.2f s   %s' % (n, secs, status))
-        check('GET behind %d silent socket(s) is not starved' % n, secs < BUDGET_S,
-              '%.2f s (budget %.1f s)' % (secs, BUDGET_S))
+        ba.check('GET behind %d silent socket(s) is not starved' % n, secs < BUDGET_S,
+                 '%.2f s (budget %.1f s)' % (secs, BUDGET_S))
         time.sleep(0.6)
 
-    print('\n' + '=' * 60)
-    if FAILURES:
-        print('FAILED %d check(s): %s' % (len(FAILURES), '; '.join(FAILURES)))
-        return 1
-    print('PRECONNECT: ALL CHECKS PASSED')
-    return 0
+    return ba.report('PRECONNECT: ALL CHECKS PASSED')
 
 
 if __name__ == '__main__':

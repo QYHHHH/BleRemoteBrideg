@@ -65,7 +65,18 @@ def demo_html():
     # The firmware generator splits these into local /app.css and /app.js
     # endpoints. The standalone preview keeps them inline so it remains one
     # file that browsers can open without a server.
-    return firmware_html().replace("<script>\n'use strict';", adapter + "<script>\n'use strict';", 1)
+    #
+    # Inject ahead of the page's own <script>, matching the TAG rather than the
+    # exact whitespace after it. The previous version anchored on
+    # "<script>\n'use strict';" and silently stopped matching the day an empty
+    # line appeared after the tag: str.replace() was a no-op, the preview ran
+    # with no fetch simulator, and every assertion failed for a reason that had
+    # nothing to do with the page. Fail loudly instead of silently doing nothing.
+    html = firmware_html()
+    at = html.find("<script>")
+    if at < 0:
+        raise SystemExit("web_page.h has no <script> block to inject the adapter into")
+    return html[:at] + adapter + html[at:]
 
 
 def main():

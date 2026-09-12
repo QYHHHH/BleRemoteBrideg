@@ -2,13 +2,16 @@
 #
 #   .\scripts\test.ps1
 #
-# 1. regenerate firmware\MiRemoteBridge\selftest_vectors.h from the shared JSON
+# 1. regenerate the two generated headers from their sources: selftest_vectors.h
+#    (from tests\vectors\key_vectors.json) and web_page_gz.h (from web_page.h)
 # 2. run the host-side model check: parser, tracker, key map, HID report
 #    descriptor, and randomised stuck-key invariants
-# 3. compile the firmware so a broken edit cannot go unnoticed
+# 3. check the Web UI: the flash budget of the gzip assets, then the page
+#    assertions in the installed Chrome against a board-free preview
+# 4. compile the firmware so a broken edit cannot go unnoticed
 #
-# The on-device half of the same suite is the `selftest` console command; see
-# docs\TESTING.md.
+# The on-device half of the same suite is the `selftest` console command plus
+# tests\tools\check_all.py; see docs\TESTING.md.
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_common.ps1')
@@ -42,8 +45,8 @@ try {
     if ($LASTEXITCODE -ne 0) { $failures++ }
 
     Write-Host ''
-    Write-Host '=== 3/4 Web UI source budget ===' -ForegroundColor Cyan
-    & $python (Join-Path $paths.Root 'tests\tools\check_web_ui.py') --check-size
+    Write-Host '=== 3/4 Web UI: flash budget + page assertions ===' -ForegroundColor Cyan
+    & $python (Join-Path $paths.Root 'tests\tools\check_web_ui.py')
     if ($LASTEXITCODE -ne 0) { $failures++ }
 
     Write-Host ''

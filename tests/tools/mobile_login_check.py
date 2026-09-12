@@ -17,40 +17,15 @@ import os
 import sys
 import time
 
-sys.path.insert(0, r'C:\Users\<user>\.workbuddy\binaries\python\pylibs')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import serial  # noqa: E402
-from cdp import Cdp, board_ip, emulate_mobile, find_page, fresh_profile, launch_chrome  # noqa: E402
+import board_auth as ba  # noqa: E402
+from cdp import Cdp, emulate_mobile, find_page, fresh_profile, launch_chrome  # noqa: E402
 
-IP = board_ip()
-FAILURES = []
+IP = ba.board_ip()
 
 # Two rounds: a plain password, then one full of characters that must survive
 # URL encoding - a space, an ampersand, an equals sign, a percent.
 PASSWORDS = ['mrbtest99', 'p a&s=s%2B']
-
-
-def check(label, ok, detail=''):
-    if not ok:
-        FAILURES.append(label)
-    print('    [%s] %s%s' % ('PASS' if ok else 'FAIL', label, (' - ' + detail) if detail else ''))
-
-
-SER = None
-
-
-def console(cmd, settle=1.2):
-    """Open the port once and keep it: opening it pulses RTS and resets the board."""
-    global SER
-    if SER is None:
-        SER = serial.Serial('COM3', 115200, timeout=0.3, dsrdtr=False, rtscts=False)
-        SER.dtr = False
-        SER.rts = False
-        time.sleep(0.4)
-    SER.reset_input_buffer()
-    SER.write(cmd)
-    time.sleep(settle)
-    return SER.read(SER.in_waiting or 1).decode('utf-8', 'replace')
 
 
 STATE_JS = """(() => {
@@ -128,45 +103,46 @@ def run_round(cdp, pw, label):
     print('\n--- %s : password %r ---' % (label, pw))
 
     print('  clear the board back to setup mode')
-    console(b'pass clear\r')
-    time.sleep(28)
+    # Round 1 opens the console, which reboots the board, so this waits for HTTP.
+    # Round 2 reuses the open port: no reboot, nothing to wait for.
+    ba.clear_password()
 
     print('  open the root URL as a phone would')
     navigate(cdp, 'http://%s/' % IP)
     st = state(cdp)
     print('   ', json.dumps(st, ensure_ascii=False))
-    check('root redirects to the setup page', st.get('path') == '/setup', str(st.get('path')))
-    check('setup form has the password fields',
+    ba.check('root redirects to the setup page', st.get('path') == '/setup', str(st.get('path')))
+    ba.check('setup form has the password fields',
           st.get('inputs') == ['password', 'confirm'], str(st.get('inputs')))
 
     print('  submit the SETUP form')
     print('   ', fill_and_submit(cdp, {'password': pw, 'confirm': pw}))
     st = state(cdp)
     print('   ', json.dumps(st, ensure_ascii=False))
-    check('setup signs the phone in and lands on the app', st.get('path') == '/', str(st.get('path')))
-    check('app page rendered its key cards', st.get('cards') == 13, str(st.get('cards')))
+    ba.check('setup signs the phone in and lands on the app', st.get('path') == '/', str(st.get('path')))
+    ba.check('app page rendered its key cards', st.get('cards') == 13, str(st.get('cards')))
 
     ck = cdp.cookies('http://%s/' % IP)
     names = sorted(c['name'] for c in ck)
     print('    cookies:', names)
-    check('session cookie was stored by the browser', 'mrb_sess' in names, str(names))
+    ba.check('session cookie was stored by the browser', 'mrb_sess' in names, str(names))
 
     print('  sign out, then sign back in through the LOGIN form')
     navigate(cdp, 'http://%s/logout' % IP)
     st = state(cdp)
     print('   ', json.dumps(st, ensure_ascii=False))
-    check('logout lands on the login page', st.get('path') == '/login', str(st.get('path')))
-    check('login form has a password field',
+    ba.check('logout lands on the login page', st.get('path') == '/login', str(st.get('path')))
+    ba.check('login form has a password field',
           st.get('inputs') == ['password'], str(st.get('inputs')))
 
     print('  submit the LOGIN form')
     print('   ', fill_and_submit(cdp, {'password': pw}))
     st, took = settle(cdp)
     print('    settled in %.1f s: %s' % (took, json.dumps(st, ensure_ascii=False)))
-    check('login is accepted and lands on the app', st.get('path') == '/', str(st.get('path')))
-    check('app page rendered after login', st.get('cards') == 13, str(st.get('cards')))
-    check('page reports the websocket is open', st.get('wsOpen') is True, str(st.get('wsOpen')))
-    check('header left the placeholder', st.get('h1') != '正在读取设备状态', repr(st.get('h1')))
+    ba.check('login is accepted and lands on the app', st.get('path') == '/', str(st.get('path')))
+    ba.check('app page rendered after login', st.get('cards') == 13, str(st.get('cards')))
+    ba.check('page reports the websocket is open', st.get('wsOpen') is True, str(st.get('wsOpen')))
+    ba.check('header left the placeholder', st.get('h1') != '正在读取设备状态', repr(st.get('h1')))
 
     print('  a WRONG password must not sign in')
     navigate(cdp, 'http://%s/logout' % IP)
@@ -174,7 +150,7 @@ def run_round(cdp, pw, label):
     fill_and_submit(cdp, {'password': pw + '-wrong'})
     st = state(cdp)
     print('   ', json.dumps(st, ensure_ascii=False))
-    check('wrong password does not reach the app', st.get('cards') != 13, str(st.get('cards')))
+    ba.check('wrong password does not reach the app', st.get('cards') != 13, str(st.get('cards')))
 
 
 def main():
@@ -194,18 +170,10 @@ def main():
             run_round(cdp, pw, 'round %d' % i)
     finally:
         proc.kill()
-        console(b'pass clear\r')
-        if SER:
-            SER.close()
+        ba.console(b'pass clear\r')
+        ba.close_console()
 
-    print('\n' + '=' * 60)
-    if FAILURES:
-        print('FAILED %d check(s):' % len(FAILURES))
-        for f in FAILURES:
-            print('   -', f)
-        return 1
-    print('MOBILE FORM FLOW: ALL CHECKS PASSED')
-    return 0
+    return ba.report('MOBILE FORM FLOW: ALL CHECKS PASSED')
 
 
 if __name__ == '__main__':
