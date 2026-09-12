@@ -362,7 +362,7 @@ void handleStatus(bool head) {
   const String remote = rc003_client::connectedName();
   out.quoted(remote.c_str());
   out.add(",\"battery\":%d,\"bindings\":%u,\"mode\":\"%s\",\"ip\":\"%s\",\"uptimeMs\":%lu",
-      settings::batteryLevel(), (unsigned)keymap_binding_count(), wifi_ui::mode(), wifi_ui::ip(),
+      rc003_client::batteryLevel(), (unsigned)keymap_binding_count(), wifi_ui::mode(), wifi_ui::ip(),
       (unsigned long)millis());
   out.add(",\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u,\"activeKey\":%u",
       (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
@@ -790,7 +790,7 @@ void wsSendStatus() {
           "\"remoteConnected\":%s,\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
       (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
       boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
-      settings::batteryLevel(), (unsigned)keymap_binding_count(),
+      rc003_client::batteryLevel(), (unsigned)keymap_binding_count(),
       (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);
 }
@@ -955,7 +955,7 @@ void wsSendKeyEvent() {
           "\"hostConnected\":%s,\"battery\":%d}",
       (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
       boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
-      settings::batteryLevel());
+      rc003_client::batteryLevel());
   jsonResult(out);
 }
 

@@ -42,6 +42,8 @@
 
 #include <host/ble_gap.h>
 #include <host/ble_store.h>
+#include <host/ble_gatt.h>
+#include <os/os_mbuf.h>
 
 #include <ctype.h>
 #include <string.h>
@@ -341,6 +343,31 @@ void onBatteryNotify(BLERemoteCharacteristic *characteristic, uint8_t *data, siz
   event_bus::post(BR_EV_RC_BATTERY, level, false);
 }
 
+// Read Battery Level directly, without retaining GATT wrapper objects or blocking keys.
+bool s_batteryReadPending=false;
+int batteryReadCallback(uint16_t conn,const ble_gatt_error *error,ble_gatt_attr *attr,void*) {
+  if(!s_client || !s_client->isConnected() || s_client->getConnId()!=conn) {s_batteryReadPending=false;return 0;}
+  if(error->status) {
+    s_batteryReadPending=false;
+    if(error->status!=BLE_HS_EDONE) BR_LOGW(kTagGatt,"battery read status=%d",error->status);
+    return 0;
+  }
+  uint8_t level;
+  if(attr && attr->om && OS_MBUF_PKTLEN(attr->om)==1 && !os_mbuf_copydata(attr->om,0,1,&level) && level<=100) {
+    BR_LOGI(kTagGatt,"battery live read=%u%%",level);
+    onBatteryNotify(nullptr,&level,1,false);
+  }
+  return 0;
+}
+void requestBatteryRead() {
+  if(s_batteryReadPending || !s_client || !s_client->isConnected()) return;
+  s_lastBatteryReadMs=nowMs();
+  static const ble_uuid16_t uuid=BLE_UUID16_INIT(0x2a19);
+  s_batteryReadPending=true;
+  int rc=ble_gattc_read_by_uuid(s_client->getConnId(),1,0xffff,&uuid.u,batteryReadCallback,nullptr);
+  if(rc) {s_batteryReadPending=false;BR_LOGW(kTagGatt,"battery request rc=%d",rc);}
+}
+
 // ---------------------------------------------------------------------------
 // Client callbacks - NimBLE host task context. Post events only.
 // ---------------------------------------------------------------------------
@@ -358,6 +385,7 @@ class ClientCallbacks : public BLEClientCallbacks {
     s_charReport = nullptr;
     s_charAtvvCtl = nullptr;
     s_charBattery = nullptr;
+    s_batteryReadPending=false;
     s_remoteBatteryValid = false;
     s_subscribed = false;
     rc003_tracker_reset(&s_tracker);
@@ -595,14 +623,12 @@ bool discoverAndSubscribe() {
       const bool isHidService = svc->getUUID().equals(BLEUUID(RC003_HOGP_SVC_UUID));
       const bool isAtvvService = BRIDGE_ATVV_CTL_ENABLE &&
           svc->getUUID().equals(BLEUUID(RC003_ATVV_SVC_UUID));
-      const bool isBatteryService = BRIDGE_BATTERY_PASSTHROUGH &&
-          svc->getUUID().equals(BLEUUID(RC003_BATTERY_SVC_UUID));
       if ((pass == 0) != isHidService) continue;
       // Do NOT discover characteristics of Device Information, vendor OTA,
       // GAP, etc. The BLE wrapper retains a heap object and semaphores for
       // every discovered characteristic, although we never use these services.
       // Filtering must precede the lazy getCharacteristics() call.
-      if (!isHidService && !isAtvvService && !isBatteryService) continue;
+      if (!isHidService && !isAtvvService) continue; // Battery is read asynchronously by UUID.
 
       BR_LOGI(kTagGatt, "service %s", svcUuid.c_str());
       std::map<std::string, BLERemoteCharacteristic *> *chars = svc->getCharacteristics();
@@ -667,36 +693,7 @@ bool discoverAndSubscribe() {
           continue;
         }
 
-        // ---- Battery level (0x2A19): pass the remote's charge through ------
-        //
-        // Read once so the host has a number straight away, and subscribe if the
-        // remote offers notifications. Discovery already runs in this task, so a
-        // blocking read is fine here - unlike in a BLE callback.
-        if (BRIDGE_BATTERY_PASSTHROUGH && isBatteryService &&
-            uuid.indexOf(RC003_BATTERY_LEVEL_UUID) >= 0) {
-          s_charBattery = ch;
-          s_lastBatteryReadMs = nowMs();
-          if (ch->canRead()) {
-            const String v = ch->readValue();
-            if (v.length() >= 1 && (uint8_t)v[0] <= 100) {
-              s_remoteBattery = (uint8_t)v[0];
-              s_remoteBatteryValid = true;
-              BR_LOGI(kTagGatt, "remote battery level: %u%%", (unsigned)s_remoteBattery);
-              event_bus::post(BR_EV_RC_BATTERY, s_remoteBattery, false);
-            } else {
-              BR_LOGW(kTagGatt, "remote battery read: %u byte(s), unusable", (unsigned)v.length());
-            }
-          }
-          if (ch->canNotify() || ch->canIndicate()) {
-            if (ch->subscribe(/*notifications=*/true, onBatteryNotify, /*response=*/false)) {
-              s_charBattery = ch;
-              BR_LOGI(kTagGatt, "subscribed to remote battery level");
-            } else {
-              BR_LOGW(kTagGatt, "subscribe failed on remote battery level");
-            }
-          }
-          continue;
-        }
+
 
         // The ATVV audio characteristic (ab5e0003) is intentionally NOT
         // subscribed: this firmware never touches the microphone path.
@@ -1062,6 +1059,7 @@ void taskLoop() {
         s_slotError="";
         setState(St::READY, "subscribed");
         event_bus::post(BR_EV_RC_READY);
+        requestBatteryRead();
       } else {
         event_bus::post(BR_EV_RC_BOND_FAIL);
         if(!s_slotError[0]) s_slotError="按键服务订阅失败，请重新进入配对模式后选择设备";
@@ -1081,18 +1079,7 @@ void taskLoop() {
       }
       // Read on the central task: some remotes never send battery notifications.
       // No timer task or retained payload; unchanged values do not reach NVS.
-      if (BRIDGE_BATTERY_PASSTHROUGH && s_charBattery &&
-          nowMs() - s_lastBatteryReadMs >= 60000) {
-        s_lastBatteryReadMs = nowMs();
-        BLERemoteCharacteristic *ch = s_charBattery;
-        if (ch->canRead()) {
-          const String value = ch->readValue();
-          if (s_client->isConnected() && value.length() == 1) {
-            uint8_t level = (uint8_t)value[0];
-            onBatteryNotify(ch, &level, 1, false);
-          }
-        }
-      }
+      if(BRIDGE_BATTERY_PASSTHROUGH && nowMs()-s_lastBatteryReadMs>=60000) requestBatteryRead();
       // Keep the link parameters favourable for latency without hammering the
       // remote with requests. Timeout stays at 1 s (see discoverAndSubscribe):
       // the short supervision timeout is what makes the next hard reboot
@@ -1198,7 +1185,7 @@ bool begin() {
   const int persisted = settings::batteryLevel();
   if (persisted >= 0 && persisted <= 100) {
     s_remoteBattery = (uint8_t)persisted;
-    s_remoteBatteryValid = true;
+    s_remoteBatteryValid = false;
     BR_LOGI(kTag, "battery cache seeded from NVS: %d%%", persisted);
   }
 

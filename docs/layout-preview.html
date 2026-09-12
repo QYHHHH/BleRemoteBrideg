@@ -392,7 +392,7 @@ function keyIcon(raw){const k=knownKey(raw);return k?icon(k)+' ':''}
 function keyTitle(k){return k.name||(knownKey(k.raw)||[])[1]||'按键 0x'+hx(k.raw)}
 function drawSlots(){
  $('slots').innerHTML=slots.map((s,i)=>{const active=i===selectedSlot,rc=active&&S.lastStatus&&S.lastStatus.remoteConnected;
- return '<button class="slot '+(active?'selected':'')+'" data-slot="'+i+'" aria-pressed="'+active+'"><span class="slot-index">槽位 0'+(i+1)+(i===0?' · 小米预设':'')+'</span><strong>'+esc(slotTitle(i))+'</strong><span class="slot-link '+(rc?'linked':'')+'">'+(rc?'● 遥控器已连接':s.address?(active?'○ 正在连接':'○ 未启用'):'○ 未添加设备')+'</span><span class="slot-battery">'+(rc&&S.lastStatus.battery>=0?'电量 '+S.lastStatus.battery+'%':esc(s.address)||'点击添加设备')+'</span></button>'}).join('');
+ return '<button class="slot '+(active?'selected':'')+'" data-slot="'+i+'" aria-pressed="'+active+'"><span class="slot-index">槽位 0'+(i+1)+(i===0?' · 小米预设':'')+'</span><strong>'+esc(slotTitle(i))+'</strong><span class="slot-link '+(rc?'linked':'')+'">'+(rc?'● 遥控器已连接':s.address?(active?'○ 正在连接':'○ 未启用'):'○ 未添加设备')+'</span><span class="slot-battery">'+(rc?(S.lastStatus.battery>=0?'电量 '+S.lastStatus.battery+'%':'电量未读取'):esc(s.address)||'点击添加设备')+'</span></button>'}).join('');
  $('slotSummary').textContent=slotTitle(selectedSlot)+' · 设置保存在开发板';
  $('pairRemote').hidden=!!slots[selectedSlot].address;$('deleteRemote').hidden=!slots[selectedSlot].address;
  section.querySelector('.head').innerHTML='<h2>'+esc(slotTitle(selectedSlot))+' · 按键映射</h2><span class="mut">点击按键编辑 · 自动保存</span>';

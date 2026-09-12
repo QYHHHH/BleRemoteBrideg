@@ -42,7 +42,7 @@ FLASH_BUDGET = 18500
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 149
+EXPECTED_CHECKS = 150
 
 TESTS = r"""(async () => {
   const results=[];
@@ -79,6 +79,7 @@ TESTS = r"""(async () => {
   delete __demo.status.fwVersion;delete __demo.status.buildTime;await load();
   assert($('ver').textContent==='','no stale stamp when firmware omits it');
   __demo.status.fwVersion='v0.0.1';__demo.status.buildTime='Sep 12 2026 12:56:33';await load();
+  __demo.status.battery=-1;await load();assert($('slots').textContent.includes('电量未读取'),'missing live battery is not displayed as cached percentage');__demo.status.battery=97;await load();
   await slotAction('select',1);
   assert(selectedSlot===1&&$('grid').hidden,'select slot activates generic remote page');
   await slotAction('add',1);
