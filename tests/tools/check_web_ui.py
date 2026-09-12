@@ -31,29 +31,31 @@ import gen_web_page  # noqa: E402
 from cdp import CHROME, Cdp, find_page, fresh_profile, launch_chrome  # noqa: E402
 from web_ui_preview import ROOT, demo_html  # noqa: E402
 
-# Reviewed total of the three gzip payloads on 2026-09-12: 10785 B.
+# Reviewed total after the approved three-slot UI on 2026-09-12: 17574 B.
 #
 # The old budget watched the SOURCE page instead (26956 B and growing), which is
 # not what the device stores - the page is served gzipped, so only the packed
 # assets are compiled into flash. A tripwire that fires on a number the device
 # never sees just goes red and gets ignored, which is exactly what happened.
 # This one fires on flash growth, which is the real cost, with room to grow.
-FLASH_BUDGET = 14000
+FLASH_BUDGET = 18500
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 129
+EXPECTED_CHECKS = 131
 
 TESTS = r"""(async () => {
   const results=[];
   const assert=(condition,name)=>{if(!condition)throw Error(name);results.push(name);};
   await load();
   assert(S.on && S.ok,'initial API load');
-  stat({...__demo.status,heapFree:15360,heapMin:12288,heapLargest:8192});
+  stat({...__demo.status,heapTotal:20480,heapFree:15360,heapMin:12288,heapLargest:8192});
   assert($('memFree').textContent.includes('15.0 KiB'),'free heap rendered in KiB');
+  assert($('memPct').textContent==='25.0%'&&$('memTotal').textContent.includes('20.0 KiB'),'used heap percentage and total rendered');
   assert($('memDetail').textContent.includes('12.0 KiB')&&$('memDetail').textContent.includes('8.0 KiB'),'minimum and largest block rendered');
-  wsMessage({type:'status',...__demo.status,heapFree:10240,heapMin:9216,heapLargest:6144});
+  wsMessage({type:'status',...__demo.status,heapTotal:20480,heapFree:10240,heapMin:9216,heapLargest:6144});
   assert($('memFree').textContent.includes('10.0 KiB'),'heartbeat updates memory');
+  assert($('memPct').textContent==='50.0%','heartbeat updates used heap percentage');
   online(false);assert(!$('memState').textContent.includes('5'),'disconnect removes live update claim');online(true);
   __demo.status.fwVersion='v9.9.9';__demo.status.buildTime='Jan  1 2030 00:00:00';await load();
   assert($('ver').textContent==='v9.9.9 · build Jan  1 2030 00:00:00','version and build stamp come from /api/status');

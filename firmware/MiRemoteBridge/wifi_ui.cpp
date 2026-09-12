@@ -314,8 +314,8 @@ void handleStatus(bool head) {
   out.add(",\"battery\":%d,\"bindings\":%u,\"mode\":\"%s\",\"ip\":\"%s\",\"uptimeMs\":%lu",
       settings::batteryLevel(), (unsigned)keymap_binding_count(), wifi_ui::mode(), wifi_ui::ip(),
       (unsigned long)millis());
-  out.add(",\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u,\"activeKey\":%u",
-      (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
+  out.add(",\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u,\"activeKey\":%u",
+      (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
       (unsigned)ESP.getMaxAllocHeap(), bridge::activeRawCode());
   // keyPresses is a monotonic counter: the page flashes the key whenever it
   // changes, so a press shorter than the poll interval is still shown.
@@ -720,11 +720,11 @@ void wsSendStatus() {
   char buf[320];
   Json out(buf, sizeof(buf));
   out.add("{\"type\":\"status\",\"keyPresses\":%lu,\"lastKey\":%u,\"activeKey\":%u,"
-          "\"remoteConnected\":%s,\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
+          "\"remoteConnected\":%s,\"hostConnected\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
       (unsigned long)bridge::keyPresses(), bridge::lastKeyRaw(), bridge::activeRawCode(),
       boolean(rc003_client::connected()), boolean(hid_server::hostConnected()),
       settings::batteryLevel(), (unsigned)keymap_binding_count(),
-      (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+      (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);
 }
 
