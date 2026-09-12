@@ -110,6 +110,13 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
 @media(max-width:1250px){.grid{grid-template-columns:minmax(0,1fr) 105px minmax(0,1fr);gap:6px}.k button{padding:8px}.k .ed{display:none}.board-body{grid-template-columns:minmax(0,1fr) 150px;gap:10px}.hardware{display:block}.board .hardware svg{float:left;width:95px;height:190px;margin:0 8px 2px 0}.board .memory{padding-left:10px}.slot{padding:10px 8px}.slot strong{font-size:16px}.rack-actions{flex-wrap:wrap}.rack-actions>div{flex-basis:100%}}
 @media(max-width:900px){.workspace{grid-template-columns:1fr}.mapping-panel{min-height:560px}.side{display:flex}.board-body{grid-template-columns:minmax(0,1.65fr) minmax(155px,1fr)}.hardware{display:flex}.board .hardware svg{float:none;width:116px}.grid{grid-template-columns:minmax(0,1fr) 140px minmax(0,1fr)}}
 @media(max-width:560px){.grid{grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr)}.rm .body{transform:scale(.64);margin:-97.2px -23.76px}.slots{gap:5px}.slot-link{font-size:10px}.slot strong{font-size:14px}.slot-index,.slot-battery{font-size:9px}.board-body{grid-template-columns:1fr}.board .memory{border-left:0;border-top:1px solid var(--line);padding:12px 0}.k .r1,.k .act{font-size:11px}}
+
+@media(min-width:901px){.mapping-panel{min-height:min(790px,calc(100vh - 118px))}.grid{grid-template-columns:minmax(0,1fr) 230px minmax(0,1fr);gap:12px}.col{align-self:stretch;justify-content:space-around;gap:12px;padding:12px 0}.k button{min-height:60px;padding:8px 10px}.rm{align-self:center}.side{min-height:100%}}
+@media(min-width:901px) and (max-width:1250px){.grid{grid-template-columns:minmax(0,1fr) 184px minmax(0,1fr);gap:8px}.k button{padding:8px}.k .r1,.k .act{font-size:12px}}
+#wires path{stroke:#a6afbc;stroke-opacity:.85;stroke-width:1}
+#memRing{--remaining:0%;width:132px;height:132px;flex:none;border-radius:50%;background:conic-gradient(#328564 var(--remaining),#e9eef2 0);padding:10px;margin:2px 0 18px;display:grid;place-items:center;transform:rotate(-90deg)}
+#memRing>div{width:100%;height:100%;border-radius:50%;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(90deg)}
+#memRing b{font:600 25px Consolas,monospace;color:var(--ink)}#memRing span{font-size:11px;color:var(--mut);margin-top:3px}#memTotal{margin-top:5px}.board .memory{align-items:center;text-align:center}.board .memory h3{align-self:stretch;text-align:left}.board .memory #memDetail{line-height:1.9}
 </style></head><body>
 <div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span>
 <span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
@@ -167,7 +174,7 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
   const base = defaults.map(a => a.raw === 62 ? {...a, mod:9, key:0} : {...a});
   let bindings = [];
   try { bindings = JSON.parse(sessionStorage.getItem('mrb-ui-demo') || '[]'); } catch (_) {}
-  const control = window.__demo = {fault:null, calls:[], status:{heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
+  const control = window.__demo = {fault:null, calls:[], status:{heapTotal:204800,heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
   window.fetch = async (input, options={}) => {
     const u = new URL(input, 'http://preview.invalid');
     const method = options.method || 'GET';
@@ -288,8 +295,8 @@ if(!card||!btn)return;
 var cb=card.getBoundingClientRect(),bb=btn.getBoundingClientRect();
 var x1=(bb.left+bb.width/2)-gb.left,y1=bb.top+bb.height/2-gb.top;
 var x2=(k[3]==='L'?cb.right+9:cb.left-9)-gb.left,y2=cb.top+cb.height/2-gb.top;
-var dx=(x2-x1)*0.45;
-out+='<path marker-end="url(#tip)" data-r="'+k[0]+'" d="M'+x1.toFixed(1)+','+y1.toFixed(1)+' C'+(x1+dx).toFixed(1)+','+y1.toFixed(1)+' '+(x2-dx).toFixed(1)+','+y2.toFixed(1)+' '+x2.toFixed(1)+','+y2.toFixed(1)+'"/>';});
+var rb=$('rmArt').getBoundingClientRect(),edge=(k[3]==='L'?rb.left-8:rb.right+8)-gb.left;var dx=(x2-edge)*0.5;
+out+='<path marker-end="url(#tip)" data-r="'+k[0]+'" d="M'+x1.toFixed(1)+','+y1.toFixed(1)+' L'+edge.toFixed(1)+','+y1.toFixed(1)+' C'+(edge+dx).toFixed(1)+','+y1.toFixed(1)+' '+(x2-dx).toFixed(1)+','+y2.toFixed(1)+' '+x2.toFixed(1)+','+y2.toFixed(1)+'"/>';});
 svg.innerHTML=out}
 function highlight(raw){KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.classList.toggle('live',!!raw&&k[0]===raw)});
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('live',!!raw&&+e.dataset.r===raw)});
@@ -297,7 +304,10 @@ Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p
 
 function memory(j){function kb(n){return typeof n==='number'&&n>=0?(n/1024).toFixed(1)+' KiB':'—'}
 if(typeof j.heapFree!=='number')return;
-$('memFree').textContent=kb(j.heapFree)+' 可用';$('memDetail').textContent='历史最低 '+kb(j.heapMin)+' · 最大连续块 '+kb(j.heapLargest);$('memState').textContent='模拟内存数据 · 仅供布局预览';}
+$('memFree').textContent=kb(j.heapFree)+' 可用';$('memDetail').textContent='历史最低 '+kb(j.heapMin)+' · 最大连续块 '+kb(j.heapLargest);$('memState').textContent='模拟内存数据 · 仅供布局预览';
+var valid=typeof j.heapTotal==='number'&&j.heapTotal>0&&j.heapFree>=0&&j.heapFree<=j.heapTotal,pct=valid?100*j.heapFree/j.heapTotal:null;
+if($('memRing')){$('memRing').style.setProperty('--remaining',pct===null?'0%':pct+'%');$('memPct').textContent=pct===null?'—':pct.toFixed(1)+'%';$('memTotal').textContent=valid?'总堆内存 '+kb(j.heapTotal):'总堆内存未知';$('memRing').setAttribute('aria-label',pct===null?'剩余内存比例未知':'剩余堆内存 '+pct.toFixed(1)+'%');}
+}
 function stat(j){memory(j);var rc=!!j.remoteConnected,h=!!j.hostConnected;
 // Version and build stamp come from /api/status, i.e. from the running
 // firmware, not from the generated page bytes - so it can never go stale.
@@ -360,6 +370,7 @@ const legacy=document.createElement('div');legacy.hidden=true;document.body.appe
 legacy.append(document.querySelector('.hero'),document.querySelector('.foot'),document.querySelector('.note'),$('pR'),$('pB'));
 const board=document.querySelector('.board');side.append(board);board.prepend($('pH'));
 const boardTitle=board.querySelector('h2'), art=board.querySelector('svg'), memoryBox=board.querySelector('.memory');
+const ring=document.createElement('div');ring.id='memRing';ring.setAttribute('role','img');ring.innerHTML='<div><b id="memPct">—</b><span>剩余比例</span></div>';memoryBox.querySelector('h3').after(ring);const total=document.createElement('small');total.id='memTotal';$('memFree').after(total);
 const hardware=document.createElement('div');hardware.className='hardware';const legend=document.createElement('div');legend.className='legend';
 [...board.children].filter(e=>e.tagName==='P').forEach(e=>legend.append(e));hardware.append(art,legend);
 const boardBody=document.createElement('div');boardBody.className='board-body';boardBody.append(hardware,memoryBox);board.append(boardBody);
