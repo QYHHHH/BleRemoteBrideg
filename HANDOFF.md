@@ -106,6 +106,14 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 - **认证机制的现状与已知弱点**（无防爆破、密码走 URL、WS token 静态、cookie 到期语义
   依赖开机时长、sha1 无盐、无 TLS）见 `docs/AUTH.md`。**别把它的防护能力说得比实际强**；
   前提是**仅限局域网，不要暴露到公网**。
+- **认证层的两条路由规则互为镜像，改动前先读 `docs/AUTH.md` §1/§3**：
+  无密码时除 `/setup`、`/ws`、`/api/token` 外一律跳 `/setup`（`/login` 也跳，否则是一个
+  永远拒绝的死路表单）；有密码时除 `/login`、`/logout` 外一律要有效会话（`/setup` 也要，
+  否则它就是任何人都能用的改密接口）。这两条都在 2026-09-12 修过，别再退回。
+- **`Cookie:` 的值必须按"行"结束，不能按 `;` 或缓冲区末尾**（`wifi_ui.cpp` 的 `cookieValue`）。
+  请求头里没有 `;`，按 `;` 找结尾会把后面的头一起吞进 cookie 值 → base64 解码失败 → **静默丢会话**。
+  实测：同一个 cookie，`Cookie` 后面多一个 `Connection: close` 就从 200 变 302 `/login`。
+  **浏览器通常把 `Cookie` 放在最后，所以这条 bug 对浏览器不可见——"浏览器能用"不等于实现对。**
 - NFC 是小米私有智能卡，与蓝牙零交互，桥接器无 NFC 硬件——不要再朝这个方向探索。
 - `ble_store_config` 的 bond 淘汰（删最旧）是预编译库行为；`makeRoomForPeer` 已在
   配对前腾位保护遥控器，勿移除。
@@ -114,11 +122,14 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 
 ```powershell
 # 物理按键（需要人手）：短按 BOOT 应只出日志不重启；长按 5s 清全部配对（危险）
-# 三项硬件检查一次跑完（前提：板子 Wi-Fi 可达 —— 先 python build/wifi_on.py）：
+# 四项硬件检查一次跑完（前提：板子 Wi-Fi 可达 —— 先 python build/wifi_on.py）：
 #   python tests/tools/check_all.py
+#     auth_guard_check   HTTP 层：认证路由/改密门/会话 cookie/token 门（不需要浏览器）
 #     preconnect_probe   socket 层：槽位是否及时释放
 #     browser_check      页面层：真 Chrome 读 live DOM（渲染/绑定/WS/按键实时推送）
 #     mobile_login_check 手机层：模拟 iPhone 走真实表单完成设置密码与登录
+#   ⚠ 这些脚本都会 `pass clear` 板子上的密码，跑完板子处于"首次设置"状态，
+#     /login 会拒绝一切输入。check_all.py 结尾会打印它留下的认证状态。
 # 不接板子先跑页面回归（浏览器逻辑 + 模拟 API，非真机）：
 #   python tests/tools/web_ui_preview.py
 #   python tests/tools/check_web_ui.py --emit-js build/web-ui-assertions.js

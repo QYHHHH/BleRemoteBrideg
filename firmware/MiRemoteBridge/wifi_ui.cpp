@@ -429,7 +429,9 @@ void handleReset() {
 // cannot explain setup mode or the BOOT recovery hint, and the page needs a real
 // form for that.
 
-// Shown while no password is stored.
+// First-run form (no password stored) and, once a session is held, the
+// change-password form. The copy has to read correctly in both states, so it
+// says "set or change" rather than promising the device has no password.
 const char kSetupPage[] =
     "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
@@ -444,8 +446,8 @@ const char kSetupPage[] =
     "color:#fff;font-size:14px;cursor:pointer}"
     ".hint{font-size:12px;color:#8a93a6;margin-top:16px;line-height:1.7}"
     "</style></head><body><div class=\"c\">"
-    "<h1>首次使用：设置访问密码</h1>"
-    "<p>这台设备还没有访问密码。设置之后浏览器会提示保存，以后自动填入。</p>"
+    "<h1>设置访问密码</h1>"
+    "<p>设置或修改这台设备的访问密码。设置后浏览器会提示保存，以后自动填入。</p>"
     "<form method=\"get\" action=\"/setup\">"
     "<label>访问密码（至少 4 位）</label>"
     "<input type=\"password\" name=\"password\" required minlength=\"4\" autofocus>"
@@ -503,21 +505,47 @@ bool base64Encode(const uint8_t *in, size_t inLen, char *out, size_t outCap) {
   return true;
 }
 
+// Pull one "name=value" pair out of a Cookie header VALUE. The value stops at
+// the end of the header LINE, not at the end of the buffer, and not only at
+// ';' - a request has no ';' separator at all (that is Set-Cookie syntax), so
+// looking for ';' alone made the value run on into whatever headers followed:
+//
+//   Cookie: mrb_sess=<32 chars>\r\nConnection: close\r\n\r\n
+//                                  ^ stopped here, 24 bytes of garbage
+//
+// The base64 decode then failed and the session was dropped. It only ever
+// worked because browsers tend to send Cookie late, and because trailing CRLF
+// happens to be tolerated by the decoder. Scanning the pairs also means other
+// cookies may precede ours. Measured on hardware: identical request, cookie
+// accepted without a trailing header, rejected with `Connection: close`.
+bool cookieValue(const char *value, const char *name, char *out, size_t outCap) {
+  const size_t nameLen = strlen(name);
+  const char *at = value;
+  while (at && *at) {
+    while (*at == ' ' || *at == '\t') ++at;
+    const char *end = at;
+    while (*end && *end != ';' && *end != '\r' && *end != '\n') ++end;
+    if ((size_t)(end - at) > nameLen && strncmp(at, name, nameLen) == 0 && at[nameLen] == '=') {
+      const char *v = at + nameLen + 1;
+      size_t len = (size_t)(end - v);
+      if (len >= outCap) len = outCap - 1;
+      memcpy(out, v, len);
+      out[len] = 0;
+      return true;
+    }
+    at = (*end == ';') ? end + 1 : nullptr;
+  }
+  return false;
+}
+
 bool readSessionCookie(const char *headers, char *out, size_t outCap) {
   if (!headers) return false;
-  const size_t nameLen = strlen(kCookieName);
-  for (const char *p = strcasestr(headers, "\r\nCookie:"); p;
-       p = strcasestr(p + 1, "\r\nCookie:")) {
-    p += 2 + 7;
-    while (*p == ' ' || *p == '\t') ++p;
-    if (strncmp(p, kCookieName, nameLen) != 0 || p[nameLen] != '=') continue;
-    const char *v = p + nameLen + 1;
-    const char *end = strchr(v, ';');
-    size_t len = end ? (size_t)(end - v) : strlen(v);
-    if (len >= outCap) len = outCap - 1;
-    memcpy(out, v, len);
-    out[len] = 0;
-    return true;
+  const char *p = headers;
+  while ((p = strcasestr(p, "\r\nCookie:")) != nullptr) {
+    const char *v = p + 9;              // past "\r\nCookie:"
+    while (*v == ' ' || *v == '\t') ++v;
+    if (cookieValue(v, kCookieName, out, outCap)) return true;
+    p = v;
   }
   return false;
 }
@@ -909,7 +937,14 @@ void dispatch() {
   // Setup mode: force the visitor to define a password before anything else
   // is served. (Without this, an unset password meant "wide open", which read
   // as a cache bug to the user: the page just opened with no prompt at all.)
-  if (!settings::hasWebPassword() && !isSetup && !isLogin && !isLogout && !isWs
+  //
+  // /login and /logout are deliberately NOT exempt here. With no password
+  // stored the login form cannot succeed - there is nothing to compare the
+  // typed value against - so every submission came back "密码错误". A user who
+  // reached /login (bookmark, history, autocomplete) therefore saw a form that
+  // rejected whatever they typed, with no hint that the device was waiting for
+  // its FIRST password instead. Send them to the setup form.
+  if (!settings::hasWebPassword() && !isSetup && !isWs
       && strcmp(target, "/api/token") != 0) {
     const int n = snprintf(s_http.header, sizeof(s_http.header),
         "HTTP/1.1 302 Found\r\nLocation: /setup\r\nCache-Control: no-store\r\n"
@@ -940,7 +975,13 @@ void dispatch() {
         return;
       }
         BR_LOGI(kTag, "no/bad session for %s -> /login", target);
-      if (!isLogin && !isLogout && !isSetup) {
+      // /setup is NOT exempt once a password exists. It is a password-CHANGING
+      // form in that state, and it used to be honoured with no session at all:
+      // a single GET /setup?password=x&confirm=x from anyone on the Wi-Fi
+      // silently replaced the stored password (and signed that caller in).
+      // With a password set, /setup now needs a valid session like everything
+      // else - only the login form and the logout link stay open.
+      if (!isLogin && !isLogout) {
         const int n = snprintf(s_http.header, sizeof(s_http.header),
             "HTTP/1.1 302 Found\r\nLocation: /login\r\nCache-Control: no-store\r\n"
             "Content-Length: 0\r\nConnection: close\r\n\r\n");
