@@ -64,7 +64,8 @@ bool begin(const char *deviceName) {
   // Just Works bonding, no MITM: the RC003 has no input/output capability and
   // neither does a keyboard-only peripheral. Bonding=true is required so both
   // peers can reconnect from a stored long-term key without re-pairing.
-  BLESecurity::setAuthenticationMode(/*bonding=*/true, /*mitm=*/false, /*sc=*/true);
+  // Keep bonding and Just Works, but disable Secure Connections for older HOGP remotes.
+  BLESecurity::setAuthenticationMode(/*bonding=*/true, /*mitm=*/false, /*sc=*/false);
   BLESecurity::setCapability(ESP_IO_CAP_NONE);
   BLESecurity::setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
   BLESecurity::setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
