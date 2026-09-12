@@ -13,7 +13,7 @@
 
 真机验收：`python tests/tools/browser_check.py` → **8/8 全过**（真 Chrome，读 live DOM）。
 
-## 2. 真实的四个根因
+## 2. 真实的五个根因
 
 | # | 根因 | 症状 | 修法 |
 | --- | --- | --- | --- |
@@ -21,6 +21,7 @@
 | 2 | **WS 升级分支不可达**。升级响应发完后代码重置了 `s_http.sending`，而真正执行升级的 `!left` 分支依赖它仍为 true。 | socket 发了 101 后**就干等**，直到空闲超时被关；页面看到的正是"连上→掉线→重连"死循环 | 升级响应发完且 `s_pendingUpgrade` 时**不重置**，让下一轮 `!left` 分支接手 |
 | 3 | **`closeExchange()` 连带关掉 WS**。HTTP 槽（与 WS 是两个 fd）一拆，把活的页面一起带走。 | 页面无限重连的第二个来源 | `closeExchange()` 不再碰 WS；`stopHttp()` 单独负责 `wsClose()` |
 | 4 | **帧缓冲溢出被静默丢弃**（**最致命、也是最后才找到的**）。绑定快照拼进 `char buf[1024]`，交给 **768 字节**的帧缓冲；`wsQueueRaw` 放不下就 `return false`，**没有一行日志**。 | 页面卡在"正在读取设备状态"，13 张卡片全是"等待读取"。WS 其实是通的（CDP 抓到 101 和 status 帧），所以前两轮"修好了"都是误判 | ① `wsQueueRaw` 拒绝时打 `BR_LOGW`（**静默**才是病根）；② 绑定数据改走 HTTP（`Content-Length` 天然分帧，多大都行），socket 只推小帧 |
+| 5 | **还没发请求的新连接独占槽位 4 秒**（2026-09-12 补查，**手机"登录不进去"的真因**）。`accept` 之后的超时用的是 `kProgressTimeoutMs`(4 s)；300 ms 的短窗口只对"已经答过一次"的连接生效。而浏览器——手机 Safari 尤其——会做**预测性连接**：TCP 连上却一个字节都不发。 | 实测：一条静默连接让真实请求等 **4.8 s**，两条 **18.9 s**，三条 **29.0 s**（单独请求仅 0.01–0.08 s）。手机上表现为"密码输进去就是进不去" | 新增 `kAcceptGraceMs = 250`：**一个字节都还没发的连接**只用 250 ms 就放槽；同时修掉"复用的 keep-alive socket 收到新请求后仍留在 idle 状态"这个相关缺陷。修复后 3～4 条静默连接下真实请求 ~1 s |
 
 ## 3. 当初猜错在哪（供以后避坑）
 
@@ -49,8 +50,16 @@
 
 ```bash
 # 前提：板子 Wi-Fi 可达（串口 wifi on），COM3 空闲，本机装有 Chrome
-python tests/tools/browser_check.py
+python tests/tools/check_all.py        # 一次跑完下面三项，给一个总判定
 ```
+
+三层检查各管一件事，互不替代（`check_all.py` 依次跑完）：
+
+| 脚本 | 层次 | 覆盖 |
+| --- | --- | --- |
+| `preconnect_probe.py` | socket | 槽位是否及时释放（静默连接、keep-alive 都不得堵住真实请求） |
+| `browser_check.py` | 页面 | 真 Chrome 读 live DOM：渲染、绑定、WS、按键实时推送 |
+| `mobile_login_check.py` | 手机 | 模拟 iPhone 走**真实表单**：设置密码 → 登录 → 登出 → 再登录 → 错误密码被拒 |
 
 脚本用 CDP 驱动**真实 Chrome**，从 `Runtime.evaluate` 读 live DOM（不靠截图推断），
 并抓 `Network` 域的握手与帧。IP 自动从 `build/.boardip` 取（DHCP 会变），
@@ -76,9 +85,23 @@ python tests/tools/browser_check.py
 5. **测试完 `pass clear`**，别把测试密码留在用户设备上。
 6. **`tests/tools/gen_web_page.py --check`** 已修好（旧版把每次都会变化的构建时间戳
    压进 gzip 里做字节比对，**过一分钟就必然报 stale**；现在解压后比对并忽略时间戳）。
+7. **跑 CDP 检查时不要固定调试端口、不要复用 profile 目录。** 上一次运行残留的 Chrome 会
+   以独占方式占着固定端口，新实例于是 **IPv4 bind 失败（`WSAEACCES` 0x271D）并静默退化成
+   只监听 IPv6**；同时复用 profile 目录会让新实例"移交"给卡死的旧实例然后自己退出。
+   症状是 `Chrome never exposed a page target`。现在 `cdp.py` 每次取**动态空闲端口 +
+   独立 profile 目录**，并且 `local_json` **IPv4/IPv6 都试**。
+8. **给"页面渲染完成"留时间再断言。** 落到 `/` 不等于加载完：表头还会停在占位文案、`S.on`
+   还是 false，直到页面取完 `/api/bindings`、`/api/status`、`/api/token` 并开好 WebSocket
+   （实测约 1.1 s）。在稳定之前读 DOM 会把**正常代码判成坏**——和读 `S.keyPress` 是同一个坑。
+   用 `mobile_login_check.py` 里的 `settle()` 那种轮询。
+9. **PowerShell 工具不捕获 stdout**，但可以用它做 CIM 查询：把结果写文件再读。
+   **不要**从 Bash 里调 powershell（会被安全策略拦下）。查/杀残留进程时，只按命令行里的
+   `--remote-debugging-port` 过滤，**绝不**笼统地按进程名杀 —— 用户自己的浏览器在同一台机器上。
 
 ## 7. 相关提交
 
 - `0f9e99c` WS 独立 fd（HTTP 不再被页面阻塞）—— 真机验证
-- 之后一次提交：上述四个根因的完整修复 + 页面改为"绑定走 HTTP / socket 只推小帧" + 本文件
-- `tests/tools/browser_check.py` 加入版本控制（此前只存在于被 gitignore 的 `build/`）
+- `d05a8db` 前四个根因的完整修复 + 页面改为"绑定走 HTTP / socket 只推小帧" + 本文件改写为结案记录
+- 随后一次提交：根因 5（静默连接的 250 ms 宽限）+ 清理死代码（Basic 认证相关）+ 认证现状记录
+  `docs/AUTH.md` + `tests/tools/` 下的 `cdp.py` / `preconnect_probe.py` / `mobile_login_check.py` /
+  `check_all.py` —— **三项硬件检查全部真机通过**

@@ -99,6 +99,13 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
   `docs/TESTING.md` §4.13。**所以别再按 "192.168.4.1 热点" 那套流程测。**
 - **socket 只推小帧**（帧上限 768 B）：整张绑定表走 HTTP。往 socket 里塞大 JSON 会被
   丢弃，这是曾经卡死页面一整天的根因，见 `docs/HANDOFF-websocket-debug.md` §4。
+- **HTTP 只有一个连接槽，且必须"没人用就立刻放"**。三种状态三种预算：空闲（答完等复用）
+  300 ms / 还没发过请求（预测性连接）250 ms / 请求或响应在动 4 s。把中间那种并到 4 s 里，
+  会让手机端的预测性连接把槽位堵死 —— 实测三条静默连接让真实请求等 29 s，
+  表现为"手机登录不进去"。见 `docs/HANDOFF-websocket-debug.md` 根因 5。
+- **认证机制的现状与已知弱点**（无防爆破、密码走 URL、WS token 静态、cookie 到期语义
+  依赖开机时长、sha1 无盐、无 TLS）见 `docs/AUTH.md`。**别把它的防护能力说得比实际强**；
+  前提是**仅限局域网，不要暴露到公网**。
 - NFC 是小米私有智能卡，与蓝牙零交互，桥接器无 NFC 硬件——不要再朝这个方向探索。
 - `ble_store_config` 的 bond 淘汰（删最旧）是预编译库行为；`makeRoomForPeer` 已在
   配对前腾位保护遥控器，勿移除。
@@ -107,9 +114,11 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 
 ```powershell
 # 物理按键（需要人手）：短按 BOOT 应只出日志不重启；长按 5s 清全部配对（危险）
-# Web UI 端到端（真 Chrome，读 live DOM，含按键实时推送）—— 前提是板子 Wi-Fi 可达：
-#   python build/wifi_on.py                 # 串口 wifi on，打印 STA 地址
-#   python tests/tools/browser_check.py     # 期望 REAL CHROME: ALL CHECKS PASSED
+# 三项硬件检查一次跑完（前提：板子 Wi-Fi 可达 —— 先 python build/wifi_on.py）：
+#   python tests/tools/check_all.py
+#     preconnect_probe   socket 层：槽位是否及时释放
+#     browser_check      页面层：真 Chrome 读 live DOM（渲染/绑定/WS/按键实时推送）
+#     mobile_login_check 手机层：模拟 iPhone 走真实表单完成设置密码与登录
 # 不接板子先跑页面回归（浏览器逻辑 + 模拟 API，非真机）：
 #   python tests/tools/web_ui_preview.py
 #   python tests/tools/check_web_ui.py --emit-js build/web-ui-assertions.js

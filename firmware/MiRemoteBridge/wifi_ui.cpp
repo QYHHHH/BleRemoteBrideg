@@ -68,6 +68,17 @@ constexpr uint32_t kProgressTimeoutMs = 4000;
 // before this was added: with five sockets open a browser's upgrade request got
 // no reply at all within 8 s, because it queued behind four idle ones.
 constexpr uint32_t kKeepAliveIdleMs = 300;
+// How long a freshly accepted socket may hold the slot before it has sent a
+// single byte of its request. This is the preconnect case: browsers - mobile
+// Safari especially - open TCP connections ahead of time and may never send
+// anything on them. Such a socket used to sit on the only exchange slot for the
+// full 4 s progress timeout, so a couple of them starved every real request.
+// Measured before this was added, against a real board: a plain GET took 4.8 s
+// behind one silent socket, 18.9 s behind two and 29.0 s behind three, versus
+// 0.01-0.08 s on its own. On a phone that reads as "I cannot log in at all".
+// A real client sends its request line immediately after connecting, so a short
+// grace is enough; anything that arrives later still gets kProgressTimeoutMs.
+constexpr uint32_t kAcceptGraceMs = 250;
 // How long one loop() pass may spend pushing a response out. Short enough to
 // keep BLE key dispatch prompt, long enough that a 6 KB script leaves in a few
 // passes instead of sixteen.
@@ -389,37 +400,36 @@ void handleReset() {
 
 // --- Console authentication --------------------------------------------------
 //
-// HTTP gets HTTP Basic, so the browser shows its own dialog and offers to save
-// the password. The websocket cannot use Basic - a browser will not attach an
-// Authorization header to WebSocket() - so the page first fetches a derived
-// token over an authenticated request and passes it in the URL.
+// One password field, no user name. It is never stored in the clear: NVS holds
+// only sha1(password). Signing in sets a session cookie that is
+// base64(uptime(4) || HMAC_SHA1(sha1(password), uptime)) - so the cookie proves
+// knowledge of the hash without carrying it, and cannot be forged by anyone who
+// does not already have the stored hash.
 //
-// With no password stored the device is in setup mode: the first visit is
-// challenged with a realm that says so, and whatever the user types becomes
-// the password. BOOT held for 5 s clears the namespace, which is the way back
-// in when the password is forgotten.
+// The websocket cannot use the cookie the way fetch() does, so the page first
+// fetches a derived token (sha1(sha1(password) + "mrb-ws")) over an
+// authenticated request and passes it in the URL.
+//
+// Known limits, deliberate for a LAN-only config page. Do not describe this as
+// more than it is:
+//   * plain HTTP - password and cookie are readable by anyone on the Wi-Fi
+//   * the password rides in the login URL (the form uses GET), so it lands in
+//     browser history; the server refuses non-empty POST bodies
+//   * the websocket token is static per password and travels in a URL, so it
+//     does not expire on its own
+//   * no rate limiting or lockout on /login
+//   * sha1 is unsalted and single-round; NVS dumped means fast cracking
+//
+// With no password stored the device is in setup mode: the first visit lands on
+// a real setup page (see kSetupPage), and whatever the user types becomes the
+// password. BOOT held for 5 s clears the namespace, which is the way back in
+// when the password is forgotten.
+//
+// There is no HTTP Basic support and none should be added back: a browser dialog
+// cannot explain setup mode or the BOOT recovery hint, and the page needs a real
+// form for that.
 
-const char *kConsoleUser = "admin";  // fixed: the user name never changes
-
-bool authDecodeBasic(const char *header, String &user, String &pass) {
-  if (!header || strncasecmp(header, "Basic ", 6) != 0) return false;
-  unsigned char raw[160];
-  size_t rawLen = 0;
-  if (mbedtls_base64_decode(raw, sizeof(raw) - 1, &rawLen,
-                            (const unsigned char *)(header + 6), strlen(header + 6)) != 0) {
-    return false;
-  }
-  raw[rawLen] = 0;
-  const char *colon = strchr((const char *)raw, ':');
-  if (!colon) return false;
-  user = String((const char *)raw).substring(0, colon - (const char *)raw);
-  pass = String(colon + 1);
-  return true;
-}
-
-// Shown while no password is stored. Chrome shows only "Sign in" for a Basic
-// challenge - the realm text never reaches the user - so the explanation has
-// to live in a real page.
+// Shown while no password is stored.
 const char kSetupPage[] =
     "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
@@ -444,21 +454,6 @@ const char kSetupPage[] =
     "<button type=\"submit\">设置密码</button></form>"
     "<p class=\"hint\">忘记密码时：按住板上 BOOT 键 5 秒，即可清除全部设置与配对"
     "（Wi-Fi 密码、访问密码、按键映射、蓝牙配对）恢复出厂。</p>"
-    "</div></body></html>";
-
-const char kSetupDonePage[] =
-    "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-    "<title>密码已设置</title><style>"
-    "body{font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;"
-    "background:#f4f5fa;color:#1c2333;margin:0;padding:24px;display:flex;justify-content:center}"
-    ".c{background:#fff;border:1px solid #e6e9f2;border-radius:16px;padding:26px;max-width:420px;width:100%}"
-    "h1{font-size:19px;margin:0 0 10px}p{font-size:13px;color:#5a627a;line-height:1.7}"
-    "a{display:inline-block;margin-top:18px;padding:11px 20px;border-radius:10px;background:#3b6ef6;"
-    "color:#fff;text-decoration:none;font-size:14px}</style></head><body><div class=\"c\">"
-    "<h1>密码已设置</h1>"
-    "<p>请重新打开页面，浏览器会要求输入用户名和密码——<b>密码已设置，正在进入配置界面</b>。"
-    "浏览器会提示保存它。</p><a href=\"/\">打开配置页面</a>"
     "</div></body></html>";
 
 const char kSetupMismatchPage[] =
@@ -632,34 +627,6 @@ const char kLoginFailPage[] =
     "<meta http-equiv=\"refresh\" content=\"0;url=/login\">"
     "<title>密码错误</title></head><body style=\"font-family:system-ui,sans-serif;padding:24px\">"
     "<p>密码错误，正在返回登录页...</p></body></html>";
-
-void authChallenge(bool setupMode) {
-  const char *realm = setupMode ? "MiRemoteBridge setup - choose a console password"
-                                : "MiRemoteBridge (user name: admin)";
-  const char *body = setupMode
-      ? "Setup mode: enter a user name (any) and the password you want to use.\n"
-        "It is stored hashed; hold BOOT for 5 seconds to wipe it again.\n"
-      : "Password required.\n";
-  const int n = snprintf(s_http.header, sizeof(s_http.header),
-      "HTTP/1.1 401 Unauthorized\r\n"
-      "WWW-Authenticate: Basic realm=\"%s\", charset=\"UTF-8\"\r\n"
-      "Content-Type: text/plain; charset=utf-8\r\n"
-      "Content-Length: %u\r\n"
-      "Cache-Control: no-store\r\n"
-      "Connection: close\r\n\r\n",
-      realm, (unsigned)strlen(body));
-  if (n < 0 || (size_t)n >= sizeof(s_http.header)) {
-    closeExchange(false);
-    return;
-  }
-  s_http.headerLen = (size_t)n;
-  s_http.headerSent = 0;
-  s_http.body = body;
-  s_http.bodyLen = strlen(body);
-  s_http.bodySent = 0;
-  s_http.sending = true;
-  s_http.progress = millis();
-}
 
 // --- WebSocket plumbing -----------------------------------------------------
 
@@ -898,20 +865,13 @@ void dispatch() {
     errorResponse(400, "Bad Request", "invalid request line"); return;
   }
   bool crossSite = false, nonemptyBody = false;
-  char host[96] = {}, origin[128] = {}, auth[200] = {};
+  char host[96] = {}, origin[128] = {};
   for (char *line = strstr(s_http.io, "\r\n"); line && line[2];) {
     line += 2;
     char *end = strstr(line, "\r\n");
     if (!end || end == line) break;
     const char saved = *end; *end = 0;
     if (strncasecmp(line, "Host:", 5) == 0) sscanf(line + 5, "%95s", host);
-    if (strncasecmp(line, "Authorization:", 14) == 0) {
-      // Skip the space after the colon, then take the rest of the value:
-      // %s would stop at that space and hand us just "Basic".
-      const char *v = line + 14;
-      while (*v == ' ' || *v == '\t') ++v;
-      sscanf(v, "%199[^\r\n]", auth);
-    }
     if (strncasecmp(line, "Origin:", 7) == 0) sscanf(line + 7, "%127s", origin);
     if (strncasecmp(line, "Sec-Fetch-Site:", 15) == 0 && strstr(line + 15, "cross-site")) crossSite = true;
     if (strncasecmp(line, "Transfer-Encoding:", 18) == 0) nonemptyBody = true;
@@ -1201,11 +1161,20 @@ void pollHttp() {
   // made the recv() below fail on fd -1 and close the exchange (and, in the old
   // code, the websocket with it).
   if (s_http.fd < 0) return;
-  const uint32_t idleLimit = s_http.idle ? kKeepAliveIdleMs : kProgressTimeoutMs;
-  if (now - s_http.progress > idleLimit || now - s_http.started > kRequestTimeoutMs) {
-    // A parked keep-alive socket expiring is routine, not a stall - log only the
-    // real thing.
-    if (!s_http.idle) {
+  // Three states, three budgets:
+  //   idle          - answered, parked for one more request   -> kKeepAliveIdleMs
+  //   no bytes yet  - accepted, request has not arrived       -> kAcceptGraceMs
+  //   in flight     - request or response actually moving     -> kProgressTimeoutMs
+  // Collapsing the middle case into the last one is what let preconnected
+  // sockets monopolise the slot for four seconds each.
+  const bool noRequestYet = (s_http.used == 0);
+  const bool routineExpiry = s_http.idle || noRequestYet;
+  const uint32_t limit = s_http.idle ? kKeepAliveIdleMs
+                                     : (noRequestYet ? kAcceptGraceMs : kProgressTimeoutMs);
+  if (now - s_http.progress > limit || now - s_http.started > kRequestTimeoutMs) {
+    // A parked keep-alive socket, or a preconnect that never spoke, expiring is
+    // routine - log only the real thing: a request that started and stalled.
+    if (!routineExpiry) {
       BR_LOGW(kTag, "HTTP timeout (header %u/%u, body %u/%u)", (unsigned)s_http.headerSent,
           (unsigned)s_http.headerLen, (unsigned)s_http.bodySent, (unsigned)s_http.bodyLen);
     }
@@ -1220,6 +1189,9 @@ void pollHttp() {
     s_http.used += (size_t)n;
     s_http.io[s_http.used] = 0;
     s_http.progress = now;
+    // A reused keep-alive socket is no longer parked: a real request is now in
+    // flight on it, so it must not keep the short idle budget.
+    s_http.idle = false;
     if (strstr(s_http.io, "\r\n\r\n")) dispatch();
     return;
   }
