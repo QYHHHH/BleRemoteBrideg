@@ -20,6 +20,9 @@ ESP32-C3 双角色 BLE 桥接固件：把**小米蓝牙遥控器 2 Pro（RC003�
 
 > 项目边界：只处理按键。不涉及遥控器麦克风与音频，不实现 USB HID / USB UAC、
 > Windows 伴侣程序、虚拟声卡、内核驱动、注入或 Wi-Fi/Web 后台。
+>
+> 当前版本 **v0.0.1**：git tag 与固件自报版本（`config.h` 的 `BRIDGE_FW_VERSION`）
+> 手工同步，改一边必须改另一边，固件那侧要重新烧录才生效。
 
 ---
 
@@ -40,7 +43,8 @@ ESP32-C3 双角色 BLE 桥接固件：把**小米蓝牙遥控器 2 Pro（RC003�
 - **防卡键**：幂等按下/松开 + 报告全量重建 + 任一侧断线立即清零，三层保证
   Windows 上永远不会有键卡住。
 - **测试基建**：宿主端模型检查（11096 项断言，含 4000 步随机不变量测试）+
-  设备端自检（137 项向量 + 44 项分发仿真），宿主与设备消费同一份期望值向量。
+  设备端自检（137 项向量 + 44 项分发仿真），宿主与设备消费同一份期望值向量；
+  Web 页面另有 **125 项断言**（不接板子，约 1 秒，用本机 Chrome 跑真 DOM）。
 - **Web 配置界面**：开机自动连上 Wi-Fi 并提供按键映射页面（手机 / 电脑浏览器直接访问），
   逐键绑定电脑快捷键或媒体键，配置持久化；按下遥控器时页面**即时推送**高亮
   （WebSocket，不是轮询）。首次访问设置访问密码，浏览器可保存；忘记密码时
@@ -284,8 +288,13 @@ python tests/tools/web_ui_preview.py
 # 浏览器打开 outputs/web-ui-preview.html
 ```
 
-**为什么按需开关**：Wi-Fi 与 BLE 共享射频和内存
-（AP 开启时堆剩余约 20 KB），配置是低频操作，平时关闭让 BLE 保持最优。
+**联网方式**：配置页走 **STA**——桥接器加入你家 Wi-Fi，和电脑/手机在同一网段，
+开机 8 秒后自动连上（已保存网络时），串口 `wifi status` 打印地址。想彻底关掉用
+`wifi off`；没有可用 Wi-Fi 时 `wifi ap on` 可退回 AP 热点（见下方命令表）。
+
+**为什么要知道堆水位**：Wi-Fi 与 BLE 共享射频和内存，开 Wi-Fi 后堆从 ~87 KB 降到
+约 **30 KB**（最大连续块 ~20 KB）。STA 下够用；AP 模式还要再吃掉约 38 KB，
+在堆已很低时它的 DHCP 会发不出地址（客户端退化成 169.254.x.x）。
 
 ---
 
@@ -305,7 +314,9 @@ python tests/tools/web_ui_preview.py
 | `raw on\|off` / `lat on\|off` / `log <0-4>` | 原始报文 / 延迟 / 日志级别 |
 | `map back\|power\|voice <模式>` | 运行时键位，NVS 持久化 |
 | `selftest` / `sim` | 设备端自检（向量 + 分发仿真） |
-| `wifi on\|off\|status` | 开/关 Web 配置热点（http://192.168.4.1/） |
+| `wifi on\|off\|status` | 开/关 Web 配置页（STA，加入已保存网络；`status` 打印地址与堆余量） |
+| `wifi join <ssid> <pass>` | 保存配置页要加入的网络（开放网络用 `""`） |
+| `wifi ap on\|off` | 退回 AP 热点模式（无可用 Wi-Fi 时的兜底，堆占用更高） |
 | `factory` | 清除全部配对与设置并重启 |
 
 ---
@@ -384,8 +395,9 @@ firmware/MiRemoteBridge/
 
 | 层级 | 状态 |
 | --- | --- |
-| L1 编译 | ✅ 新版 Web UI 编译通过（flash 44% / 全局 RAM 12%，DIO + huge_app；不代表 Wi-Fi 运行时堆占用） |
+| L1 编译 | ✅ 编译通过（flash **43%** / 全局 RAM **14%**，DIO + huge_app；不代表 Wi-Fi 运行时堆占用） |
 | L2 宿主端模型验证 | ✅ 11096 项断言（含 HID 描述符真实解析、4000 步随机不变量） |
+| L2 页面回归 | ✅ 125 项断言（不接板子，本机 Chrome 跑真 DOM，约 1 秒；热点三态逐键校验） |
 | L3 设备端自检 | ✅ 真机：`137 passed / 0 failed` + 分发仿真 `44 passed / 0 failed` |
 | L4 上游 RC003 → C3 | ✅ 真机：13/13 键、0 未知码；延迟 min 190 / median 215 / max 361 µs |
 | L4 下游 C3 → Windows | ✅ 真机：键盘 + 媒体键；多主机切换（Windows ↔ iPhone） |
@@ -402,10 +414,16 @@ bond 腾位的完整流程——这些未实测。所有"编译验证"与"真机
 tests/
 ├── vectors/key_vectors.json    解析/状态机/键表/模式 的唯一权威向量
 ├── tools/gen_vectors.py        生成 firmware/MiRemoteBridge/selftest_vectors.h
+├── tools/gen_web_page.py       把 web_page.h 拆成三份 gzip 资产（web_page_gz.h）
+├── tools/check_web_ui.py       闪存预算 + 125 项页面断言（本机 Chrome，不接板子）
+├── tools/check_all.py          四项硬件检查一次跑完（需板子）
+├── tools/spot_audit.py         逐键打印遥控器热点的三态计算样式（诊断用）
+├── tools/board_auth.py         硬件脚本共用的串口/HTTP/断言工具
 └── model/check_vectors.py      宿主端模型检查 + HID 描述符解析 + 随机不变量测试
 ```
 
 设备端 `selftest` 消费同一份 JSON 生成的 C 头文件，**设备与宿主不会对期望值分歧**。
+不接板子的全套：`.\scripts\test.ps1`（生成物 → 模型检查 → 页面断言 → 编译）。
 
 ---
 

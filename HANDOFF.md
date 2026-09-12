@@ -118,6 +118,18 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 - `ble_store_config` 的 bond 淘汰（删最旧）是预编译库行为；`makeRoomForPeer` 已在
   配对前腾位保护遥控器，勿移除。
 
+- **烧录前必须用 `--output-dir build/MiRemoteBridge` 重新编译**。平时为验证写的
+  `arduino-cli compile` 不带这个参数，`build/MiRemoteBridge` 里的 bin 就一直是旧版，
+  直接 `upload --input-dir build/MiRemoteBridge` 会把**旧固件烧进去**，而且一切看起来正常。
+- **`arduino-cli upload` 不擦 NVS**（反复确认）：密码、自定义绑定、绑定的遥控器、
+  主机配对都在，烧完自动重连。烧后验证顺序：串口读 `firmware :` 与 `NVS loaded` →
+  登录（有密码的板子读 `/api/*`、`/app.css` **必须带 cookie**，否则一律 302）后确认
+  页面资产真的换了 → 读 `/api/status` 确认 `fwVersion` / `buildTime`。
+- **顶栏版本与编译时刻来自 `/api/status`**（`fwVersion` + `__DATE__ __TIME__`），
+  页面里**不再存任何构建时间戳**：`gen_web_page.py` 以前把"生成 gzip 资源的时刻"
+  压进载荷，页面显示的不是编译时刻（出现过 12:56 烧录、页面显示 10:21）。
+  副作用是 `web_page_gz.h` 现在**确定性生成**，跑 `test.ps1` 不再弄脏工作区。
+
 ## 7. 立即可做的验证
 
 ```powershell
@@ -134,5 +146,5 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 #      所以只有开端口的那次调用需要等，见 tests/tools/board_auth.py）
 # 不接板子先跑宿主侧全套（含页面断言，约 1 秒，只需要 Chrome + Python）：
 #   .\scripts\test.ps1
-#   python tests/tools/check_web_ui.py            # 闪存预算 + 82 项页面断言
+#   python tests/tools/check_web_ui.py            # 闪存预算 + 125 项页面断言
 ```

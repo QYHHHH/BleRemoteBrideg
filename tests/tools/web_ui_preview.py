@@ -34,7 +34,7 @@ def demo_html():
   const base = defaults.map(a => a.raw === 62 ? {...a, mod:9, key:0} : {...a});
   let bindings = [];
   try { bindings = JSON.parse(sessionStorage.getItem('mrb-ui-demo') || '[]'); } catch (_) {}
-  const control = window.__demo = {fault:null, calls:[], status:{wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',battery:97}};
+  const control = window.__demo = {fault:null, calls:[], status:{wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
   window.fetch = async (input, options={}) => {
     const u = new URL(input, 'http://preview.invalid');
     const method = options.method || 'GET';

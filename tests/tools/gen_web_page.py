@@ -26,16 +26,7 @@ OUTPUT = ROOT / "firmware/MiRemoteBridge/web_page_gz.h"
 STYLE_RE = re.compile(r"<style>(.*?)</style>", re.DOTALL)
 SCRIPT_RE = re.compile(r"<script>(.*?)</script>", re.DOTALL)
 
-# The build stamp changes every minute, and it lives *inside* the gzip payload,
-# so a byte-for-byte --check can never pass unless it runs in the same minute as
-# the last regeneration. Compare with the stamp blanked instead.
-STAMP_RE = re.compile(r"build \d{4}-\d{2}-\d{2} \d{2}:\d{2}")
-
 ASSET_NAMES = ("kIndexHtmlGz", "kIndexCssGz", "kIndexJsGz")
-
-
-def normalise(text: str) -> str:
-    return STAMP_RE.sub("build <stamp>", text)
 
 
 def load_committed(path):
@@ -50,24 +41,16 @@ def load_committed(path):
         if not m:
             return {}
         raw = bytes(int(b, 16) for b in re.findall(r"0x([0-9a-fA-F]{2})", m.group(1)))
-        out[name] = normalise(gzip.decompress(raw).decode("utf-8")) if raw else ""
+        out[name] = gzip.decompress(raw).decode("utf-8") if raw else ""
     return out
 
 
-def stamp_build_time(html):
-    """Stamp __BUILDTIME__ with the build time.
-
-    The page shows this in its header, so it is immediately obvious which
-    build the browser is actually running - no more guessing about caches.
-    """
-    import datetime
-    stamp = datetime.datetime.now().strftime('build %Y-%m-%d %H:%M')
-    return html.replace('__BUILDTIME__', stamp)
-
-
 def firmware_html():
+    # No build stamp here: the page reads its version and build time from
+    # /api/status at runtime, so these bytes stay byte-identical across runs and
+    # the committed header never churns.
     source = SOURCE.read_text(encoding="utf-8")
-    return stamp_build_time(source.split('R"rawliteral(', 1)[1].split(')rawliteral";', 1)[0])
+    return source.split('R"rawliteral(', 1)[1].split(')rawliteral";', 1)[0]
 
 
 def compress(text: str) -> bytes:
@@ -143,7 +126,7 @@ def main():
         if not committed:
             raise SystemExit("web_page_gz.h is missing or unreadable - run gen_web_page.py")
         for name, text in zip(ASSET_NAMES, parts):
-            if normalise(text) != committed[name]:
+            if text != committed[name]:
                 raise SystemExit(
                     "web_page_gz.h is stale (%s differs from web_page.h) - "
                     "run gen_web_page.py" % name)

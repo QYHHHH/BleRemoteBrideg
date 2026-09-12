@@ -97,8 +97,16 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 .demo{background:#edf4fc;border-color:#d4e3f6;color:#567898}
 @media(max-width:860px){.grid{grid-template-columns:minmax(0,1fr) 240px minmax(0,1fr);gap:9px}main{padding:14px 14px 20px}.hero{flex-direction:column;align-items:stretch}.rm .body{transform:scale(.9)}}
 @media(max-width:620px){.bar{padding:11px 14px}.grid{grid-template-columns:1fr 1fr;gap:8px}.rm{grid-column:1/-1;flex-direction:row;justify-content:center;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:4px}.rm .body{transform:scale(.34);margin:-128px -40px}.cap{text-align:left}.k button{min-height:70px;padding:9px}.k .ed{display:none}.foot{flex-direction:column;align-items:stretch}.foot .bs .btn{flex:1}.hero{padding:15px 16px}}
+/* Active states, for every hotspot whatever position class it carries. The
+   position rules (du/dd/dl/dr, do, p1/p2, p6/p7) set background, border,
+   box-shadow or color themselves and used to sit after .rb.live/.rb.sel at the
+   same specificity, so source order beat the states: the D-pad never lit up and
+   .pulse had no rule at all. These carry a third class, so they always win. A
+   hidden pad glyph is shown again, or the disc lights up empty. */
+.rm .body .rb.sel{background:#d7ecff;border-color:#327ede;box-shadow:inset 0 0 0 2px #327ede;color:#1257b5}
+.rm .body .rb.live,.rm .body .rb.pulse{background:#327ede;border-color:#327ede;box-shadow:0 0 0 3px #327ede40;color:#fff}
 </style></head><body>
-<div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver">__BUILDTIME__</span><span class="grow"></span>
+<div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span>
 <span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>主机…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
 <main>
 <div class="warn" id="off" hidden><span>无法连接桥接器<span id="offWhy">（连接断开，自动重连中）</span></span><button id="retry">重新连接</button></div>
@@ -233,6 +241,9 @@ Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle(
 Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)})}
 
 function stat(j){var rc=!!j.remoteConnected,h=!!j.hostConnected;
+// Version and build stamp come from /api/status, i.e. from the running
+// firmware, not from the generated page bytes - so it can never go stale.
+$('ver').textContent=(j.fwVersion||'')+(j.buildTime?' · build '+j.buildTime:'');
 var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
 function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
 pill('pR',rc,rc?'遥控器已连接':'遥控器未连接');pill('pH',h,h?'主机已连接':'主机未连接');pill('pB',bat!=='未知',bat==='未知'?'电量未知':'电量 '+bat);

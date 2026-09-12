@@ -42,13 +42,18 @@ FLASH_BUDGET = 14000
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 82
+EXPECTED_CHECKS = 125
 
 TESTS = r"""(async () => {
   const results=[];
   const assert=(condition,name)=>{if(!condition)throw Error(name);results.push(name);};
   await load();
   assert(S.on && S.ok,'initial API load');
+  __demo.status.fwVersion='v9.9.9';__demo.status.buildTime='Jan  1 2030 00:00:00';await load();
+  assert($('ver').textContent==='v9.9.9 · build Jan  1 2030 00:00:00','version and build stamp come from /api/status');
+  delete __demo.status.fwVersion;delete __demo.status.buildTime;await load();
+  assert($('ver').textContent==='','no stale stamp when firmware omits it');
+  __demo.status.fwVersion='v0.0.1';__demo.status.buildTime='Sep 12 2026 12:56:33';await load();
   assert(document.querySelectorAll('.k').length===13,'13 key cards');
   assert(document.querySelectorAll('#rmArt [data-r]').length===13,'13 remote hotspots');
   assert(fmt(cur(0x3E))==='Ctrl + Win','runtime voice mode wins over static table');
@@ -118,6 +123,34 @@ TESTS = r"""(async () => {
   __demo.fault=null;await reset();
   assert(!$('rd').open && Object.keys(S.b).length===0,'reset confirmed and read back');
   assert(cur(0x3E).mod===9,'reset preserves serial runtime mode');
+  // Every hotspot carries a position class alongside .rb, and several of those
+  // set background / border / box-shadow / color themselves. They used to sit
+  // after .rb.live/.rb.sel at the same specificity, so source order beat the
+  // states: the four D-pad keys (du/dd/dl/dr) never lit up at all, power, mic,
+  // OK and the volume rocker only half did, and .pulse - added by the page on
+  // every real key press - had no rule anywhere. Assert per key, because the
+  // whole defect was that keys differ from each other.
+  const vis=el=>{const s=getComputedStyle(el);
+    return [s.backgroundColor,s.backgroundImage,s.borderTopColor,s.boxShadow,s.color].join('|');};
+  const states=el=>{
+    // .k carries transition:.15s: reading computed style in the same tick as a
+    // class change returns the pre-transition value and every state looks dead.
+    const t=el.style.transition;el.style.transition='none';
+    el.classList.remove('live');el.classList.remove('sel');el.classList.remove('pulse');
+    const base=vis(el);
+    el.classList.add('live');const live=vis(el);el.classList.remove('live');
+    el.classList.add('sel');const sel=vis(el);el.classList.remove('sel');
+    el.classList.add('pulse');const pulse=vis(el);el.classList.remove('pulse');
+    el.style.transition=t;return {base:base,live:live,sel:sel,pulse:pulse};};
+  for (const k of KEYS) {
+    const s=states(document.querySelector('#rmArt [data-r="'+k[0]+'"]'));
+    assert(s.live!==s.base,'hotspot lights up while held '+hx(k[0]));
+    assert(s.sel!==s.base,'hotspot marks the key being edited '+hx(k[0]));
+    assert(s.pulse!==s.base,'hotspot flashes on a real press '+hx(k[0]));
+  }
+  // The cards carry no position class, so one rule covers all thirteen.
+  assert(KEYS.every(k=>{const s=states($('k'+k[0]));return s.live!==s.base;}),'every card lights up while held');
+  assert(KEYS.every(k=>{const s=states($('k'+k[0]));return s.sel!==s.base;}),'every card marks the key being edited');
   assert(!document.querySelector('img[src^=http]'),'no remote assets');
   return {passed:results.length,checks:results};
 })()"""

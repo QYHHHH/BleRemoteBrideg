@@ -324,6 +324,13 @@ void handleStatus(bool head) {
   out.add(",\"notifications\":%lu,\"events\":%lu,\"queuePending\":%u,\"queueDropped\":%lu",
       (unsigned long)rc003_client::notifyCount(), (unsigned long)bridge::eventsHandled(),
       (unsigned)event_bus::pending(), (unsigned long)event_bus::dropped());
+  // The page shows these in its top bar. They come from the firmware itself
+  // (__DATE__/__TIME__ are the compile stamp of this translation unit), so the
+  // displayed build can never drift from the running binary the way a stamp
+  // baked into the generated page assets did.
+  out.add(",\"fwVersion\":");
+  out.quoted(BRIDGE_FW_VERSION);
+  out.add(",\"buildTime\":\"%s %s\"", __DATE__, __TIME__);
   out.add(",\"httpRequests\":%lu,\"httpCompleted\":%lu,\"httpAborted\":%lu,\"httpBackPressure\":%lu}",
       (unsigned long)s_requests, (unsigned long)s_completed, (unsigned long)s_aborted,
       (unsigned long)s_backPressure);

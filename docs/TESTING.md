@@ -549,7 +549,7 @@ Windows 动作"如需实现，唯一现实路径是给 C3 加 NFC 读卡模块�
 **除了 Chrome 和 Python 之外不需要装任何东西**。
 
 ```bash
-python tests/tools/check_web_ui.py                  # 闪存预算 + 82 项页面断言（约 1 秒）
+python tests/tools/check_web_ui.py                  # 闪存预算 + 125 项页面断言（约 1 秒）
 python tests/tools/check_web_ui.py --check-size     # 只看闪存预算
 python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，便于调试
 ```
@@ -557,11 +557,22 @@ python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，�
 `scripts/test.ps1` 的第 3/4 步跑的就是第一条命令。
 
 **闪存预算口径（2026-09-12 修正）**：盯的是三个 **gzip 资产的实际字节数**（当前
-`html 3924→1774 / css 8444→2736 / js 14627→6276`，合计 **10786 B**，上限 14000 B），
+`html 3902→1751 / css 9132→3037 / js 14856→6400`，合计 **11188 B**，上限 14000 B），
 而不是源页面字节。旧口径盯源页面（已长到 26956 B）→ 上线即红，且**这个数字设备根本看不到**
 （页面是 gzip 传输、只有压缩包进 flash），于是一红到底、无人理会。
 
-**已验证（82 项断言，全部通过）**：
+**热点的按下/选中状态逐键断言（2026-09-12 新增，39+2 项）**：每个遥控器热点都同时带一个位置类
+（`p1..p8`、`du/dd/dl/dr`、`do`），其中几个自己设了 background / border / box-shadow / color，
+且**排在 `.rb.live`/`.rb.sel` 之后、权重相同** → 源序取胜。后果：上下左右四个键完全不高亮，
+电源/语音/确定/音量只亮一半，而页面在真实按键时会加的 `.pulse` **一条 CSS 规则都没有**。
+现在断言「每个热点的 live / sel / pulse 三态都必须改变计算样式」，**逐键断言**——因为这个缺陷
+的本质就是"键与键之间不一致"，整体断言抓不到。注意探针必须先把 `transition` 置 `none`：
+`.k` 有 `transition:.15s`，改完 class 同 tick 读计算样式拿到的是过渡前的值，会把正常状态判成死态。
+
+断言失败时的排查工具：`python tests/tools/spot_audit.py`（`--raw 0x52` 可指定键）—— 逐键打印
+三态各自改了哪些计算样式，并把遥控器截图写到 `outputs/`；有死状态就以非零码退出。
+
+**已验证（125 项断言，全部通过）**：
 
 > 修正记录：这层断言一度**跑不到也跑不对**，两个独立缺陷 ——
 > ① 执行入口要求传入外部 `agent-browser` 可执行文件，而它不在本仓库工具链里，
@@ -680,9 +691,13 @@ void collectHeaders(const char *headerKeys[], const size_t headerKeysCount);
 **这意味着：只要 BLE 链路把堆压到 13 KB 量级，配置界面就无法访问 —— 与页面大小无关。**
 在解决这个之前，Web UI 的可用性取决于运气，不能对外声称可用。
 
-**gzip 方案的状态**：已实现（`tests/tools/gen_web_page.py` 生成 `web_page_gz.h`，
-21578 → 8257 字节；`handleRoot()` 按 `Accept-Encoding` 分流，明文页作回退），
-编译烧录通过，**但因 DHCP 失效未能完成真机验证**。
+**gzip 方案的现状（2026-09-12 更新）**：`tests/tools/gen_web_page.py` 把页面拆成
+三份资产并压缩进 `web_page_gz.h`，**只存 gzip、无条件回 `Content-Encoding: gzip`**
+（不按 `Accept-Encoding` 分流）。期间做过一版"明文 + gzip 双形态"（+27 KB flash），
+**用户明确否决："不影响功能，不要增加复杂度"**，已回退，留档在
+`build/gzip-dual-form-backup/`。改用 STA 后**真机验证通过**（见 §4.13.4）。
+代价：任何直接读 `/`、`/app.css`、`/app.js` 的工具**必须自己 gunzip**，
+否则会得到"200 但内容不对"的假失败。
 
 #### 4.13.4 改为「连路由器」后：页面**首次在真机上完整加载**
 
@@ -869,10 +884,10 @@ pass clear（串口） → 清除密码，回到 setup 模式
 
 | # | 项目 | 操作 | 期望 | 结果 |
 | --- | --- | --- | --- | --- |
-| 1 | 烧录 | `.\scripts\flash.ps1 -Port COM3` | `UPLOAD OK`，串口出启动横幅 | ✅ 2026-09-10 |
+| 1 | 烧录 | `.\scripts\flash.ps1 -Port COM3` | `UPLOAD OK`，串口出启动横幅 | ✅ 2026-09-10；2026-09-12 复烧 v0.0.1 再验 |
 | 2 | 上游配对 | `scan` → `connect <index>`（人工选择） | `ready: N subscription(s)` | ✅ 秒连，见下 |
-| 3 | 下游配对 | Windows 蓝牙添加 `Mi Remote Bridge` | 日志 `host connected` 变 1 | ⚠️ 连接与订阅成功，但驱动 Code 10（§4.5）；修复后**待复验** |
-| 4 | Windows 识别 | 设置 / 设备管理器 | 出现"键盘"+ 消费类控制设备 | ⏳ 待在步骤 3 通过后确认 |
+| 3 | 下游配对 | Windows 蓝牙添加 `Mi Remote Bridge` | 日志 `host connected` 变 1 | ✅ 修好（§4.5：两个顶层集合 + 各自报告 ID + 两条 `0x2A4D` 特征）后 `Status=OK` |
+| 4 | Windows 识别 | 设置 / 设备管理器 | 出现"键盘"+ 消费类控制设备 | ✅ 键盘 → `kbdhid`、消费类 → `hidserv.inf`；iOS 也实测可用（音量 / 方向键） |
 | 5 | 设备端自检 | `selftest` | `RESULT: PASS` | ✅ 见 §3 |
 
 上游配对的实测日志（`connect` 发出后约 270 ms 建链）：

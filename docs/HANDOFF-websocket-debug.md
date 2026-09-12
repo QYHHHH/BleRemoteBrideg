@@ -83,8 +83,12 @@ python tests/tools/check_all.py        # 一次跑完下面三项，给一个总
    **文件不会落盘**。用关键词锚点 + 计数断言，写盘后立即读回验证。
 4. **`esptool --after no-reset` 绝对不能用**：会停在 ROM 下载模式，固件不跑，像死机。
 5. **测试完 `pass clear`**，别把测试密码留在用户设备上。
-6. **`tests/tools/gen_web_page.py --check`** 已修好（旧版把每次都会变化的构建时间戳
-   压进 gzip 里做字节比对，**过一分钟就必然报 stale**；现在解压后比对并忽略时间戳）。
+6. **页面顶栏的时间戳曾经必然是错的**。`gen_web_page.py` 把"生成时的时间"写进 gzip
+   载荷，所以页面显示的是**生成 web_page_gz.h 那一刻**，不是编译/烧录时刻（出现过
+   烧录 12:56、页面显示 10:21）。现在时间戳彻底从页面里拿掉：顶栏读
+   `/api/status` 的 `fwVersion` + `buildTime`（固件里的 `__DATE__ __TIME__`）。
+   副作用是 `web_page_gz.h` 变成**确定性生成物**，跑 `test.ps1` 不再弄脏工作区，
+   `--check` 也不必再"抹掉时间戳再比对"。
 7. **跑 CDP 检查时不要固定调试端口、不要复用 profile 目录。** 上一次运行残留的 Chrome 会
    以独占方式占着固定端口，新实例于是 **IPv4 bind 失败（`WSAEACCES` 0x271D）并静默退化成
    只监听 IPv6**；同时复用 profile 目录会让新实例"移交"给卡死的旧实例然后自己退出。
