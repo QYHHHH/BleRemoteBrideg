@@ -371,9 +371,9 @@ async function slotAction(action,slot){
  }catch(e){toast(err(e))}finally{S.busy=false;btns()}
 }
 $('slots').onclick=e=>{const b=e.target.closest('[data-slot]');if(b&&+b.dataset.slot!==selectedSlot)slotAction('select',+b.dataset.slot)};
-const pairing=document.createElement('dialog');pairing.innerHTML='<div class="dh"><h2>选择遥控器</h2><button class="btn" id="pairClose">关闭</button></div><div class="db"><p>让遥控器进入配对模式后，选择对应名称或地址。</p><div id="nearby"></div></div><div class="da"><button class="btn" id="scanRefresh">刷新搜索结果</button></div>';document.body.append(pairing);
+const pairing=document.createElement('dialog');pairing.innerHTML='<div class="dh"><h2>选择遥控器</h2><button class="btn" id="pairClose">关闭</button></div><div class="db"><p>进入配对模式后选择设备，按信号强度排序。搜索阶段暂无 SN，请用名称和 MAC 区分。</p><div id="nearby"></div></div><div class="da"><button class="btn" id="scanRefresh">刷新搜索结果</button></div>';document.body.append(pairing);
 $('pairClose').onclick=()=>pairing.close();
-async function nearby(){if(!S.on)return;try{const rows=await req('/api/nearby');$('nearby').innerHTML=rows.map(r=>'<p><button class="btn" data-address="'+esc(r.address)+'" data-type="'+r.type+'">'+esc(r.name||'未命名设备')+' · '+esc(r.address)+' · '+r.rssi+' dBm</button></p>').join('')||'正在搜索，请稍后刷新'}catch(e){toast(err(e))}}
+async function nearby(){if(!S.on)return;try{const rows=await req('/api/nearby');$('nearby').innerHTML=rows.map(r=>'<p><button class="btn" data-address="'+esc(r.address)+'" data-type="'+r.type+'">'+esc(r.name||'未命名设备')+'<br>MAC: '+esc(r.address)+' · '+r.rssi+' dBm</button></p>').join('')||'正在搜索，请稍后刷新'}catch(e){toast(err(e))}}
 $('scanRefresh').onclick=nearby;
 $('nearby').onclick=async e=>{const b=e.target.closest('[data-address]');if(!b||!S.on||S.busy)return;S.busy=true;btns();try{await req('/api/connect?address='+b.dataset.address+'&type='+b.dataset.type,'POST');pairing.close();toast('正在连接所选遥控器')}catch(e){toast(err(e))}finally{S.busy=false;btns()}};
 $('pairRemote').onclick=async()=>{if(S.on&&confirm('请先让新遥控器进入配对模式。开始搜索并添加到当前槽位？')){await slotAction('add',selectedSlot);if(!slots[selectedSlot].address){pairing.showModal();nearby();setTimeout(()=>{if(pairing.open)nearby()},3000)}}};

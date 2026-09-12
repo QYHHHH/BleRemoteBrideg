@@ -20,6 +20,7 @@ bool restoreActiveSlot();
 // Slot operation: 0 select, 1 enable discovery, 2 delete device. Loop services
 // the NVS/map handoff only after the central task has disconnected and paused.
 bool requestSlot(uint8_t slot, uint8_t action);
+bool discardUnassigned(const String &address, uint8_t type);
 bool slotBusy();
 const char *slotError();
 void serviceSlot();

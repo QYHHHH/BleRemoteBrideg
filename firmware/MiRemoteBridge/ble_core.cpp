@@ -18,6 +18,13 @@ namespace {
 
 static const char *kTag = "BLE";
 bool s_started = false;
+int diagnosticGap(ble_gap_event *event, void *) {
+  if(event->type==BLE_GAP_EVENT_DISCONNECT)
+    BR_LOGW(kTag,"disconnect handle=%u reason=%d",event->disconnect.conn.conn_handle,event->disconnect.reason);
+  if(event->type==BLE_GAP_EVENT_ENC_CHANGE)
+    BR_LOGI(kTag,"security handle=%u status=%d",event->enc_change.conn_handle,event->enc_change.status);
+  return 0;
+}
 
 }  // namespace
 
@@ -44,6 +51,7 @@ bool begin(const char *deviceName) {
     return false;
   }
 
+  BLEDevice::setCustomGapHandler(diagnosticGap);
   BLEDevice::setPower(ESP_PWR_LVL_P9);
 
   // Just Works bonding, no MITM: the RC003 has no input/output capability and

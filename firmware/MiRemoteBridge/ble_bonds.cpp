@@ -144,9 +144,11 @@ int list(BLEAddress *out, int max_out) {
 int removePeer(BLEAddress peer) {
   ble_addr_t addr;
   toBleAddr(peer, &addr);
-  const int rc = ble_store_util_delete_peer(&addr);
-  BR_LOGI(kTag, "delete_peer %s (type %u) -> %d", peer.toString().c_str(), (unsigned)addr.type, rc);
-  return rc == 0 ? 1 : 0;
+  // Unpair also removes this peer's IRK from the controller resolving list.
+  // A missing record is already in the requested state and is therefore success.
+  const int rc = ble_gap_unpair(&addr);
+  BR_LOGI(kTag, "unpair %s (type %u) -> %d", peer.toString().c_str(), (unsigned)addr.type, rc);
+  return rc == 0 || rc == BLE_HS_ENOENT ? 1 : 0;
 }
 
 int makeRoomForPeer(const BLEAddress &incoming, const BLEAddress &protected_addr) {
@@ -210,24 +212,56 @@ bool archiveSlot(uint8_t slot, BLEAddress peer) {
 bool restoreSlot(uint8_t slot, BLEAddress peer) {
   ble_addr_t address; toBleAddr(peer, &address);
   BondArchive a{}, live{};
-  if (!quietPeer(address) || !loadArchive(slot, a) || !sameAddress(address, a.address) ||
-      !readLive(address, live)) return false;
+  if (!quietPeer(address)) {
+    BR_LOGW(kTag, "slot %u restore rejected: BLE procedure or target connection active",
+            (unsigned)slot);
+    return false;
+  }
+  if (!loadArchive(slot, a) || !sameAddress(address, a.address)) {
+    BR_LOGE(kTag, "slot %u restore rejected: archive missing or identity mismatch",
+            (unsigned)slot);
+    return false;
+  }
+  if (!readLive(address, live)) {
+    BR_LOGE(kTag, "slot %u restore rejected: live store read failed", (unsigned)slot);
+    return false;
+  }
   // A live record is newer than its snapshot. Never overwrite it with stale keys.
-  if (live.ours || live.theirs)
-    return live.ours >= a.ours && live.theirs >= a.theirs && live.cccds >= a.cccds;
+  if (live.ours || live.theirs) {
+    const bool complete = live.ours >= a.ours && live.theirs >= a.theirs &&
+                          live.cccds >= a.cccds;
+    if (!complete)
+      BR_LOGE(kTag, "slot %u restore rejected: incomplete live record (%u/%u sec, %u CCCD)",
+              (unsigned)slot, (unsigned)live.ours, (unsigned)live.theirs,
+              (unsigned)live.cccds);
+    return complete;
+  }
   int ourCount = 0, peerCount = 0, cccdCount = 0;
-  if (ble_store_util_count(BLE_STORE_OBJ_TYPE_OUR_SEC, &ourCount) ||
-      ble_store_util_count(BLE_STORE_OBJ_TYPE_PEER_SEC, &peerCount) ||
-      ble_store_util_count(BLE_STORE_OBJ_TYPE_CCCD, &cccdCount)) return false;
+  const int ourRc = ble_store_util_count(BLE_STORE_OBJ_TYPE_OUR_SEC, &ourCount);
+  const int peerRc = ble_store_util_count(BLE_STORE_OBJ_TYPE_PEER_SEC, &peerCount);
+  const int cccdRc = ble_store_util_count(BLE_STORE_OBJ_TYPE_CCCD, &cccdCount);
+  if (ourRc || peerRc || cccdRc) {
+    BR_LOGE(kTag, "slot %u restore rejected: store count failed (%d/%d/%d)",
+            (unsigned)slot, ourRc, peerRc, cccdRc);
+    return false;
+  }
   // Preflight prevents NimBLE's overflow callback evicting a computer bond.
   if (ourCount + a.ours > MYNEWT_VAL(BLE_STORE_MAX_BONDS) ||
       peerCount + a.theirs > MYNEWT_VAL(BLE_STORE_MAX_BONDS) ||
-      cccdCount + a.cccds > MYNEWT_VAL(BLE_STORE_MAX_CCCDS)) return false;
+      cccdCount + a.cccds > MYNEWT_VAL(BLE_STORE_MAX_CCCDS)) {
+    BR_LOGE(kTag, "slot %u restore has no capacity: sec=%d/%d + %u/%u, cccd=%d + %u",
+            (unsigned)slot, ourCount, peerCount, (unsigned)a.ours,
+            (unsigned)a.theirs, cccdCount, (unsigned)a.cccds);
+    return false;
+  }
   int rc = a.ours ? ble_store_write_our_sec(&a.our) : 0;
   // This API also installs the peer IRK into the controller resolving list.
   if (!rc && a.theirs) rc = ble_store_write_peer_sec(&a.peer);
   for (unsigned i = 0; !rc && i < a.cccds; ++i) rc = ble_store_write_cccd(&a.cccd[i]);
-  if (!rc) return true;
+  if (!rc) {
+    BR_LOGI(kTag, "slot %u bond restored", (unsigned)slot);
+    return true;
+  }
   // Only this previously absent peer may be partially written; retain its archive.
   const int rollback = ble_gap_unpair(&address);
   BR_LOGE(kTag, "slot restore failed (%d), rollback=%d; archive retained", rc, rollback);

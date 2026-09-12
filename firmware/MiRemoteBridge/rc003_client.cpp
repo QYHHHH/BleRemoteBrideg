@@ -92,6 +92,8 @@ BLERemoteCharacteristic *s_charAtvvCtl = nullptr;
 BLERemoteCharacteristic *s_charBattery = nullptr;
 
 String s_connectedAddr;
+String s_newPeer;
+uint8_t s_newPeerType=0;
 String s_connectedName;
 int s_lastRssi = 0;
 uint32_t s_lastReportMs = 0;
@@ -373,13 +375,43 @@ class ClientCallbacks : public BLEClientCallbacks {
 #endif
 };
 
+// Read only bounded AD records; malformed broadcasts must never expose adjacent memory.
+String advertisedName(BLEAdvertisedDevice &dev) {
+  const uint8_t *data=dev.getPayload();const size_t n=dev.getPayloadLength();
+  String name;
+  for(size_t i=0;data && i<n;) {
+    const size_t len=data[i++];
+    if(!len) continue;
+    if(len>n-i) break;
+    const uint8_t type=data[i];
+    if(type==8 || type==9) {
+      size_t size=len-1;
+      if(size>39) size=39;
+      // Validate complete UTF-8 sequences and omit control bytes.
+      size_t valid=0;
+      while(valid<size) {
+        uint8_t c=data[i+1+valid];
+        size_t width=c<128 ? 1 : c>=0xc2 && c<=0xdf ? 2 : c>=0xe0 && c<=0xef ? 3 : c>=0xf0 && c<=0xf4 ? 4 : 0;
+        if(!width || valid+width>size || c<32 || c==127) break;
+        bool ok=true;for(size_t j=1;j<width;j++) if((data[i+1+valid+j]&0xc0)!=0x80) ok=false;
+        if(!ok) break;
+        valid+=width;
+      }
+      name=String((const char*)data+i+1,valid);
+      if(type==9 && name.length()) return name;
+    }
+    i+=len;
+  }
+  return name;
+}
+
 class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
  public:
   void onResult(BLEAdvertisedDevice dev) override {
     // toString() gives the standard text form, which is also what we persist
     // and what the operator sees in Windows. Never use getNative() here.
     const String addr = dev.getAddress().toString();
-    const String name = dev.getName();
+    const String name = advertisedName(dev);
     const uint8_t addrType = dev.getAddressType();
     const int rssi = dev.getRSSI();
 
@@ -467,14 +499,14 @@ bool waitForSecurity(uint16_t connHandle, uint32_t timeoutMs) {
   while (nowMs() < deadline) {
     ble_gap_conn_desc desc;
     if (ble_gap_conn_find(connHandle, &desc) != 0) return false;
-    if (desc.sec_state.encrypted) {
+    if (desc.sec_state.encrypted && desc.sec_state.bonded) {
       BR_LOGI(kTagSec, "link encrypted (bonded=%d, authenticated=%d)", (int)desc.sec_state.bonded,
               (int)desc.sec_state.authenticated);
       return true;
     }
     vTaskDelay(pdMS_TO_TICKS(50));
   }
-  BR_LOGW(kTagSec, "link not encrypted after %ums - continuing anyway", (unsigned)timeoutMs);
+  BR_LOGW(kTagSec, "encryption/bonding incomplete after %ums", (unsigned)timeoutMs);
   return false;
 }
 
@@ -482,6 +514,7 @@ bool waitForSecurity(uint16_t connHandle, uint32_t timeoutMs) {
 // settings the remote expects. Called after every connect, so a reconnected
 // remote is always re-armed.
 bool discoverAndSubscribe() {
+  s_slotError="";
   if (!s_client || !s_client->isConnected()) return false;
 
   const uint16_t connId = s_client->getConnId();
@@ -490,7 +523,9 @@ bool discoverAndSubscribe() {
   // bond is what makes the next reconnect instant. ble_gap_security_initiate()
   // is used instead of BLEClient::secureConnection(), which waits forever.
   startSecurity(connId);
-  waitForSecurity(connId, 3000);
+  ble_gap_conn_desc identityInfo{};
+  if(s_newPeer.length() && !ble_gap_conn_find(connId,&identityInfo)) {BLEAddress identity(identityInfo.peer_id_addr);s_newPeer=identity.toString();s_newPeerType=identity.getType();}
+  if (!waitForSecurity(connId, 10000)) {s_slotError="蓝牙配对未完成，请让遥控器重新进入配对模式";return false;}
 
   // Ask for the fast connection parameters immediately. Everything below -
   // service discovery, characteristic discovery, CCCD writes - is ATT
@@ -564,7 +599,7 @@ bool discoverAndSubscribe() {
         // ---- HOGP report characteristic (0x2A4D) -------------------------
         if (isHidService && uuid.indexOf(RC003_HID_REPORT_UUID) >= 0) {
           if (ch->canNotify() || ch->canIndicate()) {
-            if (ch->subscribe(/*notifications=*/true, onHogpNotify, /*response=*/false)) {
+            if (ch->subscribe(/*notifications=*/ch->canNotify(), onHogpNotify, /*response=*/true)) {
               s_charReport = ch;
               subscribed++;
               BR_LOGI(kTagGatt, "subscribed to HID report %s", uuid.c_str());
@@ -683,6 +718,7 @@ bool connectToAddress(const String &addrText, uint8_t addrType) {
     vTaskDelay(pdMS_TO_TICKS(60));
   }
 
+  if(!settings::hasRc003()) {s_newPeer=addrText;s_newPeerType=addrType;}
   s_connectAttempts++;
 
   // The timeout argument of BLEClient::connect() is ignored by this library
@@ -726,13 +762,13 @@ void configureScan() {
   scan->setActiveScan(true);
   scan->setInterval(BRIDGE_SCAN_INTERVAL_MS);
   scan->setWindow(BRIDGE_SCAN_WINDOW_MS);
-  scan->setAdvertisedDeviceCallbacks(&s_scanCallbacks, /*wantDuplicates=*/false, /*shouldParse=*/true);
+  scan->setAdvertisedDeviceCallbacks(&s_scanCallbacks, /*wantDuplicates=*/false, /*shouldParse=*/false);
 
   if (settings::hasRc003()) {
     BR_LOGI(kTag, "scanning for bound remote %s (\"%s\")", settings::rc003Address().c_str(),
             settings::rc003Name().c_str());
   } else {
-    BR_LOGI(kTag, "scanning for a Xiaomi remote (no bound remote yet)");
+    BR_LOGI(kTag, "scanning for device selection (empty slot)");
   }
 }
 
@@ -864,6 +900,10 @@ void handleRequests() {
 // Central task
 // ---------------------------------------------------------------------------
 void taskLoop() {
+  if(s_newPeer.length() && s_client && !s_client->isConnected()) {
+    if(rc003_client::discardUnassigned(s_newPeer,s_newPeerType)) s_newPeer="";
+    else {BR_LOGE(kTag,"failed to clean temporary bond %s",s_newPeer.c_str());vTaskDelay(pdMS_TO_TICKS(500));return;}
+  }
   if (s_slotBusy) {
     if (!s_slotPaused) {
       BLEDevice::getScan()->stop();
@@ -997,10 +1037,13 @@ void taskLoop() {
           s_connectedAddr=identity.toString();
         }
         settings::setPairingEnabled(false);
+        s_newPeer="";
+        s_slotError="";
         setState(St::READY, "subscribed");
         event_bus::post(BR_EV_RC_READY);
       } else {
         event_bus::post(BR_EV_RC_BOND_FAIL);
+        if(!s_slotError[0]) s_slotError="按键服务订阅失败，请重新进入配对模式后选择设备";
         BR_LOGE(kTag, "service discovery/subscription failed, disconnecting");
         if (s_client && s_client->isConnected()) s_client->disconnect();
         vTaskDelay(pdMS_TO_TICKS(200));
@@ -1058,6 +1101,15 @@ void taskEntry(void *arg) {
 
 namespace rc003_client {
 
+bool discardUnassigned(const String &address, uint8_t type) {
+  if(address.length()!=17 || type>1) return false;
+  for(uint8_t i=0;i<3;i++) {String saved,name;uint8_t t;settings::slotInfo(i,saved,name,t);if(saved.equalsIgnoreCase(address)&&t==type)return true;}
+  BLEAddress peer(address,type);ble_addr_t native{};native.type=type;memcpy(native.val,peer.getNative(),6);
+  ble_gap_conn_desc info{};if(!ble_gap_conn_find_by_addr(&native,&info))return false;
+  const bool ok=ble_bonds::removePeer(peer)>0;
+  BR_LOGI(kTag,"discard temporary peer %s type=%u result=%d",address.c_str(),type,ok);
+  return ok;
+}
 bool slotBusy() { return s_slotBusy; }
 const char *slotError() { return s_slotError; }
 bool requestSlot(uint8_t slot, uint8_t action) {
@@ -1128,7 +1180,7 @@ bool begin() {
     BR_LOGI(kTag, "battery cache seeded from NVS: %d%%", persisted);
   }
 
-  BLEDevice::getScan()->setAdvertisedDeviceCallbacks(&s_scanCallbacks, false, true);
+  BLEDevice::getScan()->setAdvertisedDeviceCallbacks(&s_scanCallbacks, false, false);
 
   // 8192 bytes: this task does String formatting, std::map iteration and
   // native NimBLE calls, all of which are stack hungry. The C3 has a single
@@ -1228,30 +1280,31 @@ size_t nearbyCount() {
   size_t n = 0;
   portENTER_CRITICAL(&s_nearbyMux);
   for (size_t i = 0; i < kNearbyMax; i++) {
-    if (s_nearby[i].used) n++;
+    if (s_nearby[i].used && nowMs()-s_nearby[i].lastSeenMs<30000) n++;
   }
   portEXIT_CRITICAL(&s_nearbyMux);
   return n;
 }
 
 bool nearbyAt(size_t index, String *address, uint8_t *addrType, String *name, int *rssi) {
-  bool ok = false;
-  size_t seen = 0;
+  NearbyEntry entry{};bool ok=false;
   portENTER_CRITICAL(&s_nearbyMux);
-  for (size_t i = 0; i < kNearbyMax; i++) {
-    if (!s_nearby[i].used) continue;
-    if (seen != index) {
-      seen++;
-      continue;
+  for(size_t i=0;i<kNearbyMax;i++) {
+    if(!s_nearby[i].used || nowMs()-s_nearby[i].lastSeenMs>=30000) continue;
+    size_t rank=0;
+    for(size_t j=0;j<kNearbyMax;j++) {
+      if(!s_nearby[j].used || nowMs()-s_nearby[j].lastSeenMs>=30000) continue;
+      if(s_nearby[j].rssi>s_nearby[i].rssi || (s_nearby[j].rssi==s_nearby[i].rssi && j<i)) rank++;
     }
-    if (address) *address = String(s_nearby[i].addr);
-    if (addrType) *addrType = s_nearby[i].addrType;
-    if (name) *name = String(s_nearby[i].name);
-    if (rssi) *rssi = s_nearby[i].rssi;
-    ok = true;
-    break;
+    if(rank==index) {entry=s_nearby[i];ok=true;break;}
   }
   portEXIT_CRITICAL(&s_nearbyMux);
+  if(ok) {
+    if(address)*address=String(entry.addr);
+    if(addrType)*addrType=entry.addrType;
+    if(name)*name=String(entry.name);
+    if(rssi)*rssi=entry.rssi;
+  }
   return ok;
 }
 

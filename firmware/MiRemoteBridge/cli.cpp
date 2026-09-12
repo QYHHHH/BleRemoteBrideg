@@ -302,9 +302,22 @@ void execute(char *line) {
     return;
   }
 
+  if(!strcasecmp(cmd,"slot")) {
+    if(argc==2 && strlen(argv[1])==1 && argv[1][0]>='0' && argv[1][0]<='2') {
+      Serial.println(rc003_client::requestSlot(argv[1][0]-'0',0)?"slot switch queued":"slot switch refused");
+    } else {
+      Serial.printf("active slot=%u busy=%u error=%s\n",settings::activeSlot(),rc003_client::slotBusy(),rc003_client::slotError());
+      for(uint8_t i=0;i<3;i++){String address,name;uint8_t type;settings::slotInfo(i,address,name,type);Serial.printf("slot %u: %s type=%u %s\n",i,address.c_str(),type,name.c_str());}
+    }
+    return;
+  }
+
   if (!strcasecmp(cmd, "bond")) {
     if (argc >= 2 && !strcasecmp(argv[1], "list")) {
       printBonds();
+    } else if(argc==4 && !strcasecmp(argv[1],"forget") && strlen(argv[2])==17 && (!strcmp(argv[3],"0")||!strcmp(argv[3],"1"))) {
+      bool valid=true;for(int i=0;i<17;i++)if(i%3==2 ? argv[2][i]!=':' : !isxdigit((unsigned char)argv[2][i]))valid=false;
+      Serial.println(valid && !rc003_client::slotBusy() && rc003_client::discardUnassigned(String(argv[2]),atoi(argv[3])) ? "temporary bond cleared (saved slots protected)" : "bond cleanup refused");
     } else {
       Serial.println("usage: bond list");
     }

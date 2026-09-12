@@ -27,8 +27,8 @@ int count();
 // written, or -1 on error.
 int list(BLEAddress *out, int max_out);
 
-// Forget the bond with one peer. Returns 1 when a record was removed, 0 when
-// nothing matched, -1 on error.
+// Forget one peer and remove its controller IRK. Returns 1 when the peer is
+// absent afterward (including when already absent), or 0 on failure.
 int removePeer(BLEAddress peer);
 
 // Bond housekeeping for a newly connected peer, run BEFORE that peer pairs.
