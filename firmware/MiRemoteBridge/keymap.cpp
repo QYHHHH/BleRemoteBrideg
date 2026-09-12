@@ -393,6 +393,80 @@ const char *keymap_raw_name(uint8_t raw_code) {
     default:               return "UNKNOWN";
   }
 }
+// Common byte values found in standard HID keyboard reports and the low byte
+// of Consumer Control usages. Remote vendors are free to use another code
+// space, so these names are intentionally kept separate from the fixed RC003
+// map and are used when a dynamic slot learns a key.
+bool keymap_standard_name(uint8_t raw_code, char *buf, size_t buf_len) {
+  if (!buf || buf_len == 0) return false;
+  const char *name = nullptr;
+  switch (raw_code) {
+    // Keyboard / keypad navigation and editing.
+    case 0x28: name = "Enter"; break;
+    case 0x29: name = "Esc"; break;
+    case 0x2A: name = "Backspace"; break;
+    case 0x2B: name = "Tab"; break;
+    case 0x2C: name = "Space"; break;
+    case 0x39: name = "Caps Lock"; break;
+    case 0x46: name = "Print Screen"; break;
+    case 0x47: name = "Scroll Lock"; break;
+    case 0x48: name = "Pause"; break;
+    case 0x49: name = "Insert"; break;
+    case 0x4A: name = "Home"; break;
+    case 0x4B: name = "Page Up"; break;
+    case 0x4C: name = "Delete"; break;
+    case 0x4D: name = "End"; break;
+    case 0x4E: name = "Page Down"; break;
+    case 0x4F: name = "Right"; break;
+    case 0x50: name = "Left"; break;
+    case 0x51: name = "Down"; break;
+    case 0x52: name = "Up"; break;
+    case 0x53: name = "Num Lock"; break;
+    case 0x65: name = "Application / Menu"; break;
+    // Consumer Control values whose low byte is not a keyboard usage.
+    case 0x9C: name = "频道 +"; break;
+    case 0x9D: name = "频道 -"; break;
+    case 0xB0: name = "播放"; break;
+    case 0xB1: name = "暂停"; break;
+    case 0xB2: name = "录制"; break;
+    case 0xB3: name = "快进"; break;
+    case 0xB4: name = "快退"; break;
+    case 0xB5: name = "下一曲"; break;
+    case 0xB6: name = "上一曲"; break;
+    case 0xB7: name = "停止"; break;
+    case 0xB8: name = "弹出"; break;
+    case 0xCD: name = "播放 / 暂停"; break;
+    case 0xE2: name = "静音"; break;
+    case 0xE9: name = "音量 +"; break;
+    case 0xEA: name = "音量 -"; break;
+    // These two are common Consumer Control values on remote reports. They
+    // overlap keyboard punctuation in the abstract HID tables, but a learned
+    // remote key with these values is overwhelmingly a media button.
+    case 0x30: name = "电源"; break;
+    case 0x32: name = "睡眠"; break;
+    default: break;
+  }
+  if (name) {
+    snprintf(buf, buf_len, "%s", name);
+    return true;
+  }
+  // Keyboard letters A-Z (0x04-0x1D), digits 1-0 (0x1E-0x27), and F1-F12
+  // (0x3A-0x45) are compact ranges in the HID Usage Tables.
+  if (raw_code >= 0x04 && raw_code <= 0x1D) {
+    snprintf(buf, buf_len, "%c", (char)('A' + raw_code - 0x04));
+    return true;
+  }
+  if (raw_code >= 0x1E && raw_code <= 0x27) {
+    const unsigned digit = raw_code == 0x27 ? 0u : (unsigned)(raw_code - 0x1D);
+    snprintf(buf, buf_len, "数字%u", digit);
+    return true;
+  }
+  if (raw_code >= 0x3A && raw_code <= 0x45) {
+    snprintf(buf, buf_len, "F%u", (unsigned)(raw_code - 0x39));
+    return true;
+  }
+  return false;
+}
 
 void keymap_describe(const hid_action_t *action, char *buf, size_t buf_len) {
   if (!buf || buf_len == 0) return;

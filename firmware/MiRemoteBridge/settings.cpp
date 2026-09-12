@@ -119,7 +119,19 @@ bool learnKey(uint8_t raw) {
 }
 String keyName(uint8_t raw) {
   char key[8]; snprintf(key,sizeof(key),"kn_%02x",raw);
-  return remotePrefs().getString(key,"");
+  const String saved = remotePrefs().getString(key,"");
+  if (saved.length()) return saved;
+
+  // Learned third-party keys get a useful name immediately. A manual rename
+  // remains authoritative because it is checked first above.
+  char standard[24];
+  if (keymap_standard_name(raw, standard, sizeof(standard))) return String(standard);
+
+  // Keep the measured RC003 names available for vendor codes shared with a
+  // dynamic remote (for example 0x80/0x81 volume).
+  const char *legacy = keymap_raw_name(raw);
+  if (strcmp(legacy, "UNKNOWN") != 0) return String(legacy);
+  return String("");
 }
 bool renameKey(uint8_t raw, const String &name) {
   if (!raw || name.length()>72 || !name.length()) return false;

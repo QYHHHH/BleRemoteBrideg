@@ -217,6 +217,18 @@ const char *matchRemoteNameHint(const String &name) {
   return nullptr;
 }
 
+// Xiaomi's RC003 exposes several HID report characteristics. A saved slot
+// keeps the advertised name, so use only Xiaomi-specific hints here; the
+// generic "Remote" hint is intentionally excluded because third-party remotes
+// are allowed to use the more tolerant one-report path.
+bool isXiaomiRemoteName(const String &name) {
+  return name.indexOf("\xe5\xb0\x8f\xe7\xb1\xb3") >= 0 ||
+         containsIgnoreCase(name, "xiaomi") ||
+         containsIgnoreCase(name, "mi rc") ||
+         containsIgnoreCase(name, "mi remote") ||
+         containsIgnoreCase(name, "rc003");
+}
+
 void copyFixed(char *dst, size_t dstLen, const char *src) {
   if (!dst || dstLen == 0) return;
   if (!src) {
@@ -607,6 +619,8 @@ bool discoverAndSubscribe() {
           (unsigned)services->size(), (unsigned)ESP.getFreeHeap());
 
   int subscribed = 0;
+  int hidReportCandidates = 0;
+  int hidReportFailures = 0;
   s_notifyHandleCount=0;
 
   // Final compatibility probe for the CMCC voice remote: its link drops with
@@ -615,6 +629,7 @@ bool discoverAndSubscribe() {
   // first HID input report so we can isolate the trigger without changing the
   // security or key-mapping paths.
   const bool cmccSingleReportProbe = s_connectedName.indexOf("CMCC_Voice_Remote") >= 0;
+  const bool xiaomiRemote = !cmccSingleReportProbe && isXiaomiRemoteName(s_connectedName);
   if (cmccSingleReportProbe) BR_LOGW(kTagGatt, "compat probe: CMCC single HID report");
 
   // Two passes over the discovered services, and the order is not cosmetic:
@@ -666,12 +681,26 @@ bool discoverAndSubscribe() {
             continue;
           }
           if (ch->canNotify() || ch->canIndicate()) {
-            if (s_notifyHandleCount<8 && subscribeNative(s_client->getConnId(),ch->getHandle(),endHandle,ch->canNotify())) {
+            hidReportCandidates++;
+            bool reportSubscribed = s_notifyHandleCount < 8 &&
+                subscribeNative(s_client->getConnId(), ch->getHandle(), endHandle, ch->canNotify());
+            // After a slot switch the remote can answer the first descriptor
+            // discovery too early (ATT error 0x10D). A short retry avoids
+            // advertising a half-armed Xiaomi link and is cheaper than making
+            // the user wait for a full scan cycle.
+            if (!reportSubscribed && xiaomiRemote) {
+              vTaskDelay(pdMS_TO_TICKS(60));
+              reportSubscribed = s_notifyHandleCount < 8 &&
+                  subscribeNative(s_client->getConnId(), ch->getHandle(), endHandle, ch->canNotify());
+              if (reportSubscribed) BR_LOGI(kTagGatt, "HID report subscription recovered on retry");
+            }
+            if (reportSubscribed) {
               s_notifyHandles[s_notifyHandleCount++]={ch->getHandle(),false};
               s_charReport = ch;
               subscribed++;
               BR_LOGI(kTagGatt, "subscribed to HID report %s", uuid.c_str());
             } else {
+              hidReportFailures++;
               s_subscriptionFailures++;
               BR_LOGE(kTagGatt, "subscribe failed on HID report %s", uuid.c_str());
             }
@@ -727,6 +756,23 @@ bool discoverAndSubscribe() {
   if (subscribed == 0) {
     cached=nullptr;
     BR_LOGE(kTagGatt, "no notification source found - is this an RC003?");
+    return false;
+  }
+
+  // The first Xiaomi report carries the normal key path. Entering READY with
+  // only the remaining auxiliary reports makes the web UI say "connected" but
+  // silently loses every button press. Force a clean discovery instead; the
+  // next attempt must reach the full set of report CCCDs before it can become
+  // usable. Third-party remotes keep the intentionally permissive policy.
+  if (xiaomiRemote && hidReportCandidates > 0 && hidReportFailures > 0) {
+    BR_LOGW(kTagGatt, "Xiaomi HID subscriptions incomplete (%d/%d failed); retrying with fresh service discovery",
+            hidReportFailures, hidReportCandidates);
+    s_subscribed = false;
+    s_notifyHandleCount = 0;
+    s_charReport = nullptr;
+    cached = nullptr;
+    cachedPeer = "";
+    s_refreshServices = true;
     return false;
   }
 

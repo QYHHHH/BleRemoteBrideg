@@ -351,8 +351,9 @@ function applySlots(j){if(!Array.isArray(j.slots)||j.slots.length!==3||j.active<
 function slotTitle(i){return i===0?'RC003':slots[i].name||'遥控器 0'+(i+1)}
 function syncDefault(){drawSlots()}
 const ICON_CODES=['du','dd','dl','dr','p6','p7','p3','p4'];
+const COMMON_ICON_CODES={233:'p6',234:'p7'};
 function knownKey(raw){return KEYS.find(k=>k[0]===raw&&ICON_CODES.includes(k[4]))}
-function keyIcon(raw){const k=knownKey(raw);return k?icon(k)+' ':''}
+function keyIcon(raw){const k=knownKey(raw);if(k)return icon(k)+' ';const c=COMMON_ICON_CODES[raw];return c?icon([0,'','','',c])+' ':''}
 function keyTitle(k){return k.name||(knownKey(k.raw)||[])[1]||'按键 0x'+hx(k.raw)}
 function drawSlots(){
  $('slots').innerHTML=slots.map((s,i)=>{const active=i===selectedSlot,rc=active&&S.lastStatus&&S.lastStatus.remoteConnected;

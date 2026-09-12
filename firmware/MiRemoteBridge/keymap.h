@@ -65,6 +65,11 @@ bool keymap_is_known(uint8_t raw_code);
 
 // Human readable name of a raw code ("VOL_UP", "UNKNOWN", ...). Never NULL.
 const char *keymap_raw_name(uint8_t raw_code);
+// Resolve common USB HID keyboard and Consumer Control byte values used by
+// third-party remotes. The raw remote protocol is still vendor-dependent, so
+// this helper is for display/learning names; it does not silently create a
+// forwarding binding. Returns false for values with no unambiguous common name.
+bool keymap_standard_name(uint8_t raw_code, char *buf, size_t buf_len);
 
 // Human readable description of an action, written into `buf`.
 // Example: "KB LALT+F4", "CONSUMER 0x00E9", "NONE".
