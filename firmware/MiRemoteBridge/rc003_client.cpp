@@ -609,6 +609,14 @@ bool discoverAndSubscribe() {
   int subscribed = 0;
   s_notifyHandleCount=0;
 
+  // Final compatibility probe for the CMCC voice remote: its link drops with
+  // BLE_ERR_CONN_TERM_MIC after several CCCD writes. Keep Xiaomi and other
+  // remotes on the normal multi-report path; this probe subscribes only its
+  // first HID input report so we can isolate the trigger without changing the
+  // security or key-mapping paths.
+  const bool cmccSingleReportProbe = s_connectedName.indexOf("CMCC_Voice_Remote") >= 0;
+  if (cmccSingleReportProbe) BR_LOGW(kTagGatt, "compat probe: CMCC single HID report");
+
   // Two passes over the discovered services, and the order is not cosmetic:
   // the service map is a std::map keyed by the UUID *string*, which sorts
   // 0x180F (battery) BEFORE 0x1812 (HID). A single in-order pass spends ~2 s
@@ -653,6 +661,10 @@ bool discoverAndSubscribe() {
 
         // ---- HOGP report characteristic (0x2A4D) -------------------------
         if (isHidService && uuid.indexOf(RC003_HID_REPORT_UUID) >= 0) {
+          if (cmccSingleReportProbe && s_notifyHandleCount > 0) {
+            BR_LOGW(kTagGatt, "compat probe: skip HID report value=%u", (unsigned)ch->getHandle());
+            continue;
+          }
           if (ch->canNotify() || ch->canIndicate()) {
             if (s_notifyHandleCount<8 && subscribeNative(s_client->getConnId(),ch->getHandle(),endHandle,ch->canNotify())) {
               s_notifyHandles[s_notifyHandleCount++]={ch->getHandle(),false};
