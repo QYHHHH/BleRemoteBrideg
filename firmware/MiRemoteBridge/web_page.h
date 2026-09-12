@@ -167,25 +167,18 @@ function btns(){var L=S.busy||S.load;Array.prototype.forEach.call(document.query
 Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=S.busy});
 $('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
 function online(v,why){S.on=v;$('off').hidden=v;btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
-/* Everything here runs over one websocket: commands go out, events come in.
-No polling, no timers, and a key is on screen the instant the board sees it. */
-function wsReq(cmd,expect,timeout){
-return new Promise(function(res,rej){
-if(!S.ws||S.ws.readyState!==1){rej(Error('未连接设备'));return}
-var w={cmd:cmd,expect:expect,res:res,rej:rej,t:setTimeout(function(){
-var n=S.pending.indexOf(w);if(n>=0)S.pending.splice(n,1);rej(Error('请求超时，结果未确认，请刷新核对'))},timeout||6000)};
-S.pending.push(w);S.ws.send(cmd)})}
-function settle(type,data){
-for(var i=0;i<S.pending.length;i++){if(S.pending[i].expect!==type)continue;
-var w=S.pending.splice(i,1)[0];clearTimeout(w.t);
-if(type==='error')w.rej(Error((data&&data.error)||'设备返回错误'));else w.res(data);return}
-if(type==='error'&&S.pending.length){var w0=S.pending.shift();clearTimeout(w0.t);w0.rej(Error((data&&data.error)||'设备返回错误'))}}
+/* The socket is push-only from here on: a key going down and a slow status
+heartbeat, both a few dozen bytes. Every query and write goes over plain HTTP
+instead, because an HTTP response is framed by Content-Length and can carry the
+whole binding table however big it gets. The socket cannot: it used to build the
+snapshot into a 1024-byte buffer and hand it to a 768-byte frame buffer, which
+dropped it without a word and left the page stuck on "waiting to read" forever.
+Anything that must fit in one frame must stay small. */
 function req(u,m){
-if(u==='/api/bindings')return wsReq('get','bindings');
-if(u==='/api/status')return wsReq('status','status');
-if(u.indexOf('/api/set?')===0)return wsReq(u.slice(5),'bindings');
-if(u==='/api/reset')return wsReq('reset','bindings');
-return Promise.reject(Error('unknown endpoint '+u))}
+return fetch(u,{cache:'no-store',method:m||'GET'}).then(function(r){
+if(r.status===401){var e=new Error('登录会话无效，请重新登录');e.relogin=true;throw e}
+return r.json().catch(function(){throw new Error('HTTP '+r.status)}).then(function(j){
+if(!r.ok)throw new Error((j&&j.error)||('HTTP '+r.status));return j})})}
 function pulse(raw){if(!raw)return;Array.prototype.forEach.call($('rmArt').children,function(e){
 if(+e.dataset.r===raw){e.classList.add('pulse');setTimeout(function(){e.classList.remove('pulse')},260)}})}
 function wsMessage(j){
@@ -193,9 +186,8 @@ if(!j||typeof j.type!=='string')return;
 if(j.type==='key'){if(typeof j.keyPresses==='number')S.keyPress=j.keyPresses;
 if(j.lastKey)pulse(j.lastKey);
 if(typeof j.activeKey==='number')highlight(j.activeKey);return}
-if(j.type==='status'){stat(j);if(!S.on)load();return}
-settle(j.type,j)}
-function wsOpen(){S.wsRetry=0;S.pending=[];load()}
+if(j.type==='status'){stat(j);if(!S.on)load();return}}
+function wsOpen(){S.wsRetry=0;load()}
 function wsClosed(){online(false);
 if(S.wsTimer)clearTimeout(S.wsTimer);
 var d=Math.min(8000,600*(S.wsRetry=(S.wsRetry||0)+1));
@@ -248,7 +240,9 @@ $('h1').textContent=(rc&&h)?'RC003 已就绪':(rc?'遥控器已连接，等待�
 $('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。')}
 function load(manual){if(S.load||S.busy||$('ed').open||$('rd').open)return;S.load=true;btns();
 return req('/api/bindings').then(apply).then(function(){return req('/api/status')}).then(function(j){stat(j);online(true);if(manual)toast('已刷新')})
-.catch(function(e){online(false);if(manual)toast(e.message==='Failed to fetch'?'连接失败，请确认已连接热点':e.message)}).finally(function(){S.load=false;btns()})}
+.catch(function(e){if(e&&e.relogin){location.href='/login';return}
+var m=(e&&e.message==='Failed to fetch')?'连接失败，请确认设备和本机在同一网络':((e&&e.message)||'连接失败');
+online(false,m);if(manual)toast(m)}).finally(function(){S.load=false;btns()})}
 function openEd(r){if(!S.ok||!S.on||S.busy||S.load)return;S.sel=r;S.cur=r;var a=cur(r)||{kind:1,mod:0,key:40,cons:233};S.mods=a.mod|0;
 $('kind').value=String(a.kind||0);setSel('key',a.key||0);setSel('cons',a.cons||233);
 $('edT').textContent='编辑 '+pick(KEYS.map(function(k){return [k[0],k[1]]}),r,'按键');$('edC').textContent='RAW 0x'+hx(r);

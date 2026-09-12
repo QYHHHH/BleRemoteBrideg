@@ -19,9 +19,9 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 **许可**：GPL-3.0-or-later（2026-09-11 应作者决定由 MIT 改为 GPL-3.0，全树 SPDX
 已更新）。要开源发布，README 已按对外标准写好。
 
-## 2. 当前状态（截至 2026-09-11 上午）
+## 2. 当前状态（截至 2026-09-12 上午）
 
-**全部核心功能真机可用**，工作树干净，最新提交 `196da6c`：
+**全部核心功能真机可用**，工作树干净：
 
 | 功能 | 验证 |
 | --- | --- |
@@ -32,11 +32,15 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 | iPhone 连接（音量/方向键） | ✅ 用户实测 |
 | 多主机轮换（Windows↔iPhone <0.1s 接管） | ✅ 实测 |
 | BOOT 键：短按无操作 / 长按 5s 恢复出厂 | ⚠️ 代码完成已烧录，物理按压待用户验证 |
-| Web 配置 UI（wifi on → 192.168.4.1） | ⚠️ 固件实测 AP/HTTP/API 正常；页面重做后**真机回归未通过**（47.8 KB 页面超出 BLE 共存下的内存余量，AP 的 DHCP 在 ~13.5 KB 水位下不发租约）。取证与下一步见 `docs/TESTING.md` §4.13 |
+| **Web 配置 UI（`wifi on` → 页面注册/改键/实时按键）** | ✅ **真 Chrome 端到端 8/8 通过**（`tests/tools/browser_check.py`，读 live DOM，含按键实时推送） |
 | `bind` 串口命令（设置/列表/解除） | ✅ 实测 |
 
 **待办**：`docs/TESTING.md` §5.3 的边界清单（长按、连按、休眠唤醒、两侧同时重启、
-卡键）尚未逐项验收；Web UI 浏览器端回归；README 提到的英文版/CI 未做。
+卡键）尚未逐项验收；README 提到的英文版/CI 未做。
+
+**Web UI 的修复过程与必须守住的不变量**见 `docs/HANDOFF-websocket-debug.md`
+（该文件已从"排查任务书"改写为结案记录 —— 它原来的三个猜测**全是错的**，别再照着排查）。
+
 
 ## 3. 硬环境
 
@@ -88,8 +92,13 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 ## 6. 已知问题 / 注意
 
 - 板子 USB 偶发掉线（`CM_PROB_PHANTOM`）——硬件/线材问题，重插即可。
-- Web UI 浏览器端尚未回归测试（AP/HTTP/API 层已实测）；`bind` 的 keycode 语义
-  约定**全 hex**（`bind 3e ...` = 0x3E 语音键）。
+- `bind` 的 keycode 语义约定**全 hex**（`bind 3e ...` = 0x3E 语音键）。
+- Web UI 现在走 **STA 模式**（加入家里 Wi-Fi 拿 DHCP 地址，`wifi on` 会打印，
+  也记在 `build/.boardip`），不再是 AP 热点。原因：AP 模式下 DHCP 在 BLE 共存时的
+  ~13.5 KB 堆水位起不来（客户端关联成功却拿不到 IP → `169.254.x.x`），见
+  `docs/TESTING.md` §4.13。**所以别再按 "192.168.4.1 热点" 那套流程测。**
+- **socket 只推小帧**（帧上限 768 B）：整张绑定表走 HTTP。往 socket 里塞大 JSON 会被
+  丢弃，这是曾经卡死页面一整天的根因，见 `docs/HANDOFF-websocket-debug.md` §4。
 - NFC 是小米私有智能卡，与蓝牙零交互，桥接器无 NFC 硬件——不要再朝这个方向探索。
 - `ble_store_config` 的 bond 淘汰（删最旧）是预编译库行为；`makeRoomForPeer` 已在
   配对前腾位保护遥控器，勿移除。
@@ -98,8 +107,9 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 
 ```powershell
 # 物理按键（需要人手）：短按 BOOT 应只出日志不重启；长按 5s 清全部配对（危险）
-# Web UI：串口 wifi on → 手机连 "MiRemoteBridge" 热点 → http://192.168.4.1/
-#         逐键改绑定 → 按遥控器验证 → wifi off
+# Web UI 端到端（真 Chrome，读 live DOM，含按键实时推送）—— 前提是板子 Wi-Fi 可达：
+#   python build/wifi_on.py                 # 串口 wifi on，打印 STA 地址
+#   python tests/tools/browser_check.py     # 期望 REAL CHROME: ALL CHECKS PASSED
 # 不接板子先跑页面回归（浏览器逻辑 + 模拟 API，非真机）：
 #   python tests/tools/web_ui_preview.py
 #   python tests/tools/check_web_ui.py --emit-js build/web-ui-assertions.js

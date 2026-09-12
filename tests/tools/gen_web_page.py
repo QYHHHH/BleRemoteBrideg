@@ -26,6 +26,33 @@ OUTPUT = ROOT / "firmware/MiRemoteBridge/web_page_gz.h"
 STYLE_RE = re.compile(r"<style>(.*?)</style>", re.DOTALL)
 SCRIPT_RE = re.compile(r"<script>(.*?)</script>", re.DOTALL)
 
+# The build stamp changes every minute, and it lives *inside* the gzip payload,
+# so a byte-for-byte --check can never pass unless it runs in the same minute as
+# the last regeneration. Compare with the stamp blanked instead.
+STAMP_RE = re.compile(r"build \d{4}-\d{2}-\d{2} \d{2}:\d{2}")
+
+ASSET_NAMES = ("kIndexHtmlGz", "kIndexCssGz", "kIndexJsGz")
+
+
+def normalise(text: str) -> str:
+    return STAMP_RE.sub("build <stamp>", text)
+
+
+def load_committed(path):
+    """Decompress the payloads out of a generated header: {name: text}."""
+    if not path.exists():
+        return {}
+    text = path.read_text(encoding="utf-8")
+    out = {}
+    for name in ASSET_NAMES:
+        m = re.search(r"static const char %s\[\] PROGMEM = \{(.*?)\};" % name,
+                      text, re.DOTALL)
+        if not m:
+            return {}
+        raw = bytes(int(b, 16) for b in re.findall(r"0x([0-9a-fA-F]{2})", m.group(1)))
+        out[name] = normalise(gzip.decompress(raw).decode("utf-8")) if raw else ""
+    return out
+
 
 def stamp_build_time(html):
     """Stamp __BUILDTIME__ with the build time.
@@ -112,9 +139,14 @@ def main():
     sizes = ", ".join(f"{len(t.encode())}->{len(compress(t))}" for t in parts)
 
     if args.check:
-        current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
-        if current != generated:
-            raise SystemExit("web_page_gz.h is stale - run gen_web_page.py")
+        committed = load_committed(OUTPUT)
+        if not committed:
+            raise SystemExit("web_page_gz.h is missing or unreadable - run gen_web_page.py")
+        for name, text in zip(ASSET_NAMES, parts):
+            if normalise(text) != committed[name]:
+                raise SystemExit(
+                    "web_page_gz.h is stale (%s differs from web_page.h) - "
+                    "run gen_web_page.py" % name)
         print(f"web_page_gz.h up to date (html, css, js: {sizes})")
         return
 

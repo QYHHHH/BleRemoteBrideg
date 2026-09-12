@@ -62,6 +62,12 @@ constexpr size_t kHeaderLimit = 1536;
 constexpr size_t kIoCapacity = 3072;
 constexpr size_t kIoPerLoop = 1024;
 constexpr uint32_t kProgressTimeoutMs = 4000;
+// How long a finished keep-alive socket may hold the single exchange slot while
+// it waits for the next request on itself. Short on purpose: the slot is not
+// shareable, so a lingering idle socket delays every other client. Measured
+// before this was added: with five sockets open a browser's upgrade request got
+// no reply at all within 8 s, because it queued behind four idle ones.
+constexpr uint32_t kKeepAliveIdleMs = 300;
 // How long one loop() pass may spend pushing a response out. Short enough to
 // keep BLE key dispatch prompt, long enough that a 6 KB script leaves in a few
 // passes instead of sixteen.
@@ -70,6 +76,7 @@ constexpr uint32_t kRequestTimeoutMs = 15000;
 struct Exchange {
   int fd = -1;
   bool sending = false;
+  bool idle = false;           // response done, socket parked for one more request
   char io[kIoCapacity];        // request headers, then JSON response (reused)
   char header[320];
   const char *body = nullptr;  // flash asset, literal, or io[]
@@ -176,15 +183,17 @@ void closeExchange(bool complete) {
   s_http.body = nullptr;
   s_http.used = 0;
   s_http.sending = false;
+  s_http.idle = false;
   s_pendingUpgrade = false;
-  if (s_ws) {
-    BR_LOGI(kTag, "websocket closed, heap %u B", (unsigned)ESP.getFreeHeap());
-    wsClose();
-  }
+  // Deliberately does NOT touch the websocket any more. Since the upgrade moved
+  // the frame socket to its own fd, an HTTP slot teardown - a stale request, an
+  // idle timeout, even stopHttp - must not take the live page down with it.
+  // That coupling was one of the two reasons the page reconnected forever.
 }
 
 void stopHttp() {
   closeExchange(false);
+  if (s_ws) wsClose();
   if (s_listener >= 0) ::close(s_listener);
   s_listener = -1;
 }
@@ -204,7 +213,7 @@ bool startHttp() {
   addr.sin_family = AF_INET;
   addr.sin_port = htons(80);
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  if (!nonblocking(fd) || bind(fd, (sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 4) != 0) {
+  if (!nonblocking(fd) || bind(fd, (sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 8) != 0) {
     BR_LOGE(kTag, "HTTP listen failed, errno %d", errno);
     ::close(fd);
     return false;
@@ -219,7 +228,7 @@ void respond(int code, const char *reason, const char *type, const char *body, s
              bool gzip = false, bool head = false) {
   const int n = snprintf(s_http.header, sizeof(s_http.header),
       "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %u\r\n"
-      "Connection: keep-alive\r\nKeep-Alive: timeout=5, max=100\r\n"
+      "Connection: keep-alive\r\nKeep-Alive: timeout=1, max=100\r\n"
       "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n%s\r\n",
       code, reason, type, (unsigned)len, gzip ? "Content-Encoding: gzip\r\nVary: Accept-Encoding\r\n" : "");
   if (n < 0 || (size_t)n >= sizeof(s_http.header)) { closeExchange(false); return; }
@@ -655,6 +664,9 @@ void authChallenge(bool setupMode) {
 // --- WebSocket plumbing -----------------------------------------------------
 
 void wsClose() {
+  if (s_ws) {
+    BR_LOGI(kTag, "websocket closed (fd %d), heap %u B", s_wsFd, (unsigned)ESP.getFreeHeap());
+  }
   s_ws = false;
   if (s_wsFd >= 0) ::close(s_wsFd);
   s_wsFd = -1;
@@ -665,9 +677,23 @@ void wsClose() {
 // Queue one unmasked text frame. Refuses while the previous frame is still
 // draining: callers are event handlers, not queues.
 bool wsQueueRaw(const uint8_t *payload, size_t len, uint8_t opcode) {
-  if (s_wsOutSent < s_wsOutLen) return false;
+  // A frame that is refused here is gone: the caller has no way to retry and the
+  // page will simply never see that event. Stay loud about it - a silently
+  // dropped frame is what made the page sit on "waiting to read" for a whole
+  // session (the binding snapshot was built into 1024 bytes and handed to a
+  // 768-byte frame buffer, so every snapshot was dropped without a log line).
+  if (s_wsOutSent < s_wsOutLen) {
+    BR_LOGW(kTag, "ws frame refused: previous frame still draining (%u/%u B)",
+            (unsigned)s_wsOutSent, (unsigned)s_wsOutLen);
+    return false;
+  }
   const size_t need = len + 10;
-  if (need > sizeof(s_wsOutBuf)) return false;
+  if (need > sizeof(s_wsOutBuf)) {
+    BR_LOGW(kTag, "ws frame refused: %u B payload does not fit the %u B frame "
+                  "buffer - send it over HTTP instead (opcode %u)",
+            (unsigned)len, (unsigned)sizeof(s_wsOutBuf), (unsigned)opcode);
+    return false;
+  }
   size_t n = 0;
   s_wsOutBuf[n++] = (uint8_t)(0x80 | opcode);
   if (len < 126) {
@@ -688,39 +714,6 @@ bool wsQueueRaw(const uint8_t *payload, size_t len, uint8_t opcode) {
 
 void wsQueue(const char *payload) { wsQueueRaw((const uint8_t *)payload, strlen(payload), 0x1); }
 
-// Bindings as the page wants them (shared with the HTTP endpoint).
-size_t buildBindingsJson(char *buf, size_t cap) {
-  Json out(buf, cap);
-  uint8_t raws[KEYMAP_MAX_BINDINGS];
-  hid_action_t acts[KEYMAP_MAX_BINDINGS];
-  const size_t count = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
-  out.add("{\"bindings\":[");
-  for (size_t i = 0; i < count; ++i) {
-    if (i) out.add(",");
-    actionJson(out, raws[i], acts[i]);
-  }
-  out.add("],\"defaults\":[");
-  const keymap_entry_t *table = keymap_default_table();
-  const size_t dcount = keymap_default_count();
-  for (size_t i = 0; i < dcount; ++i) {
-    if (i) out.add(",");
-    actionJson(out, table[i].raw_code, table[i].press);
-  }
-  out.add("],\"effective\":[");
-  for (size_t i = 0; i < dcount; ++i) {
-    if (i) out.add(",");
-    actionJson(out, table[i].raw_code, keymap_lookup(table[i].raw_code));
-  }
-  out.add("]}");
-  return out.ok() ? out.size() : 0;
-}
-
-void wsSendBindings() {
-  char buf[1024];
-  const size_t n = buildBindingsJson(buf, sizeof(buf));
-  if (n) wsQueueRaw((const uint8_t *)buf, n, 0x1);
-}
-
 void wsSendStatus() {
   char buf[320];
   Json out(buf, sizeof(buf));
@@ -734,11 +727,19 @@ void wsSendStatus() {
 
 // Console-style command arriving over the socket: "get", "set?raw=..&kind=..",
 // "reset" - the same query parsing the HTTP endpoints use.
+//
+// Every reply here MUST be a small frame. The binding table grows with the user's
+// configuration and does not fit a single websocket frame, and a frame that does
+// not fit is dropped - that is precisely how this page once spent a whole session
+// stuck on "waiting to read". The table itself is therefore served only over
+// HTTP, where Content-Length frames it whatever its size; the socket just
+// acknowledges and lets the caller re-read. Do not add a "send the bindings"
+// command back here.
 void wsCommand(char *msg) {
   char *query = strchr(msg, '?');
   if (query) *query++ = 0;
   if (!strcmp(msg, "get")) {
-    wsSendBindings();
+    wsQueue("{\"type\":\"error\",\"error\":\"bindings are served over HTTP\"}");
     return;
   }
   if (!strcmp(msg, "status")) {
@@ -754,7 +755,6 @@ void wsCommand(char *msg) {
     }
     settings::setBinding(raw, kind, mod, key, cons);
     wsQueue("{\"type\":\"saved\"}");
-    wsSendBindings();
     return;
   }
   if (!strcmp(msg, "reset")) {
@@ -766,7 +766,6 @@ void wsCommand(char *msg) {
       n = keymap_get_bindings(raws, acts, KEYMAP_MAX_BINDINGS);
     }
     wsQueue("{\"type\":\"reset\"}");
-    wsSendBindings();
     return;
   }
   wsQueue("{\"type\":\"error\",\"error\":\"unknown command\"}");
@@ -1096,26 +1095,42 @@ bool retryable(int error) {
 
 void pollHttp() {
   if (s_listener < 0) return;
+  // The single exchange slot. A socket that has already been answered only keeps
+  // it for one more request, and only for kKeepAliveIdleMs: browsers open 4-6
+  // parallel connections (page, css, js, upgrade) and every parked socket used
+  // to hold the slot for the full 4 s progress timeout, so the upgrade request -
+  // always last in line - never got served at all. Measured before the fix: five
+  // sockets open, upgrade request unanswered for 8+ seconds.
   if (s_http.fd < 0) {
     const int fd = accept(s_listener, nullptr, nullptr);
-    if (fd < 0) return;
-    if (!nonblocking(fd)) { ::close(fd); return; }
-    const int one = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-    // Linger 0: close() sends RST instead of starting a graceful shutdown.
-    // The response bytes are already gone by then, so the client sees a
-    // complete reply; what it avoids is the server-side TIME_WAIT pile-up.
-    // With a 150 ms poll and a 5 s keep-alive window the board churns through
-    // connections fast, and every lingering pcb holds a TCP control block -
-    // that pile-up is what drove the free heap down to a few hundred bytes.
-    struct linger lg {};
-    lg.l_onoff = 1;
-    lg.l_linger = 0;
-    setsockopt(fd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
-    s_http.fd = fd;
-    s_http.used = 0;
-    s_http.sending = false;
-    s_http.started = s_http.progress = millis();
+    if (fd >= 0) {
+      if (!nonblocking(fd)) {
+        ::close(fd);
+      } else {
+        const int one = 1;
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+        // Linger 0: close() sends RST instead of starting a graceful shutdown.
+        // The response bytes are already gone by then, so the client sees a
+        // complete reply; what it avoids is the server-side TIME_WAIT pile-up.
+        // With a 150 ms poll and a 300 ms keep-alive idle window the board
+        // churns through connections fast, and every lingering pcb holds a TCP
+        // control block - that pile-up is what drove the free heap down to a few
+        // hundred bytes.
+        struct linger lg {};
+        lg.l_onoff = 1;
+        lg.l_linger = 0;
+        setsockopt(fd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
+        s_http.fd = fd;
+        s_http.used = 0;
+        s_http.sending = false;
+        s_http.idle = false;
+        s_http.started = s_http.progress = millis();
+      }
+    }
+    // No `return` on a failed accept: after the upgrade hands its fd to the
+    // websocket there is usually no HTTP connection at all, and bailing out here
+    // would stop servicing the live websocket - frames, pings and key events
+    // would never leave the board.
   }
   const uint32_t now = millis();
   if (s_ws) {
@@ -1179,9 +1194,21 @@ void pollHttp() {
     }
     }
   }
-  if (now - s_http.progress > kProgressTimeoutMs || now - s_http.started > kRequestTimeoutMs) {
-    BR_LOGW(kTag, "HTTP timeout (header %u/%u, body %u/%u)", (unsigned)s_http.headerSent,
-        (unsigned)s_http.headerLen, (unsigned)s_http.bodySent, (unsigned)s_http.bodyLen);
+  // Everything below services the HTTP exchange slot, so it must not run when
+  // there is no HTTP socket: after the upgrade hands its fd to the websocket,
+  // s_http.fd is -1. Running anyway is what let the request timeout fire four
+  // seconds after a successful upgrade and tear the live page down - and what
+  // made the recv() below fail on fd -1 and close the exchange (and, in the old
+  // code, the websocket with it).
+  if (s_http.fd < 0) return;
+  const uint32_t idleLimit = s_http.idle ? kKeepAliveIdleMs : kProgressTimeoutMs;
+  if (now - s_http.progress > idleLimit || now - s_http.started > kRequestTimeoutMs) {
+    // A parked keep-alive socket expiring is routine, not a stall - log only the
+    // real thing.
+    if (!s_http.idle) {
+      BR_LOGW(kTag, "HTTP timeout (header %u/%u, body %u/%u)", (unsigned)s_http.headerSent,
+          (unsigned)s_http.headerLen, (unsigned)s_http.bodySent, (unsigned)s_http.bodyLen);
+    }
     closeExchange(false); return;
   }
   if (!s_http.sending) {
@@ -1212,9 +1239,11 @@ void pollHttp() {
       s_wsFd = s_http.fd;   // dedicated fd: HTTP keeps accepting other requests
       s_http.fd = -1;
       s_http.sending = false;
+      s_http.idle = false;
+      s_http.used = 0;
       s_http.headerLen = s_http.headerSent = 0;
       s_http.bodyLen = s_http.bodySent = 0;
-      BR_LOGI(kTag, "websocket open, heap %u B", (unsigned)ESP.getFreeHeap());
+      BR_LOGI(kTag, "websocket open on fd %d, heap %u B", s_wsFd, (unsigned)ESP.getFreeHeap());
     } else {
       closeExchange(true);
     }
@@ -1255,11 +1284,21 @@ void pollHttp() {
     if (millis() - budgetEnd < 0x80000000u && (int32_t)(millis() - budgetEnd) >= 0) break;
   }
   if (s_http.headerSent == s_http.headerLen && s_http.bodySent == s_http.bodyLen) {
-    // Keep the connection open. The page polls for live key state, and opening
-    // a fresh socket per poll would pile up TIME_WAIT entries (TCP_MSL is 60 s)
-    // until lwIP ran out of sockets. Idle connections are dropped by the
-    // progress timeout above.
+    if (s_pendingUpgrade) {
+      // The 101 is fully out. Do NOT reset the exchange here: the upgrade is
+      // acted on by the `!left` branch above, which needs s_http.sending to
+      // still be true on the next pass. Resetting first made that branch
+      // unreachable, so the socket sent 101 and then just sat there until the
+      // idle timeout closed it - which the page saw as "connected, dropped,
+      // reconnecting" on an endless loop.
+      return;
+    }
+    // Keep the connection open for one more request, but park it as `idle` so a
+    // client that is actually waiting can take the slot away immediately. The
+    // page's only long-lived connection is the websocket, so this window exists
+    // purely to let / reuse the socket for /app.css and /app.js.
     s_http.sending = false;
+    s_http.idle = true;
     s_http.used = 0;
     s_http.body = nullptr;
     s_http.headerSent = s_http.headerLen = 0;
