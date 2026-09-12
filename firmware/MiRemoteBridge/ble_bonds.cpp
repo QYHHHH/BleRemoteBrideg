@@ -226,6 +226,7 @@ bool restoreSlot(uint8_t slot, BLEAddress peer) {
     BR_LOGE(kTag, "slot %u restore rejected: live store read failed", (unsigned)slot);
     return false;
   }
+  BR_LOGI(kTag,"slot %u keys: ours=%u ltk=%u size=%u peer=%u ltk=%u size=%u",slot,a.ours,a.our.ltk_present,a.our.key_size,a.theirs,a.peer.ltk_present,a.peer.key_size);
   // A live record is newer than its snapshot. Never overwrite it with stale keys.
   if (live.ours || live.theirs) {
     const bool complete = live.ours >= a.ours && live.theirs >= a.theirs &&

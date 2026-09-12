@@ -406,7 +406,7 @@ async function slotAction(action,slot){
  S.busy=true;btns();$('ed').close();editor.close();if(typeof pairing!=='undefined')pairing.close();
  try{
   await req('/api/slot?slot='+slot+'&action='+action,'POST');
-  for(let i=0;i<60;i++){const j=await req('/api/slots');applySlots(j);if(!j.busy){if(j.error)throw Error(j.error);break}if(i===59)throw Error('操作仍在进行，请稍候');await new Promise(r=>setTimeout(r,500))}
+  for(let i=0;i<200;i++){const j=await req('/api/slots');applySlots(j);if(!j.busy){if(j.error)throw Error(j.error);break}if(i===199)throw Error('操作仍在进行，请稍候');await new Promise(r=>setTimeout(r,150))}
   await req('/api/bindings').then(apply);await req('/api/status').then(stat);
  }catch(e){toast(err(e))}finally{S.busy=false;btns()}
 }

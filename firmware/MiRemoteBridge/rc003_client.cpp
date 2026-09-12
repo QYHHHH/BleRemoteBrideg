@@ -41,6 +41,7 @@
 #include <BLEScan.h>
 
 #include <host/ble_gap.h>
+#include <host/ble_store.h>
 
 #include <ctype.h>
 #include <string.h>
@@ -487,6 +488,7 @@ ScanCallbacks s_scanCallbacks;
 // ---------------------------------------------------------------------------
 int startSecurity(uint16_t connHandle) {
   const int rc = ble_gap_security_initiate(connHandle);
+  BR_LOGI(kTagSec,"security initiate handle=%u rc=%d",connHandle,rc);
   if (rc != 0 && rc != BLE_HS_EALREADY) {
     BR_LOGW(kTagSec, "ble_gap_security_initiate rc=%d", rc);
     return rc;
@@ -494,11 +496,18 @@ int startSecurity(uint16_t connHandle) {
   return 0;
 }
 
+bool storedPeerKey(const ble_gap_conn_desc &desc) {
+  ble_store_key_sec key{};key.peer_addr=desc.peer_id_addr;
+  ble_store_value_sec value{};
+  return ble_store_read_peer_sec(&key,&value)==0 && value.ltk_present;
+}
+
 bool waitForSecurity(uint16_t connHandle, uint32_t timeoutMs) {
   const uint32_t deadline = nowMs() + timeoutMs;
   while (nowMs() < deadline) {
     ble_gap_conn_desc desc;
     if (ble_gap_conn_find(connHandle, &desc) != 0) return false;
+    if(s_slotBusy)return false;
     if (desc.sec_state.encrypted && desc.sec_state.bonded) {
       BR_LOGI(kTagSec, "link encrypted (bonded=%d, authenticated=%d)", (int)desc.sec_state.bonded,
               (int)desc.sec_state.authenticated);
@@ -506,7 +515,8 @@ bool waitForSecurity(uint16_t connHandle, uint32_t timeoutMs) {
     }
     vTaskDelay(pdMS_TO_TICKS(50));
   }
-  BR_LOGW(kTagSec, "encryption/bonding incomplete after %ums", (unsigned)timeoutMs);
+  ble_gap_conn_desc last{};ble_gap_conn_find(connHandle,&last);
+  BR_LOGW(kTagSec, "security timeout %ums encrypted=%u bonded=%u stored=%u", (unsigned)timeoutMs,last.sec_state.encrypted,last.sec_state.bonded,storedPeerKey(last));
   return false;
 }
 
@@ -522,7 +532,10 @@ bool discoverAndSubscribe() {
   // The remote's HID service is unusable until the link is encrypted, and the
   // bond is what makes the next reconnect instant. ble_gap_security_initiate()
   // is used instead of BLEClient::secureConnection(), which waits forever.
-  startSecurity(connId);
+  ble_gap_conn_desc before{};
+  if(ble_gap_conn_find(connId,&before))return false;
+  BR_LOGI(kTagSec,"security begin encrypted=%u bonded=%u stored=%u",before.sec_state.encrypted,before.sec_state.bonded,storedPeerKey(before));
+  if(!before.sec_state.encrypted && startSecurity(connId))return false;
   ble_gap_conn_desc identityInfo{};
   if(s_newPeer.length() && !ble_gap_conn_find(connId,&identityInfo)) {BLEAddress identity(identityInfo.peer_id_addr);s_newPeer=identity.toString();s_newPeerType=identity.getType();}
   if (!waitForSecurity(connId, 10000)) {s_slotError="蓝牙配对未完成，请让遥控器重新进入配对模式";return false;}
@@ -1116,6 +1129,7 @@ bool requestSlot(uint8_t slot, uint8_t action) {
   if (slot>2 || action>2 || s_slotBusy || !hid_server::slotSwitchSafe()) return false;
   s_slotTarget=slot; s_slotAction=action; s_slotError="";
   s_slotPaused=false; s_slotBusy=true;
+  BLEScan *scan=BLEDevice::getScan();if(scan->isScanning())scan->stop();
   return true;
 }
 void serviceSlot() {
