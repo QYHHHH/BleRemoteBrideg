@@ -13,8 +13,11 @@
 // ---------------------------------------------------------------------------
 // Firmware identity
 // ---------------------------------------------------------------------------
+// Kept in step with the git tag by hand - nothing ties them together
+// automatically. The tag carries the "v" (v0.0.1); this string matches it
+// character for character so the boot banner, `status` and the tag all agree.
 #define BRIDGE_FW_NAME        "MiRemoteBridge"
-#define BRIDGE_FW_VERSION     "0.3.0"
+#define BRIDGE_FW_VERSION     "v0.0.1"
 
 // ---------------------------------------------------------------------------
 // Downstream (peripheral) role: what Windows sees
