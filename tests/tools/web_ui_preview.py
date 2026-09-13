@@ -34,9 +34,9 @@ def demo_html():
   const base = defaults.map(a => a.raw === 62 ? {...a, mod:9, key:0} : {...a});
   let bindings = [];
   try { bindings = JSON.parse(sessionStorage.getItem('mrb-ui-demo') || '[]'); } catch (_) {}
-  const control = window.__demo = {fault:null, calls:[], status:{heapTotal:204800,heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
+  const control = window.__demo = {fault:null, calls:[], status:{heapTotal:204800,heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',remoteId:'',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
   let active=0;
-  const devices=[{name:'RC003',address:''},{name:'',address:''},{name:'',address:''}],maps=[bindings,[],[]],keys=[[],[],[]];
+  const devices=[{name:'RC003',address:'',identity:''},{name:'',address:'',identity:''},{name:'',address:'',identity:''}],maps=[bindings,[],[]],keys=[[],[],[]];
   control.devices=devices;control.keys=keys;
   window.WebSocket=class {constructor(url){this.url=url;this.readyState=1;queueMicrotask(()=>this.onopen&&this.onopen())}close(){this.readyState=3;this.onclose&&this.onclose({code:1000})}};
   window.fetch = async (input, options={}) => {
@@ -58,7 +58,7 @@ def demo_html():
       maps[active]=bindings;active=+u.searchParams.get('slot');bindings=maps[active];
       const action=u.searchParams.get('action');
       if(action==='add')control.pairing=true;
-      if(action==='delete')devices[active]={name:'',address:''};
+      if(action==='delete'){devices[active]={name:'',address:'',identity:''};keys[active]=[];maps[active]=[];bindings=[];}
       return json({ok:true});
     }
     if(u.pathname==='/api/connect'){devices[active]={name:'测试遥控器',address:u.searchParams.get('address')};control.pairing=false;return json({ok:true});}

@@ -21,6 +21,9 @@ void begin();
 uint8_t activeSlot();
 bool selectSlot(uint8_t slot);
 bool slotInfo(uint8_t slot, String &address, String &name, uint8_t &type);
+String slotIdentity(uint8_t slot);
+// Clear every persisted record in the currently selected non-default slot.
+bool clearActiveSlot();
 bool pairingEnabled();
 void setPairingEnabled(bool enabled);
 size_t learnedKeys(uint8_t *out, size_t cap);
@@ -36,6 +39,8 @@ String rc003Address();
 uint8_t rc003AddrType();
 String rc003Name();
 bool setRc003(const String &address, uint8_t addrType, const String &name);
+bool setRc003Identity(const String &identity);
+String rc003Identity();
 void clearRc003();
 
 // ---- keymap modes ---------------------------------------------------------

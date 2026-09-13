@@ -17,7 +17,7 @@ button{font:inherit;color:inherit;cursor:pointer}button:disabled{cursor:not-allo
 main{max-width:1680px;margin:0 auto;padding:12px 18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 18px #26324904}
 .hero{display:flex;align-items:center;gap:18px;padding:10px 16px;margin-bottom:10px}
-.hero .t{flex:1;min-width:0}.hero h1{margin-bottom:4px}.hero p{font-size:12px;color:var(--mut)}
+.hero .t{flex:1;min-width:0}.hero h1{margin-bottom:4px}.hero p{font-size:12px;color:var(--mut)}.hero #diag:empty{display:none}.hero #diag.wake{margin:7px 0 0;padding:5px 8px;color:#8b6b37;background:#fff9ef;border:1px solid #f0ddbb;border-radius:6px}
 .btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 14px;border:1px solid #dfe3e9;border-radius:7px;background:#fff;font-size:12px;white-space:nowrap}
 .btn:hover{background:#f8fafc}.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}.btn.p:hover{background:#0966d9}
 .btn.d{color:#b45345}
@@ -95,7 +95,7 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 @media(max-width:900px){.workspace{grid-template-columns:1fr}.board{display:grid;grid-template-columns:150px 1fr;gap:0 16px}.board svg{grid-row:1/7;height:250px}.board h2{grid-column:2}.memory{grid-column:1/-1}.hero{flex-direction:row}.grid{grid-template-columns:minmax(0,1fr) 170px minmax(0,1fr)}}
 @media(max-width:620px){.grid{grid-template-columns:1fr 1fr}.rm{grid-row:1}.rm .body{margin:-110px -40px}.hero{flex-wrap:wrap}.hero .t{flex-basis:100%}.board{display:block}.board svg{height:210px}}
 main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:stretch}.mapping-panel{padding:16px;display:flex;flex-direction:column;min-height:min(790px,calc(100vh - 118px))}.mapping-panel .head{margin-bottom:14px}.grid{grid-template-columns:minmax(0,1fr) 230px minmax(0,1fr);gap:12px;align-items:center;flex:1}.col{align-self:stretch;justify-content:space-around;gap:12px;padding:12px 0}.k button{min-height:60px;padding:8px 10px;line-height:1.4}.k .r1,.k .act{font-size:13px}.k .ed{display:inline}.rm{padding:0;margin:0;border:0;flex-direction:column;gap:12px;align-self:center}.rm .body{width:132px;height:540px;transform:scale(.86);margin:-37.8px -9.24px}.cap{font-size:11px;text-align:center}.side{display:flex;flex-direction:column;gap:14px;height:100%}
-.rack{padding:14px}.rack-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.rack-heading span{font-size:12px}.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.slot{display:flex;flex-direction:column;align-items:start;gap:8px;text-align:left;padding:13px 11px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;min-width:0}.slot.selected{background:#edf5ff;border-color:#82b7f6;box-shadow:inset 0 3px #1674ed}.slot strong{font-size:18px}.slot-index,.slot-battery,.slot-link{font-size:12px;color:var(--mut)}.slot-link.linked{color:var(--ok)}.slot-wake{font-size:11px;color:#906b34}.rack-actions{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px}.rack-actions>div{flex:1;font-size:12px}.rack-actions small{display:block;color:var(--mut);margin-top:3px}.rack-actions .btn{padding:7px 10px}
+.rack{padding:14px}.rack-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.rack-heading span{font-size:12px}.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.slot{display:flex;flex-direction:column;align-items:start;gap:8px;text-align:left;padding:13px 11px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;min-width:0}.slot.selected{background:#edf5ff;border-color:#82b7f6;box-shadow:inset 0 3px #1674ed}.slot strong{font-size:18px}.slot-index,.slot-battery,.slot-link{font-size:12px;color:var(--mut)}.slot-link.linked{color:var(--ok)}.slot-wake{font-size:11px;color:#906b34}.slot-id{font-size:11px;color:var(--mut);word-break:break-all}.rack-actions{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px}.rack-actions>div{flex:1;font-size:12px}.rack-actions small{display:block;color:var(--mut);margin-top:3px}.rack-actions .btn{padding:7px 10px}
 .side .board{display:block;flex:1 0 auto;position:relative;align-content:start;padding:16px}.board>h2{margin-bottom:14px}.board>#pH,.board>#pW{float:right;margin:0 0 0 6px}.board-body{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(140px,.8fr);gap:16px;align-items:stretch}.hardware{display:flex;gap:14px;align-items:center}.board .hardware svg{width:220px;height:300px;flex:none;margin:0}.legend{flex:1;min-width:0}.board .legend p{display:block;margin:0;padding:11px 0;border-bottom:1px solid #edf0f3;font-size:13px;line-height:1.7}.board .legend p:last-child{border-bottom:0}.board .memory{border-top:0;border-left:1px solid var(--line);padding:10px 0 10px 16px;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;grid-column:auto}.memory h3{align-self:stretch;text-align:left;margin-bottom:8px}.memory strong{font-size:18px}.board .memory p{font-size:10px;margin:7px 0;line-height:1.7}.memory small{font-size:11px;line-height:1.6}.board .memory #memDetail{white-space:pre-line}
 .empty-remote{min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;color:var(--mut)}.empty-remote h2{color:var(--ink)}.empty-remote p{font-size:12px}.empty-remote small{font-size:10px}.empty-icon{font-size:32px;color:#86a8cf;border:1px dashed #c2d5e9;border-radius:14px;padding:6px 24px}.learn-banner{border-bottom:1px solid var(--line);padding:8px 0 16px}.learn-banner b,.learn-banner span{display:block}.learn-banner span{font-size:13px;color:var(--mut);margin-top:4px}.simulator{display:flex;align-items:center;gap:8px;margin:15px 0;flex-wrap:wrap}.simulator>span{font-size:12px;color:var(--mut)}.learned-keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.learned-key button{min-height:60px;padding:8px 10px}.learned-key.heard{background:#edf5ff;border-color:#1674ed}#slotName{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;border:1px solid #dce1e8;border-radius:7px;background:#fff;color:var(--ink);font:inherit}
 #wires path{stroke:#a6afbc;stroke-opacity:.85;stroke-width:1}#memRing{--used:0%;width:94px;height:94px;flex:none;border-radius:50%;background:conic-gradient(#327ede var(--used),#e9eef2 0);padding:8px;margin:2px 0 10px;display:grid;place-items:center;transform:rotate(-90deg)}#memRing>div{width:100%;height:100%;border-radius:50%;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(90deg)}#memRing b{font:600 19px Consolas,monospace;color:var(--ink)}#memRing span{font-size:10px;color:var(--mut);margin-top:1px}#memTotal{margin-top:3px}.repo-placeholder{font-size:12px;color:var(--blue);padding:4px 9px;border:1px dashed #b9d1ee;border-radius:6px;text-decoration:none;cursor:default}.mapping-panel .head span,.memory #memDetail,.memory #memState{font-size:11px!important}
@@ -160,9 +160,9 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
   const base = defaults.map(a => a.raw === 62 ? {...a, mod:9, key:0} : {...a});
   let bindings = [];
   try { bindings = JSON.parse(sessionStorage.getItem('mrb-ui-demo') || '[]'); } catch (_) {}
-  const control = window.__demo = {fault:null, calls:[], status:{heapTotal:204800,heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
+  const control = window.__demo = {fault:null, calls:[], status:{heapTotal:204800,heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',remoteId:'',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
   let active=0;
-  const devices=[{name:'RC003',address:''},{name:'',address:''},{name:'',address:''}],maps=[bindings,[],[]],keys=[[],[],[]];
+  const devices=[{name:'RC003',address:'',identity:''},{name:'',address:'',identity:''},{name:'',address:'',identity:''}],maps=[bindings,[],[]],keys=[[],[],[]];
   control.devices=devices;control.keys=keys;
   window.WebSocket=class {constructor(url){this.url=url;this.readyState=1;queueMicrotask(()=>this.onopen&&this.onopen())}close(){this.readyState=3;this.onclose&&this.onclose({code:1000})}};
   window.fetch = async (input, options={}) => {
@@ -184,7 +184,7 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
       maps[active]=bindings;active=+u.searchParams.get('slot');bindings=maps[active];
       const action=u.searchParams.get('action');
       if(action==='add')control.pairing=true;
-      if(action==='delete')devices[active]={name:'',address:''};
+      if(action==='delete'){devices[active]={name:'',address:'',identity:''};keys[active]=[];maps[active]=[];bindings=[];}
       return json({ok:true});
     }
     if(u.pathname==='/api/connect'){devices[active]={name:'测试遥控器',address:u.searchParams.get('address')};control.pairing=false;return json({ok:true});}
@@ -221,7 +221,7 @@ for(i=0;i<10;i++)KB.push([30+i,String((i+1)%10)]);
 for(i=0;i<12;i++)KB.push([58+i,'F'+(i+1)]);
 var CS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
 var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
-var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null,wsOpened:false,claimed:false};
+var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null,wsOpened:false,claimed:false,switching:false};
 function hx(v){return v.toString(16).toUpperCase().padStart(2,'0')}
 function pick(l,v,d){for(var i=0;i<l.length;i++)if(l[i][0]===v)return l[i][1];return d}
 function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return pick(CS,a.cons,'媒体 0x'+hx(a.cons));
@@ -261,7 +261,9 @@ if(+e.dataset.r===raw){e.classList.add('pulse');setTimeout(function(){e.classLis
 function wsMessage(j){
 if(!j||typeof j.type!=='string')return;
 if(j.type==='key'){if(typeof j.keyPresses==='number')S.keyPress=j.keyPresses;
-if(j.lastKey){pulse(j.lastKey);if(selectedSlot)load()}
+var down=j.pressed===undefined?!!j.activeKey:!!j.pressed,raw=+j.lastKey||0;
+if(raw&&down){pulse(raw);
+if(selectedSlot&& !learned.some(function(k){return k.raw===raw})){load().then(function(){highlight(typeof j.activeKey==='number'&&j.activeKey?j.activeKey:raw)})}}
 if(typeof j.activeKey==='number')highlight(j.activeKey);return}
 if(j.type==='status'){const changed=!S.lastStatus||j.remoteConnected!==S.lastStatus.remoteConnected;stat(j);if(!S.on||S.slotBusy||changed)load();return}
 if(j.type==='claimed'){S.claimed=true;return}}
@@ -303,22 +305,25 @@ var x2=(k[3]==='L'?cb.right+9:cb.left-9)-gb.left,y2=cb.top+cb.height/2-gb.top;
 var dx=(x2-x1)*0.42;
 out+='<path marker-end="url(#tip)" data-r="'+k[0]+'" d="M'+x1.toFixed(1)+','+y1.toFixed(1)+' C'+(x1+dx).toFixed(1)+','+y1.toFixed(1)+' '+(x2-dx).toFixed(1)+','+y2.toFixed(1)+' '+x2.toFixed(1)+','+y2.toFixed(1)+'"/>';});
 svg.innerHTML=out}
-function highlight(raw){KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.classList.toggle('live',!!raw&&k[0]===raw)});
+function highlight(raw){
+KEYS.forEach(function(k){var el=$('k'+k[0]);if(el)el.classList.toggle('live',!!raw&&k[0]===raw)});
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('live',!!raw&&+e.dataset.r===raw)});
-Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)})}
-
+Array.prototype.forEach.call(document.querySelectorAll('#wires path'),function(p){p.classList.toggle('live',!!raw&&+p.dataset.r===raw)});
+Array.prototype.forEach.call(document.querySelectorAll('.learned-key'),function(e){var b=e.querySelector('[data-learned]');e.classList.toggle('heard',!!raw&&!!b&&+b.dataset.learned===raw)})
+}
 function memory(j){function kb(n){return typeof n==='number'&&n>=0?(n/1024).toFixed(1)+' KiB':'—'}
 if(typeof j.heapFree!=='number')return;
 $('memFree').textContent=kb(j.heapFree)+' 可用';$('memDetail').textContent='历史最低 '+kb(j.heapMin)+' · 最大连续块 '+kb(j.heapLargest);$('memState').textContent='更新于 '+new Date().toLocaleTimeString()+' · 约 5 秒更新';var valid=typeof j.heapTotal==='number'&&j.heapTotal>0&&j.heapFree>=0&&j.heapFree<=j.heapTotal,used=valid?100*(j.heapTotal-j.heapFree)/j.heapTotal:null;if($('memRing')){$('memRing').style.setProperty('--used',used===null?'0%':used+'%');$('memPct').textContent=used===null?'—':used.toFixed(1)+'%';$('memTotal').textContent=valid?'总堆内存 '+kb(j.heapTotal):'总堆内存未知';$('memRing').setAttribute('aria-label',used===null?'已使用内存比例未知':'已使用堆内存 '+used.toFixed(1)+'%')}}
-function stat(j){S.lastStatus=j;memory(j);var rc=!!j.remoteConnected,h=!!j.hostConnected;
-// Version and build stamp come from /api/status, i.e. from the running
+function connectionHint(j){var e=$("diag"),s=String(j&&j.remoteState||""),t=S.switching?"正在切换遥控器，请按一下任意键唤醒。":s==="DISCOVERING"?"正在发现服务，请按一下任意键唤醒。":s==="CONNECTING"||s==="DIRECT"?"正在连接，请按一下任意键唤醒。":s==="SCANNING"||s==="BACKOFF"?"正在搜索，请按一下任意键唤醒。":"";e.textContent=t;e.className=t?"wake":""}function stat(j){S.lastStatus=j;memory(j);if(j.remoteId&&slots&&slots[selectedSlot])slots[selectedSlot].identity=j.remoteId;var rc=!!j.remoteConnected,h=!!j.hostConnected;// Version and build stamp come from /api/status, i.e. from the running
 // firmware, not from the generated page bytes - so it can never go stale.
 if(j.type!=='status'||Object.prototype.hasOwnProperty.call(j,'fwVersion')||Object.prototype.hasOwnProperty.call(j,'buildTime'))$('ver').textContent=(j.fwVersion||'')+(j.buildTime?' · build '+j.buildTime:'');
 var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
 function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
 pill('pR',rc,rc?'遥控器已连接':'遥控器未连接');pill('pH',h,h?'被控蓝牙已连接':'被控蓝牙未连接');pill('pB',bat!=='未知',bat==='未知'?'电量未知':'电量 '+bat);
 $('h1').textContent=(rc&&h)?'RC003 已就绪':(rc?'遥控器已连接，等待主机':'等待遥控器连接');
-$('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。');if(typeof drawSlots==='function')drawSlots()}
+$('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。');
+connectionHint(j);if(typeof drawSlots==='function')drawSlots();
+if(typeof j.activeKey==='number')highlight(j.activeKey)}
 function load(manual){if(S.load||S.busy||$('ed').open||$('rd').open)return;S.load=true;const socket=S.ws;btns();
 return req('/api/slots').then(applySlots).then(function(){return req('/api/bindings')}).then(apply).then(function(){return req('/api/status')}).then(function(j){stat(j);online(socket===S.ws&&!!socket&&socket.readyState===1);if(manual)toast('已刷新')})
 .catch(function(e){if(e&&e.relogin){location.href='/login';return}
@@ -382,43 +387,44 @@ document.body.append(editor);
 opt('slotKey',KB);opt('slotCons',CS);
 let selectedSlot=0,editingKey=null,editingMods=0;
 
-let slots=[{name:'RC003',address:''},{name:'遥控器 02',address:''},{name:'遥控器 03',address:''}],learned=[];
+let slots=[{name:'RC003',address:'',identity:''},{name:'遥控器 02',address:'',identity:''},{name:'遥控器 03',address:'',identity:''}],learned=[];
 function applySlots(j){if(!Array.isArray(j.slots)||j.slots.length!==3||j.active<0||j.active>2)throw Error('槽位数据不完整');selectedSlot=j.active;slots=j.slots;learned=j.keys||[];S.slotBusy=!!j.busy;if(j.error)toast(j.error);drawSlots()}
 function slotTitle(i){return i===0?'RC003':slots[i].name||'遥控器 0'+(i+1)}
 function syncDefault(){drawSlots()}
 const ICON_CODES=['du','dd','dl','dr','p6','p7','p3','p4'];
+const COMMON_ICON_CODES={233:'p6',234:'p7'};
 function knownKey(raw){return KEYS.find(k=>k[0]===raw&&ICON_CODES.includes(k[4]))}
-function keyIcon(raw){const k=knownKey(raw);return k?icon(k)+' ':''}
+function keyIcon(raw){const k=knownKey(raw);if(k)return icon(k)+' ';const c=COMMON_ICON_CODES[raw];return c?icon([0,'','','',c])+' ':''}
 function keyTitle(k){return k.name||(knownKey(k.raw)||[])[1]||'按键 0x'+hx(k.raw)}
 function drawSlots(){
- $('slots').innerHTML=slots.map((s,i)=>{const active=i===selectedSlot,rc=active&&S.lastStatus&&S.lastStatus.remoteConnected,wake=active&&s.address&&!rc;
- return '<button class="slot '+(active?'selected':'')+'" data-slot="'+i+'" aria-pressed="'+active+'"><span class="slot-index">槽位 0'+(i+1)+(i===0?' · 小米预设':'')+'</span><strong>'+esc(slotTitle(i))+'</strong><span class="slot-link '+(rc?'linked':'')+'">'+(rc?'● 遥控器已连接':s.address?(active?'○ 正在连接':'○ 未启用'):'○ 未添加设备')+'</span><span class="slot-battery">'+(rc?(S.lastStatus.battery>=0?'电量 '+S.lastStatus.battery+'%':'电量未读取'):esc(s.address)||'点击添加设备')+'</span>'+(wake?'<span class="slot-wake">请按一下遥控器唤醒</span>':'')+'</button>'}).join('');
+ $('slots').innerHTML=slots.map((s,i)=>{const active=i===selectedSlot,rc=active&&S.lastStatus&&S.lastStatus.remoteConnected,rs=S.lastStatus&&S.lastStatus.remoteState,wake=active&&s.address&&!rc&&(S.switching||rs==="CONNECTING"||rs==="DIRECT"||rs==="DISCOVERING"||rs==="SCANNING"||rs==="BACKOFF");
+ return '<button class="slot '+(active?'selected':'')+'" data-slot="'+i+'" aria-pressed="'+active+'"><span class="slot-index">槽位 0'+(i+1)+(i===0?' · 小米预设':'')+'</span><strong>'+esc(slotTitle(i))+'</strong><span class="slot-link '+(rc?'linked':'')+'">'+(rc?'● 遥控器已连接':s.address?(active?'○ 正在连接':'○ 未启用'):'○ 未添加设备')+'</span><span class="slot-battery">'+(rc?(S.lastStatus.battery>=0?'电量 '+S.lastStatus.battery+'%':'电量未读取'):esc(s.address)||'点击添加设备')+'</span>'+(s.identity?'<span class="slot-id">设备标识：'+esc(s.identity)+'</span>':'')+(wake?'<span class="slot-wake">请按一下遥控器唤醒</span>':'')+'</button>'}).join('');
  $('slotSummary').textContent=slotTitle(selectedSlot)+' · 设置保存在开发板';
  $('pairRemote').hidden=!!slots[selectedSlot].address;$('deleteRemote').hidden=!slots[selectedSlot].address;
  section.querySelector('.head').innerHTML='<h2>'+esc(slotTitle(selectedSlot))+' · 按键映射</h2><span class="mut">点击按键编辑 · 自动保存</span>';
  $('grid').hidden=selectedSlot!==0;discovered.hidden=selectedSlot===0;
  if(selectedSlot===0){discovered.innerHTML='';drawWires()}
- else discovered.innerHTML='<div class="learn-banner"><b>逐个按下遥控器按键</b><span>最多记录 16 个按键，点击卡片设置快捷键。</span></div><div class="learned-keys">'+learned.map(k=>'<div class="k learned-key"><button data-learned="'+k.raw+'"><span class="r1">'+keyIcon(k.raw)+'<b>'+esc(keyTitle(k))+'</b></span><span class="r2"><span class="act">'+fmt(cur(k.raw)||{kind:0})+'</span><span class="ed">编辑 ›</span></span></button></div>').join('')+'</div>';
+ else discovered.innerHTML='<div class="learn-banner"><b>逐个按下遥控器按键</b><span>最多记录 128 个按键，点击卡片设置快捷键。</span></div><div class="learned-keys">'+learned.map(k=>'<div class="k learned-key"><button data-learned="'+k.raw+'"><span class="r1">'+keyIcon(k.raw)+'<b>'+esc(keyTitle(k))+'</b></span><span class="r2"><span class="act">'+fmt(cur(k.raw)||{kind:0})+'</span><span class="ed">编辑 ›</span></span></button></div>').join('')+'</div>';
  btns();
 }
 async function slotAction(action,slot){
  if(!S.on||S.busy||S.load||S.slotBusy)return;
- S.busy=true;btns();$('ed').close();editor.close();if(typeof pairing!=='undefined')pairing.close();
+  S.busy=true;S.switching=action==='select';if(S.switching)connectionHint({remoteState:'CONNECTING'});btns();$('ed').close();editor.close();if(typeof pairing!=='undefined')pairing.close();
  try{
   await req('/api/slot?slot='+slot+'&action='+action,'POST');
   for(let i=0;i<200;i++){const j=await req('/api/slots');applySlots(j);if(!j.busy){if(j.error)throw Error(j.error);break}if(i===199)throw Error('操作仍在进行，请稍候');await new Promise(r=>setTimeout(r,150))}
   await req('/api/bindings').then(apply);await req('/api/status').then(stat);
- }catch(e){toast(err(e))}finally{S.busy=false;btns()}
+ }catch(e){toast(err(e))}finally{S.busy=false;S.switching=false;connectionHint(S.lastStatus||{});btns()}
 }
 $('slots').onclick=e=>{const b=e.target.closest('[data-slot]');if(b&&+b.dataset.slot!==selectedSlot)slotAction('select',+b.dataset.slot)};
-const pairing=document.createElement('dialog');pairing.innerHTML='<div class="dh"><h2>选择遥控器</h2><button class="btn" id="pairClose">关闭</button></div><div class="db"><p>进入配对模式后选择设备，按信号强度排序。搜索阶段暂无 SN，请用名称和 MAC 区分。</p><div id="nearby"></div></div><div class="da"><button class="btn" id="scanRefresh">刷新搜索结果</button></div>';document.body.append(pairing);
+const pairing=document.createElement('dialog');pairing.innerHTML='<div class="dh"><h2>选择遥控器</h2><button class="btn" id="pairClose">关闭</button></div><div class="db"><p>进入配对模式后选择设备，按信号强度排序。搜索阶段显示设备名和 MAC；SN/CEMI/CMIIT 若设备通过标准 BLE 设备信息服务提供，会在连接后显示。</p><div id="nearby"></div></div><div class="da"><button class="btn" id="scanRefresh">刷新搜索结果</button></div>';document.body.append(pairing);
 $('pairClose').onclick=()=>pairing.close();
-async function nearby(){if(!S.on)return;try{const rows=await req('/api/nearby');$('nearby').innerHTML=rows.map(r=>'<p><button class="btn" data-address="'+esc(r.address)+'" data-type="'+r.type+'">'+esc(r.name||'未命名设备')+'<br>MAC: '+esc(r.address)+' · '+r.rssi+' dBm</button></p>').join('')||'正在搜索，请稍后刷新'}catch(e){toast(err(e))}}
+async function nearby(){if(!S.on)return;try{const rows=await req('/api/nearby');$('nearby').innerHTML=rows.map(r=>'<p><button class="btn" data-address="'+esc(r.address)+'" data-type="'+r.type+'">'+esc(r.name||'未命名设备')+'<br>MAC: '+esc(r.address)+' · '+r.rssi+' dBm<br>SN/CEMI/CMIIT：连接后读取</button></p>').join('')||'正在搜索，请稍后刷新'}catch(e){toast(err(e))}}
 $('scanRefresh').onclick=nearby;
 $('nearby').onclick=async e=>{const b=e.target.closest('[data-address]');if(!b||!S.on||S.busy)return;S.busy=true;btns();try{await req('/api/connect?address='+b.dataset.address+'&type='+b.dataset.type,'POST');pairing.close();toast('正在连接所选遥控器')}catch(e){toast(err(e))}finally{S.busy=false;btns()}};
 $('pairRemote').onclick=async()=>{if(S.on&&confirm('请先让新遥控器进入配对模式。开始搜索并添加到当前槽位？')){await slotAction('add',selectedSlot);if(!slots[selectedSlot].address){pairing.showModal();nearby();setTimeout(()=>{if(pairing.open)nearby()},3000)}}};
 
-$('deleteRemote').onclick=()=>{if(S.on&&confirm('删除当前槽位的设备配对？保留快捷键，添加新设备后可继续使用。'))return slotAction('delete',selectedSlot)};
+$('deleteRemote').onclick=()=>{if(S.on&&confirm('删除当前槽位的设备配对？同时删除该槽位已发现按键和快捷键，之后可重新添加。'))return slotAction('delete',selectedSlot)};
 discovered.onclick=e=>{const b=e.target.closest('[data-learned]');if(b)openSlotEditor(+b.dataset.learned)};
 MD.forEach(m=>{const b=document.createElement('button');b.className='m';b.textContent=m[1];b.dataset.bit=m[0];b.onclick=()=>{if(!S.on||S.busy)return;editingMods^=m[0];autoSave()};$('slotMods').append(b)});
 function openSlotEditor(raw){

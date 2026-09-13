@@ -140,7 +140,7 @@ keymap_voice_mode_t keymap_get_voice_mode(void);
 #define KEYMAP_BIND_KIND_KB   1      // keyboard: modifier + keycode
 #define KEYMAP_BIND_KIND_CONS 2      // consumer: 16-bit usage
 
-#define KEYMAP_MAX_BINDINGS 16
+#define KEYMAP_MAX_BINDINGS 128
 
 // Set (or with kind == KEYMAP_BIND_KIND_NONE, clear) the binding for one raw
 // code. Returns false when the table is full or the arguments are invalid.

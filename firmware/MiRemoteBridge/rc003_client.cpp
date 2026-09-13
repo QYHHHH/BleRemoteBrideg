@@ -103,6 +103,8 @@ String s_connectedAddr;
 String s_newPeer;
 uint8_t s_newPeerType=0;
 String s_connectedName;
+String s_connectedIdentity;
+bool s_identityReadAttempted = false;
 int s_lastRssi = 0;
 uint32_t s_lastReportMs = 0;
 uint32_t s_notifyCount = 0;
@@ -385,6 +387,45 @@ void requestBatteryRead() {
   if(rc) {s_batteryReadPending=false;BR_LOGW(kTagGatt,"battery request rc=%d",rc);}
 }
 
+// Read the optional standard Device Information serial number after the key
+// path is ready. SN/CEMI/CMIIT markings are often only printed on the case and
+// are not part of BLE advertising; when a remote exposes the standard 0x2A25
+// characteristic we can show it without guessing from arbitrary manufacturer
+// bytes.
+bool printableIdentity(const String &value) {
+  if (value.length() == 0 || value.length() > 64) return false;
+  for (size_t i = 0; i < value.length(); ++i) {
+    const uint8_t c = (uint8_t)value[i];
+    if (c < 0x20 || c == 0x7f) return false;
+  }
+  return true;
+}
+
+void readConnectedIdentity() {
+  if (s_identityReadAttempted || !s_client || !s_client->isConnected()) return;
+  s_identityReadAttempted = true;
+  BLERemoteService *info = s_client->getService(BLEUUID((uint16_t)0x180A));
+  if (!info) {
+    BR_LOGI(kTagGatt, "device information service absent; SN/CEMI/CMIIT not exposed over BLE");
+    return;
+  }
+  BLERemoteCharacteristic *serial = info->getCharacteristic(BLEUUID((uint16_t)0x2A25));
+  if (!serial || !serial->canRead()) {
+    BR_LOGI(kTagGatt, "device information has no readable serial number (0x2A25)");
+    return;
+  }
+  const String value = serial->readValue();
+  if (!printableIdentity(value)) {
+    BR_LOGW(kTagGatt, "device serial unavailable or non-printable");
+    return;
+  }
+  s_connectedIdentity = value;
+  if (!settings::setRc003Identity(value))
+    BR_LOGW(kTagGatt, "device serial read but could not persist");
+  else
+    BR_LOGI(kTagGatt, "device serial=%s", value.c_str());
+}
+
 // ---------------------------------------------------------------------------
 // Client callbacks - NimBLE host task context. Post events only.
 // ---------------------------------------------------------------------------
@@ -403,6 +444,8 @@ class ClientCallbacks : public BLEClientCallbacks {
     s_charAtvvCtl = nullptr;
     s_charBattery = nullptr;
     s_batteryReadPending=false;
+    s_connectedIdentity = "";
+    s_identityReadAttempted = false;
     s_remoteBatteryValid = false;
     s_subscribed = false;
     s_notifyHandleCount=0;
@@ -1147,6 +1190,9 @@ void taskLoop() {
         setState(St::SCANNING, "link gone");
         break;
       }
+      // Read the optional Device Information serial after the link is usable;
+      // this keeps HID subscriptions and slot switching responsive.
+      readConnectedIdentity();
       // Read on the central task: some remotes never send battery notifications.
       // No timer task or retained payload; unchanged values do not reach NVS.
       if(BRIDGE_BATTERY_PASSTHROUGH && nowMs()-s_lastBatteryReadMs>=60000) requestBatteryRead();
@@ -1220,7 +1266,17 @@ void serviceSlot() {
   if (ok && s_slotAction==2) {
     ok=ble_bonds::deleteSlot(s_slotTarget,
         settings::hasRc003() ? BLEAddress(settings::rc003Address(),settings::rc003AddrType()) : BLEAddress());
-    if(ok) { settings::clearRc003(); settings::setPairingEnabled(false); }
+    if(ok) {
+      if (s_slotTarget > 0) {
+        // A deleted third-party slot starts clean: address, bond metadata,
+        // learned keys, names and all shortcut bindings are removed together.
+        ok = settings::clearActiveSlot();
+        if (ok) ok = settings::selectSlot(s_slotTarget);
+      } else {
+        settings::clearRc003();
+        settings::setPairingEnabled(false);
+      }
+    }
   }
   if (ok && s_slotAction==1) {
     if (settings::hasRc003()) ok=false; // Delete explicitly before adding.
@@ -1234,7 +1290,7 @@ void serviceSlot() {
     settings::selectSlot(old);
     if(addr.length()) ble_bonds::restoreSlot(old,BLEAddress(addr,type));
   }
-  s_connectedAddr=""; s_connectedName="";
+  s_connectedAddr=""; s_connectedName=""; s_connectedIdentity=""; s_identityReadAttempted=false;
   s_remoteBatteryValid=false; s_scanBurstStartMs=0; s_directAttempts=0;
   rc003_tracker_reset(&s_tracker);
   setState(St::IDLE,"slot operation");
@@ -1340,6 +1396,7 @@ bool notified() { return s_subscribed; }
 String boundAddress() { return settings::hasRc003() ? settings::rc003Address() : String("(none)"); }
 String connectedAddress() { return s_connectedAddr.length() ? s_connectedAddr : String("(none)"); }
 String connectedName() { return s_connectedName.length() ? s_connectedName : String("(none)"); }
+String connectedIdentity() { return s_connectedIdentity; }
 int lastRssi() { return s_lastRssi; }
 
 int lastReportAgeMs() {

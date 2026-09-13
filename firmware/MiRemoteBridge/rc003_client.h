@@ -42,6 +42,7 @@ bool notified();                   // notifications are subscribed and flowing
 String boundAddress();
 String connectedAddress();
 String connectedName();
+String connectedIdentity();
 int lastRssi();
 int lastReportAgeMs();
 uint32_t notifyCount();

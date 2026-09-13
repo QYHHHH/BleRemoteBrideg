@@ -93,9 +93,9 @@ TESTS = r"""(async () => {
   await slotAction('select',1);
   assert(S.b[144].key===4,'switch back restores previous mapping');
   await slotAction('delete',1);
-  assert(!slots[1].address&&S.b[144].key===4,'device deletion retains shortcut configuration');
+  assert(!slots[1].address&&!S.b[144]&&learned.length===0,'device deletion clears discovered keys and shortcuts');
   await slotAction('add',1);await req('/api/connect?address=00:11:22:33:44:01&type=0','POST');await load();await reset();
-  assert(slots[1].address&&!S.b[144]&&learned.length===1,'shortcut reset retains pairing and discovered keys');
+  assert(slots[1].address&&!S.b[144]&&learned.length===0,'shortcut reset retains pairing after deleted keys stay cleared');
   await slotAction('select',0);
   assert(document.querySelectorAll('.k').length===13,'13 key cards');
   assert(document.querySelectorAll('#rmArt [data-r]').length===13,'13 remote hotspots');

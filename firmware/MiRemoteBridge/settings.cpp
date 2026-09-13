@@ -31,6 +31,7 @@ Preferences &remotePrefs() { return s_slot ? s_slotPrefs : s_prefs; }
 const char *kKeyRcAddr = "rc_addr";
 const char *kKeyRcType = "rc_type";
 const char *kKeyRcName = "rc_name";
+const char *kKeyRcIdentity = "rc_id";
 const char *kKeyRaw = "log_raw";
 const char *kKeyLat = "log_lat";
 const char *kKeyLevel = "log_lvl";
@@ -101,6 +102,23 @@ bool slotInfo(uint8_t slot, String &address, String &name, uint8_t &type) {
   type = p->getUChar(kKeyRcType, BLE_ADDR_PUBLIC);
   return true;
 }
+String slotIdentity(uint8_t slot) {
+  if (slot > 2) return String("");
+  Preferences temp;
+  Preferences *p = &s_prefs;
+  if (slot) {
+    char ns[12]; snprintf(ns, sizeof(ns), "mrb_slot%u", slot);
+    if (!temp.begin(ns, true)) return String("");
+    p = &temp;
+  }
+  return p->getString(kKeyRcIdentity, "");
+}
+
+bool clearActiveSlot() {
+  if (!s_ready || !s_slot) return false;
+  return remotePrefs().clear();
+}
+
 bool pairingEnabled() { return remotePrefs().getBool("pairing", false); }
 void setPairingEnabled(bool enabled) { remotePrefs().putBool("pairing", enabled); }
 size_t learnedKeys(uint8_t *out, size_t cap) {
@@ -167,11 +185,20 @@ bool setRc003(const String &address, uint8_t addrType, const String &name) {
   return true;
 }
 
+bool setRc003Identity(const String &identity) {
+  if (!s_ready || identity.length() > 64) return false;
+  if (!identity.length()) { remotePrefs().remove(kKeyRcIdentity); return true; }
+  return remotePrefs().putString(kKeyRcIdentity, identity) == identity.length();
+}
+
+String rc003Identity() { return s_ready ? remotePrefs().getString(kKeyRcIdentity, "") : String(""); }
+
 void clearRc003() {
   if (!s_ready) return;
   remotePrefs().remove(kKeyRcAddr);
   remotePrefs().remove(kKeyRcType);
   remotePrefs().remove(kKeyRcName);
+  remotePrefs().remove(kKeyRcIdentity);
   remotePrefs().remove(kKeyBatteryValid);
   remotePrefs().remove(kKeyBattery);
 }

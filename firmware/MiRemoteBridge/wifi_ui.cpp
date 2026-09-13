@@ -59,7 +59,8 @@ constexpr uint32_t kAutoStartDelayMs = 8000;
 // One active HTTP exchange, bounded accept backlog. Browsers may queue asset
 // requests; they do not allocate unbounded application buffers on the MCU.
 constexpr size_t kHeaderLimit = 1536;
-constexpr size_t kIoCapacity = 3072;
+// 128 keys with names plus bindings must fit one bounded JSON response.
+constexpr size_t kIoCapacity = 16384;
 constexpr size_t kIoPerLoop = 1024;
 constexpr uint32_t kProgressTimeoutMs = 4000;
 // How long a finished keep-alive socket may hold the single exchange slot while
@@ -331,10 +332,11 @@ void handleSlots(bool head) {
   out.quoted(rc003_client::slotError());
   out.add(",\"slots\":[");
   for(uint8_t i=0;i<3;i++) {
-    String addr,name; uint8_t type; settings::slotInfo(i,addr,name,type);
+    String addr,name,id; uint8_t type; settings::slotInfo(i,addr,name,type); id=settings::slotIdentity(i);
     if(i) out.add(",");
     out.add("{\"address\":");out.quoted(addr.c_str());
     out.add(",\"name\":");out.quoted(name.c_str());
+    out.add(",\"identity\":");out.quoted(id.c_str());
     out.add("}");
   }
   out.add("],\"keys\":[");
@@ -361,6 +363,9 @@ void handleStatus(bool head) {
   out.add(",\"remoteName\":");
   const String remote = rc003_client::connectedName();
   out.quoted(remote.c_str());
+  out.add(",\"remoteId\":");
+  const String remoteId = rc003_client::connectedIdentity();
+  out.quoted(remoteId.c_str());
   out.add(",\"battery\":%d,\"bindings\":%u,\"mode\":\"%s\",\"ip\":\"%s\",\"uptimeMs\":%lu",
       rc003_client::batteryLevel(), (unsigned)keymap_binding_count(), wifi_ui::mode(), wifi_ui::ip(),
       (unsigned long)millis());
