@@ -240,7 +240,7 @@ opt('key',KB);opt('cons',CS);
 MD.forEach(function(m){var b=document.createElement('button');b.type='button';b.className='m';b.dataset.bit=m[0];b.textContent=m[1];b.setAttribute('aria-pressed','false');
 b.onclick=function(){S.mods^=m[0];draft()};$('mods').appendChild(b)});
 function setSel(id,v){if(!Array.prototype.some.call($(id).options,function(o){return +o.value===v}))$(id).add(new Option('HID 0x'+hx(v),String(v)));$(id).value=String(v)}
-function btns(){var L=S.busy||S.load||S.slotBusy;Array.prototype.forEach.call(document.querySelectorAll('[data-r],[data-learned],#resetAll,#uiReset,#pairRemote,#deleteRemote,[data-slot],#simulateBind,#simulateKey,#simulateRepeat,#slotEditor input,#slotEditor select,#slotEditor .m,#slotDelete'),function(e){e.disabled=!S.ok||!S.on||L});
+function btns(){var L=S.busy||S.load||S.slotBusy;Array.prototype.forEach.call(document.querySelectorAll('[data-r],[data-learned],#resetAll,#uiReset,#pairRemote,#deleteRemote,#simulateBind,#simulateKey,#simulateRepeat,#slotEditor input,#slotEditor select,#slotEditor .m,#slotDelete'),function(e){e.disabled=!S.ok||!S.on||L});Array.prototype.forEach.call(document.querySelectorAll('[data-slot]'),function(e){e.disabled=!S.ok||!S.on||S.load});
 Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=!S.on||L});
 $('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
 function online(v,why){S.on=v;if(!v)$('memState').textContent='连接已断开 · 数值为上次采样';$('off').hidden=v;var p=$('pW');if(p){p.className='pill '+(v?'ok':'off');p.lastChild.textContent=v?'网页控制已连接':'网页控制已断开';p.title=v?'网页已获得开发板控制权':'点击重新连接并夺回控制权'}btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
@@ -407,16 +407,16 @@ function drawSlots(){
  else discovered.innerHTML='<div class="learn-banner"><b>逐个按下遥控器按键</b><span>最多记录 128 个按键，点击卡片设置快捷键。</span></div><div class="learned-keys">'+learned.map(k=>'<div class="k learned-key"><button data-learned="'+k.raw+'"><span class="r1">'+keyIcon(k.raw)+'<b>'+esc(keyTitle(k))+'</b></span><span class="r2"><span class="act">'+fmt(cur(k.raw)||{kind:0})+'</span><span class="ed">编辑 ›</span></span></button></div>').join('')+'</div>';
  btns();
 }
+let slotSeq=0;
 async function slotAction(action,slot){
- if(!S.on||S.busy||S.load||S.slotBusy)return;
-  S.busy=true;S.switching=action==='select';if(S.switching)connectionHint({remoteState:'CONNECTING'});btns();$('ed').close();editor.close();if(typeof pairing!=='undefined')pairing.close();
+ if(!S.on||S.load||((S.busy||S.slotBusy)&&!(action==='select'&&slot!==selectedSlot)))return;
+ const seq=++slotSeq;S.busy=true;S.switching=action==='select';if(S.switching)connectionHint({remoteState:'CONNECTING'});btns();$('ed').close();editor.close();if(typeof pairing!=='undefined')pairing.close();
  try{
   await req('/api/slot?slot='+slot+'&action='+action,'POST');
-  for(let i=0;i<200;i++){const j=await req('/api/slots');applySlots(j);if(!j.busy){if(j.error)throw Error(j.error);break}if(i===199)throw Error('操作仍在进行，请稍候');await new Promise(r=>setTimeout(r,150))}
+  for(let i=0;i<200;i++){const j=await req('/api/slots');if(seq!==slotSeq)return;applySlots(j);if(!j.busy){if(j.error)throw Error(j.error);break}if(i===199)throw Error('操作仍在进行，请稍候');await new Promise(r=>setTimeout(r,150))}
   await req('/api/bindings').then(apply);await req('/api/status').then(stat);
- }catch(e){toast(err(e))}finally{S.busy=false;S.switching=false;connectionHint(S.lastStatus||{});btns()}
-}
-$('slots').onclick=e=>{const b=e.target.closest('[data-slot]');if(b&&+b.dataset.slot!==selectedSlot)slotAction('select',+b.dataset.slot)};
+ }catch(e){if(seq===slotSeq)toast(err(e))}finally{if(seq===slotSeq){S.busy=false;S.switching=false;connectionHint(S.lastStatus||{});btns()}}
+}$('slots').onclick=e=>{const b=e.target.closest('[data-slot]');if(b&&+b.dataset.slot!==selectedSlot)slotAction('select',+b.dataset.slot)};
 const pairing=document.createElement('dialog');pairing.innerHTML='<div class="dh"><h2>选择遥控器</h2><button class="btn" id="pairClose">关闭</button></div><div class="db"><p>进入配对模式后选择设备，按信号强度排序。搜索阶段显示设备名和 MAC；SN/CEMI/CMIIT 若设备通过标准 BLE 设备信息服务提供，会在连接后显示。</p><div id="nearby"></div></div><div class="da"><button class="btn" id="scanRefresh">刷新搜索结果</button></div>';document.body.append(pairing);
 $('pairClose').onclick=()=>pairing.close();
 async function nearby(){if(!S.on)return;try{const rows=await req('/api/nearby');$('nearby').innerHTML=rows.map(r=>'<p><button class="btn" data-address="'+esc(r.address)+'" data-type="'+r.type+'">'+esc(r.name||'未命名设备')+'<br>MAC: '+esc(r.address)+' · '+r.rssi+' dBm<br>SN/CEMI/CMIIT：连接后读取</button></p>').join('')||'正在搜索，请稍后刷新'}catch(e){toast(err(e))}}
