@@ -1084,7 +1084,7 @@ void dispatch() {
   if(post && expectedSlot>=0 && expectedSlot!=settings::activeSlot()) {
     errorResponse(409,"Conflict","active slot changed");return;
   }
-  if (post && rc003_client::slotBusy()) {
+  if (post && rc003_client::slotBusy() && strcmp(target, "/api/slot") != 0) {
     errorResponse(409,"Conflict","slot changing"); return;
   }
   if (isLogin) {

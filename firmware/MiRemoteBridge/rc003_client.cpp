@@ -939,6 +939,30 @@ void clearPending() {
   s_pendValid = false;
   portEXIT_CRITICAL(&s_pendMux);
 }
+// A slot request can arrive while the central task is inside the blocking
+// NimBLE connect wait.  Setting s_slotBusy alone is not enough in that case:
+// the task cannot reach its normal disconnect branch until BLEClient::connect
+// returns.  Cancel the GAP procedure from the loop that received the request;
+// the central task then observes the cancelled connect and completes the slot
+// handoff on its next tick.
+void cancelCentralOperation() {
+  BLEScan *scan = BLEDevice::getScan();
+  if (scan->isScanning()) scan->stop();
+
+  if (s_state == St::CONNECTING) {
+    const int rc = ble_gap_conn_cancel();
+    if (rc != 0 && rc != BLE_HS_ENOTCONN && rc != BLE_HS_EALREADY)
+      BR_LOGW(kTag, "cancel pending connect rc=%d", rc);
+    else
+      BR_LOGI(kTag, "pending connect cancelled for slot operation");
+  }
+
+  // Discovery/security calls are also interruptible through the live link.
+  // The central task still owns all follow-up state changes; this call only
+  // asks NimBLE to terminate the current link promptly.
+  if (s_client && s_client->isConnected() && s_state != St::READY)
+    s_client->disconnect();
+}
 
 // ---------------------------------------------------------------------------
 // Request handling
@@ -1246,10 +1270,14 @@ bool discardUnassigned(const String &address, uint8_t type) {
 bool slotBusy() { return s_slotBusy; }
 const char *slotError() { return s_slotError; }
 bool requestSlot(uint8_t slot, uint8_t action) {
-  if (slot>2 || action>2 || s_slotBusy || !hid_server::slotSwitchSafe()) return false;
+  if (slot>2 || action>2 || !hid_server::slotSwitchSafe()) return false;
+  // Retargeting a pending slot operation is safe: serviceSlot() runs in the
+  // Arduino loop, so a request cannot arrive while its NVS handoff is active.
+  // This also lets a second click replace an add/select that is still waiting
+  // for BLE to stop.
   s_slotTarget=slot; s_slotAction=action; s_slotError="";
   s_slotPaused=false; s_slotBusy=true;
-  BLEScan *scan=BLEDevice::getScan();if(scan->isScanning())scan->stop();
+  cancelCentralOperation();
   return true;
 }
 void serviceSlot() {
