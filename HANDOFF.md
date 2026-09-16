@@ -14,8 +14,11 @@
 免驱、免伴侣程序。
 
 **边界**（用户明确的红线）：只做按键转发；不做音频/USB/驱动/注入/宏。Web 配置界面
-**已从按需改为常开**（只要存过 Wi-Fi 凭据，开机后自行起来；`wifi off` / `wifi ap off`
-只回一句拒绝提示）。射频与内存是被 BLE 与 Wi-Fi 分摊的，但配置可达性优先。
+**默认不在网络上**——开机不自动连 Wi-Fi，**短按 BOOT 键**或串口 `wifi on` 打开
+30 分钟窗口（计时从拿到 IP 起），到点主动关 Wi-Fi（`WiFi.disconnect(true)` +
+`WIFI_OFF`，BLE 不受影响）。窗口期内任何续期操作（再按 BOOT / `wifi on` /
+页面"再开 30 分钟"按钮）都重置倒计时。射频与内存是被 BLE 与 Wi-Fi 分摊的，
+但配置可达性优先这条不变。
 
 **许可**：GPL-3.0-or-later（2026-09-11 应作者决定由 MIT 改为 GPL-3.0，全树 SPDX
 已更新）。要开源发布，README 已按对外标准写好。
@@ -111,18 +114,19 @@ README 早已不含英文版与 CI 的计划，那条已删除。）
 - **Git**：关键节点自动提交，**中文提交信息**（见 `AGENTS.md`）并注明验证程度
   （编译验证 vs 真机验证）。已有 103 次提交，历史在 Git 里可追溯，不要重建仓库。
 - **文档**：用户要求项目开源，README 面向对外发布；一切"实测/未实测"严格区分。
-- **Wi-Fi 是常开的，关不掉**：`wifi off` / `wifi ap off` 都被明确拒绝
-  （见 `cli.cpp` 的 wifi 分支与 `wifi_ui.h` 的 ALWAYS-ON 注释）。**别再写
-  "不用时 `wifi off`" 这类指引**——它已经不成立，README 早期版本也留过这种残留。
-  Wi-Fi 与 BLE 共存吃 ~50KB 堆 + 射频时间，这是已知代价，不是待办。
+- **Web 配置是按需 30 分钟窗口，**不是**常开**：`wifi on` 打开窗口（计时从拿到
+  IP 起），`wifi off` 现在**真的能关**。**短按 BOOT 键**也是打开入口，且会重置
+  倒计时。实现见 `cli.cpp` 的 wifi 分支、`wifi_ui.cpp` 的 `kWindowMs` 常量、
+  `wifi_ui.h` 的头注释。`AUTH.md` 写了"为什么这么做"（替代旧密码机制）。
+  Wi-Fi 与 BLE 共存吃 ~50KB 堆 + 射频时间，这是已知代价。
 
 ## 6. 已知问题 / 注意
 
 - 板子 USB 偶发掉线（`CM_PROB_PHANTOM`）——硬件/线材问题，重插即可。
 - `bind` 的 keycode 语义约定**全 hex**（`bind 3e ...` = 0x3E 语音键）。
-- Web UI 现在走 **STA 模式**（加入家里 Wi-Fi 拿 DHCP 地址，`wifi on` 会打印，
-  也记在 `build/.boardip`），不再是 AP 热点。原因：AP 模式下 DHCP 在 BLE 共存时的
-  ~13.5 KB 堆水位起不来（客户端关联成功却拿不到 IP → `169.254.x.x`），见
+- Web UI 在窗口期内走 **STA 模式**（加入家里 Wi-Fi 拿 DHCP 地址，地址记在
+  `build/.boardip`）。`wifi ap on` 仍然是兜底热点。原因：AP 模式下 DHCP 在 BLE
+  共存时的 ~13.5 KB 堆水位起不来（客户端关联成功却拿不到 IP → `169.254.x.x`），见
   `docs/TESTING.md` §4.13。**所以别再按 "192.168.4.1 热点" 那套流程测。**
 - **socket 只推小帧**（帧上限 768 B）：整张绑定表走 HTTP。往 socket 里塞大 JSON 会被
   丢弃，这是曾经卡死页面一整天的根因，见 `docs/HANDOFF-websocket-debug.md` §4。
@@ -163,17 +167,12 @@ README 早已不含英文版与 CI 的计划，那条已删除。）
 ## 7. 立即可做的验证
 
 ```powershell
-# 物理按键（需要人手）：短按 BOOT 应只出日志不重启；长按 5s 清全部配对（危险）
-# 四项硬件检查一次跑完（前提：板子 Wi-Fi 可达 —— 先 python build/wifi_on.py）：
+# 物理按键（需要人手）：短按 BOOT 应打开 30 分钟窗口；长按 5s 清全部配对（危险）
+# 两项硬件检查一次跑完（前提：板子 Wi-Fi 在 30 分钟窗口内 —— 短按 BOOT 或 wifi_on.py）：
 #   python tests/tools/check_all.py
-#     auth_guard_check   HTTP 层：认证路由/改密门/会话 cookie/token 门（不需要浏览器）
-#     preconnect_probe   socket 层：槽位是否及时释放（只发 HTTP，不重启板子、不碰密码）
-#     browser_check      页面层：真 Chrome 读 live DOM（渲染/绑定/WS/按键实时推送）
-#     mobile_login_check 手机层：模拟 iPhone 走真实表单完成设置密码与登录
-#   ⚠ 后三个会 `pass clear` 板子上的密码，跑完板子处于"首次设置"状态，
-#     /login 会拒绝一切输入。check_all.py 结尾会打印它留下的认证状态。
-#     （`pass clear` 本身不重启；重启是"打开串口"那一下的 RTS 脉冲造成的，
-#      所以只有开端口的那次调用需要等，见 tests/tools/board_auth.py）
+#     preconnect_probe   socket 层：槽位是否及时释放（只发 HTTP，不重启板子、不改键）
+#     browser_check      页面层：真 Chrome 读 live DOM（渲染/绑定/WS/倒计时/按键推送）
+#   跑完板子保持在原状态；与旧的"会清密码"不同，不再需要收尾步骤。
 # 不接板子先跑宿主侧全套（含页面断言，约 1 秒，只需要 Chrome + Python）：
 #   .\scripts\test.ps1
 #   python tests/tools/check_web_ui.py            # 闪存预算 + 161 项页面断言

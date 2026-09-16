@@ -864,17 +864,17 @@ esptool 直接以 **1 500 000** 波特率烧录为 649.8 kbit/s / 16.4 s——**
 | 落键 → 帧到达 | 数毫秒级（长轮询版实测 23 ms，WS 更短） |
 | 保活 | 服务端每 10 s ping；对端静默 30 s 即断开释放服务槽 |
 
-**认证**（HTTP Basic + WebSocket 令牌）：
+**窗口与跨域**（无认证，30 分钟窗口 + Host 白名单）：
 
 ```
-无凭据             → 401 + realm "…setup - choose a console password"
-首次带凭据         → 200，密码写入 NVS（SHA1）
-同一凭据           → 200
-错误密码           → 401 + realm "MiRemoteBridge web console"
-GET /api/token     → {"token":"…"}（受 Basic 保护）
-/ws?token=<正确>   → 101
-/ws?token=<错误>   → 401
-pass clear（串口） → 清除密码，回到 setup 模式
+短按 BOOT（< 3 s）        → 板子加入 Wi-Fi，从拿到 IP 起 30 分钟窗口开始
+串口 wifi on                → 等价
+GET /api/window            → {"active":true,"remaining":<sec>}
+GET /api/window/extend     → 重置 30 分钟计时
+窗口到期                    → 板子主动 WiFi.mode(WIFI_OFF)；页面 ~1 s 内显示 closed overlay
+Host: <LAN IP>.local       → 放行
+Host: evil.com             → 403 "host header not on this device's LAN"（防 DNS rebinding）
+POST /api/set              → 校验 Origin == http://<Host> + Sec-Fetch-Site
 ```
 
 **忘记密码的出路**：BOOT 长按 5 秒 → `settings::clearAll()` 用
@@ -1127,7 +1127,7 @@ Connect 即可（ESP Web Tools 那一套）。
 >
 > - **已实测安全**：MobaXterm 的普通串口（2026-09-16，连上 20 秒，日志里没有
 >   任何 `[BUTTON ]` 行，GPIO9 全程为高）；`scripts/monitor.ps1 -Seconds`
->   （显式 `DtrEnable = $false`，`tests/tools/board_auth.py` 同理）。
+>   （显式 `DtrEnable = $false`）。
 > - **未核实**：`monitor.ps1` 不带 `-Seconds` 的交互模式走 `arduino-cli monitor`；
 >   PuTTY / SSCOM 等第三方工具。
 >
