@@ -1094,7 +1094,7 @@ Connect 即可（ESP Web Tools 那一套）。
 | --- | --- | --- | --- | --- |
 | 34 | 端口被识别 | 打开网页点 Connect，看端口列表 | 列出 CH343 那个口；取消选择会弹出组件自带的驱动提示框 | ☐ |
 | 35 | 设备信息 | 选口后页面读到的设备信息 | 名称 `Mi Remote Bridge`、固件 `MiRemoteBridge` / `v0.0.4`、芯片字段 `esp32c3/esp32-c3` | ☐ |
-| 36 | **DTR 冲突（最要紧）** | 保持端口连接 30 秒以上，什么都不做 | 板子**不重启、不进下载模式、不恢复出厂**。若出现其中任一情况，就是 DTR→GPIO9 这条接线的问题 | ☐ |
+| 36 | **DTR 冲突（最要紧）** | 用网页保持端口连接 30 秒以上，什么都不做（**不是**普通串口软件，后者见下方注） | 板子**不重启、不进下载模式、不恢复出厂**。若出现其中任一情况，就是 DTR→GPIO9 这条接线的问题 | ☐ |
 | 37 | 配网成功 | 选 Wi-Fi、填密码、提交 | 串口出现 `[IMPROV] credentials for "..." received; joining`；随后网页自动跳到 `http://<ip>/`；`wifi status` 显示 `READY (sta)` | ☐ |
 | 38 | 配错密码 | 故意填错密码 | 约 20 秒后网页提示连接失败，且**可以再试一次**（不会卡在"连接中"） | ☐ |
 | 39 | 换网络重配 | 对已联网的板子再配一次另一个网络 | 切到新网络，配置页仍可访问（HTTP 监听器跨重连存活） | ☐ |
@@ -1113,10 +1113,15 @@ Connect 即可（ESP Web Tools 那一套）。
 > 所以端口打开后毫秒级就有合法帧进来，5 秒判定那一刻 `sessionActive()` 必然为真，
 > 防护生效 —— **这一项现在有代码依据，不再是纯猜测。**
 >
-> 仍未覆盖的是**浏览器里的串口控制台**（esp-web-tools 的 `ewt-console` 组件）：它
-> 同样置位 DTR，但走文本通道、不发 Improv 帧，防护不适用。用浏览器控制台看日志
-> 超过 5 秒仍会触发恢复出厂。本项目自己的 `scripts/monitor.ps1` 不受影响 ——
-> 它显式设了 `DtrEnable = $false`（`tests/tools/board_auth.py` 同理）。另见 HANDOFF §5。
+> 仍未覆盖的是**所有"只收不发"的串口软件**：esp-web-tools 的串口控制台
+> （`ewt-console` 组件）、PuTTY、SSCOM / 各类串口助手都是这一类。它们同样可能
+> 置位 DTR，但走文本通道、不发 Improv 帧，所以防护不适用 —— DTR 连续置位满
+> 5 秒就会触发恢复出厂。**判断方法**：打开软件后看日志里有没有
+> `[BUTTON ] key pressed`，有就说明这个软件置位了 DTR。
+>
+> 本项目 `scripts/monitor.ps1 -Seconds` 不受影响（显式设了 `DtrEnable = $false`，
+> `tests/tools/board_auth.py` 同理）；**不带 `-Seconds` 的交互模式走的是
+> `arduino-cli monitor`，DTR 行为未核实**，用之前建议先扫一眼日志。另见 HANDOFF §5。
 
 ### 5.4 延迟测量
 
