@@ -9,13 +9,13 @@
   :root{
     --bg:#ffffff;
     --panel:#fafafa;
-    --line:#e9e9ec;
+    --line:#ebebef;
     --line-strong:#d8d8dd;
     --ink:#14161a;
     --ink-2:#4b5058;
     --ink-3:#8a9099;
     --accent:#14161a;
-    --radius:16px;
+    --radius:18px;
   }
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%}
@@ -24,15 +24,19 @@
     background:var(--bg);
     color:var(--ink);
     font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
-    font-size:16px;
-    line-height:1.65;
+    font-size:17px;
+    line-height:1.7;
     -webkit-font-smoothing:antialiased;
   }
   a{color:inherit}
-  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
   .eyebrow{
     font-size:12px;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--ink-3);font-weight:600;margin:0 0 12px;
+    color:var(--ink-3);font-weight:600;margin:0 0 14px;
+  }
+  .num{
+    display:inline-block;font-size:13px;font-weight:600;
+    color:var(--ink-3);letter-spacing:.04em;margin-bottom:12px;
   }
 
   /* ---------- nav ---------- */
@@ -42,25 +46,25 @@
     backdrop-filter:saturate(180%) blur(12px);
     border-bottom:1px solid var(--line);
   }
-  .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
-  .brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:-.01em}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:-.01em;font-size:16px}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--ink);flex:none}
-  .nav a{font-size:14px;color:var(--ink-2);text-decoration:none;margin-left:26px}
+  .nav a{font-size:14px;color:var(--ink-2);text-decoration:none;margin-left:28px}
   .nav a:hover{color:var(--ink)}
 
   /* ---------- hero ---------- */
-  .hero{padding:88px 0 64px}
+  .hero{padding:120px 0 96px}
   h1{
-    font-size:clamp(34px,5.4vw,54px);
-    line-height:1.12;letter-spacing:-.035em;font-weight:600;
-    margin:0 0 20px;max-width:16ch;
+    font-size:clamp(40px,5.8vw,62px);
+    line-height:1.08;letter-spacing:-.04em;font-weight:600;
+    margin:0 0 24px;max-width:18ch;
   }
-  .lede{font-size:19px;color:var(--ink-2);max-width:56ch;margin:0 0 32px}
+  .lede{font-size:21px;color:var(--ink-2);max-width:60ch;margin:0 0 36px;line-height:1.5}
   .lede b{color:var(--ink);font-weight:600}
   .hero-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   .btn{
     display:inline-flex;align-items:center;gap:8px;
-    height:44px;padding:0 22px;border-radius:999px;
+    height:48px;padding:0 24px;border-radius:999px;
     font-size:15px;font-weight:500;text-decoration:none;
     border:1px solid transparent;cursor:pointer;
     transition:transform .12s ease,background .15s ease,border-color .15s ease,opacity .15s;
@@ -70,13 +74,14 @@
   .btn-dark:hover{background:#000}
   .btn-ghost{background:#fff;color:var(--ink);border-color:var(--line-strong)}
   .btn-ghost:hover{border-color:var(--ink)}
-  .meta-note{font-size:13px;color:var(--ink-3);margin-top:18px}
+  .meta-note{font-size:14px;color:var(--ink-3);margin-top:22px}
 
   /* ---------- sections ---------- */
-  section{padding:56px 0}
-  .sec-head{margin-bottom:28px}
-  h2{font-size:26px;letter-spacing:-.02em;font-weight:600;margin:0 0 8px}
-  .sec-sub{color:var(--ink-2);margin:0;max-width:62ch}
+  section{padding:80px 0}
+  .sec-head{margin-bottom:36px;max-width:780px}
+  h2{font-size:34px;letter-spacing:-.025em;font-weight:600;margin:0 0 14px;line-height:1.2}
+  h3{font-size:18px;letter-spacing:-.01em;font-weight:600;margin:0}
+  .sec-sub{color:var(--ink-2);margin:0;font-size:18px;max-width:64ch}
 
   .card{
     background:var(--panel);
@@ -84,30 +89,67 @@
     border-radius:var(--radius);
   }
 
+  /* ---------- use cases ---------- */
+  .cases{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .case{
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    padding:30px;transition:border-color .15s,box-shadow .15s;
+  }
+  .case:hover{border-color:var(--line-strong);box-shadow:0 2px 4px rgba(0,0,0,.03)}
+  .case .ico{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:38px;height:38px;border-radius:11px;
+    background:var(--panel);border:1px solid var(--line);
+    margin-bottom:18px;color:var(--ink);
+  }
+  .case .ico svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .case h3{margin:0 0 6px;font-size:18px}
+  .case p{margin:0;font-size:15px;color:var(--ink-2);line-height:1.6}
+
   /* ---------- diagram ---------- */
-  .diagram{padding:28px;text-align:center}
+  .diagram{padding:36px;text-align:center}
   .diagram img{max-width:100%;height:auto;display:block;margin:0 auto}
-  .diagram figcaption{font-size:13px;color:var(--ink-3);margin-top:18px}
+  .diagram figcaption{font-size:14px;color:var(--ink-3);margin-top:22px}
+
+  /* ---------- product showcase ---------- */
+  .showcase{display:flex;flex-direction:column;gap:48px}
+  .row{display:grid;grid-template-columns:1.05fr 1fr;gap:56px;align-items:center}
+  .row.flip{grid-template-columns:1fr 1.05fr}
+  .row.flip .shot{margin-left:auto}
+  .shot{
+    border:1px solid var(--line);border-radius:18px;overflow:hidden;
+    background:var(--panel);box-shadow:0 1px 2px rgba(0,0,0,.04);
+  }
+  .shot img{display:block;width:100%;height:auto}
+  .copy .num{margin-bottom:10px}
+  .copy h3{font-size:24px;letter-spacing:-.02em;margin:0 0 12px;line-height:1.25}
+  .copy p{margin:0;color:var(--ink-2);font-size:16px;line-height:1.65}
+  .copy ul{margin:18px 0 0;padding:0;list-style:none;font-size:14.5px;color:var(--ink-2)}
+  .copy ul li{padding-left:18px;position:relative;margin:7px 0}
+  .copy ul li::before{
+    content:"";position:absolute;left:0;top:11px;
+    width:6px;height:6px;border-radius:50%;background:var(--ink-3);
+  }
 
   /* ---------- features ---------- */
-  .grid{display:grid;gap:14px}
+  .grid{display:grid;gap:18px}
   .g3{grid-template-columns:repeat(3,1fr)}
   .g2{grid-template-columns:repeat(2,1fr)}
   .tile{
     background:#fff;border:1px solid var(--line);border-radius:var(--radius);
-    padding:22px;transition:border-color .15s ease,box-shadow .15s ease;
+    padding:26px;transition:border-color .15s ease,box-shadow .15s ease;
   }
   .tile:hover{border-color:var(--line-strong);box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .tile h3{margin:0 0 6px;font-size:16px;font-weight:600;letter-spacing:-.01em}
-  .tile p{margin:0;font-size:14px;color:var(--ink-2)}
+  .tile h3{margin:0 0 8px;font-size:17px;font-weight:600;letter-spacing:-.01em}
+  .tile p{margin:0;font-size:14.5px;color:var(--ink-2);line-height:1.6}
   .tile .k{
     display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--ink-3);font-weight:600;margin-bottom:10px;
+    color:var(--ink-3);font-weight:600;margin-bottom:12px;
   }
 
   /* ---------- table ---------- */
-  .tbl{width:100%;border-collapse:collapse;font-size:14px}
-  .tbl th,.tbl td{text-align:left;padding:12px 18px;border-bottom:1px solid var(--line)}
+  .tbl{width:100%;border-collapse:collapse;font-size:15px}
+  .tbl th,.tbl td{text-align:left;padding:14px 20px;border-bottom:1px solid var(--line)}
   .tbl tr:last-child td{border-bottom:none}
   .tbl th{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
   .tbl td:first-child{color:var(--ink-2)}
@@ -118,34 +160,34 @@
   /* ---------- steps ---------- */
   ol.steps{margin:0;padding:0;list-style:none;counter-reset:s}
   ol.steps li{
-    counter-increment:s;position:relative;padding-left:44px;margin:18px 0;
-    font-size:15px;color:var(--ink-2);
+    counter-increment:s;position:relative;padding-left:48px;margin:20px 0;
+    font-size:16px;color:var(--ink-2);
   }
   ol.steps li::before{
     content:counter(s);position:absolute;left:0;top:1px;
-    width:28px;height:28px;border-radius:50%;
+    width:32px;height:32px;border-radius:50%;
     border:1px solid var(--line-strong);background:#fff;
     display:flex;align-items:center;justify-content:center;
-    font-size:13px;font-weight:600;color:var(--ink);
+    font-size:14px;font-weight:600;color:var(--ink);
   }
   ol.steps li b{color:var(--ink);font-weight:600}
 
   /* ---------- source chooser ---------- */
-  .sources{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0}
+  .sources{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:24px 0}
   .src{
     position:relative;display:block;cursor:pointer;
     background:#fff;border:1px solid var(--line);border-radius:var(--radius);
-    padding:20px;transition:border-color .15s,box-shadow .15s;
+    padding:22px;transition:border-color .15s,box-shadow .15s;
   }
   .src:hover{border-color:var(--line-strong)}
   .src input{position:absolute;opacity:0;pointer-events:none}
   .src.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
   .src .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .src h3{margin:0;font-size:15px;font-weight:600}
-  .src p{margin:6px 0 0;font-size:13px;color:var(--ink-3);line-height:1.55}
+  .src h3{margin:0;font-size:16px;font-weight:600}
+  .src p{margin:8px 0 0;font-size:14px;color:var(--ink-3);line-height:1.55}
   .badge{
     font-size:11px;font-weight:600;letter-spacing:.04em;
-    padding:3px 9px;border-radius:999px;border:1px solid var(--line-strong);
+    padding:4px 10px;border-radius:999px;border:1px solid var(--line-strong);
     color:var(--ink-2);white-space:nowrap;
   }
   .badge.ready{background:#eaf7ef;border-color:#bfe3cd;color:#0f7b3f}
@@ -155,21 +197,21 @@
 
   /* ---------- dropzone ---------- */
   .drop{
-    margin-top:14px;border:1px dashed var(--line-strong);border-radius:12px;
-    padding:22px;text-align:center;background:#fff;
-    font-size:14px;color:var(--ink-2);cursor:pointer;
+    margin-top:16px;border:1px dashed var(--line-strong);border-radius:12px;
+    padding:24px;text-align:center;background:#fff;
+    font-size:15px;color:var(--ink-2);cursor:pointer;
     transition:border-color .15s,background .15s;
   }
   .drop:hover,.drop.over{border-color:var(--ink);background:var(--panel)}
   .drop b{color:var(--ink)}
-  .drop .file{display:block;margin-top:8px;font-size:13px;color:var(--ink);word-break:break-all}
+  .drop .file{display:block;margin-top:10px;font-size:13px;color:var(--ink);word-break:break-all}
   .drop .file span{color:var(--ink-3)}
 
   /* ---------- connect ---------- */
-  #connect{padding-bottom:88px}
-  .connect-box{padding:32px}
+  #connect{padding-bottom:96px}
+  .connect-box{padding:36px}
   .btn-connect{
-    height:52px;padding:0 30px;font-size:16px;border-radius:999px;
+    height:54px;padding:0 32px;font-size:16px;border-radius:999px;
     background:var(--accent);color:#fff;border:1px solid transparent;
     display:inline-flex;align-items:center;gap:10px;cursor:pointer;
     transition:background .15s,opacity .15s,transform .12s;
@@ -177,7 +219,7 @@
   .btn-connect:hover{background:#000}
   .btn-connect:active{transform:translateY(1px)}
   .btn-connect[disabled]{background:#e6e6e9;color:#9aa0a8;cursor:not-allowed}
-  .status{margin-top:16px;font-size:14px;color:var(--ink-2);min-height:22px}
+  .status{margin-top:18px;font-size:15px;color:var(--ink-2);min-height:24px}
   .status.warn{color:#8a6d1f}
   .status.err{color:#b4232a}
   .status.ok{color:#0f7b3f}
@@ -188,8 +230,8 @@
   .device-link.show{display:block}
   .device-link a{font-weight:600;color:#0f7b3f;text-decoration:none}
 
-  .notes{margin-top:26px;border-top:1px solid var(--line);padding-top:22px}
-  .note{display:flex;gap:12px;font-size:13.5px;color:var(--ink-2);margin:12px 0}
+  .notes{margin-top:28px;border-top:1px solid var(--line);padding-top:24px}
+  .note{display:flex;gap:12px;font-size:14px;color:var(--ink-2);margin:12px 0}
   .note .ic{flex:none;width:18px;color:var(--ink-3);font-weight:600;text-align:center}
   .note b{color:var(--ink)}
   code{
@@ -199,7 +241,7 @@
   }
 
   /* ---------- footer ---------- */
-  footer{border-top:1px solid var(--line);padding:32px 0 56px;font-size:13px;color:var(--ink-3)}
+  footer{border-top:1px solid var(--line);padding:36px 0 64px;font-size:13px;color:var(--ink-3)}
   .foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
   .foot a{color:var(--ink-2);text-decoration:none;margin-right:18px}
   .foot a:hover{color:var(--ink)}
@@ -207,8 +249,14 @@
   .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
   @media (max-width:760px){
-    .g3,.g2,.sources{grid-template-columns:1fr}
-    .hero{padding:56px 0 40px}
+    .wrap{padding:0 20px}
+    .g3,.g2,.sources,.cases{grid-template-columns:1fr}
+    .row,.row.flip{grid-template-columns:1fr;gap:28px}
+    .row.flip .shot{margin-left:0}
+    .hero{padding:60px 0 48px}
+    section{padding:56px 0}
+    h2{font-size:26px}
+    .lede{font-size:18px}
     .connect-box{padding:22px}
     .nav a{margin-left:18px}
   }
@@ -220,7 +268,8 @@
   <div class="wrap nav">
     <div class="brand"><span class="dot"></span>MiRemoteBridge</div>
     <nav>
-      <a href="#how">原理</a>
+      <a href="#cases">使用场景</a>
+      <a href="#ui">配置界面</a>
       <a href="#why">优势</a>
       <a href="#compat">兼容性</a>
       <a href="#connect">连接设备</a>
@@ -246,6 +295,42 @@
     <p class="meta-note">整套成本约 15–25 元：开发板 ≈ 10 元 + 遥控器 ≈ 5 元起。</p>
   </div>
 
+  <!-- ============ USE CASES ============ -->
+  <section id="cases">
+    <div class="sec-head">
+      <p class="eyebrow">使用场景</p>
+      <h2>遥控器到手能干啥</h2>
+      <p class="sec-sub">电脑接收的所有按键都是标准 HID 报告，所以遥控器能干的事和普通键盘一模一样。</p>
+    </div>
+    <div class="cases">
+
+      <div class="case">
+        <div class="ico">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M3 9h18M8 21h8"/></svg>
+        </div>
+        <h3>看视频</h3>
+        <p>方向键跳进度，音量键调音量，TV 键全屏。沙发上看电影，遥控器在手里就能搞定一切。</p>
+      </div>
+
+      <div class="case">
+        <div class="ico">
+          <svg viewBox="0 0 24 24"><path d="M12 4a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M9 21h6"/></svg>
+        </div>
+        <h3>Vibe Coding · 语音写代码</h3>
+        <p>按住语音键对 AI 说需求，松开自动转写。方向键移光标，确认键提交，双手不离开键盘位置。</p>
+      </div>
+
+      <div class="case">
+        <div class="ico">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 3-6 3V9z"/></svg>
+        </div>
+        <h3>媒体与演示</h3>
+        <p>听歌暂停/切歌、看图全屏、PPT 翻页——所有媒体键都能用，躺在床上也能控制播放。</p>
+      </div>
+
+    </div>
+  </section>
+
   <!-- ============ HOW ============ -->
   <section id="how">
     <div class="sec-head">
@@ -261,6 +346,67 @@
       <img src="docs/images/architecture.png" alt="MiRemoteBridge 工作原理：蓝牙遥控器 → ESP32-C3 开发板 → 电脑">
       <figcaption>遥控器 → ESP32-C3 → 电脑。Web 界面只在需要改设置时才出现，平时板子不联网。</figcaption>
     </figure>
+  </section>
+
+  <!-- ============ PRODUCT UI ============ -->
+  <section id="ui">
+    <div class="sec-head">
+      <p class="eyebrow">真实配置界面</p>
+      <h2>在浏览器里改键、看状态、换遥控器</h2>
+      <p class="sec-sub">无需装客户端、无需串口命令。所有用户操作都在网页里完成。</p>
+    </div>
+
+    <div class="showcase">
+
+      <div class="row">
+        <div class="shot">
+          <img src="docs/images/ui-keymap.png" alt="RC003 按键映射页面：13 键完整对应表">
+        </div>
+        <div class="copy">
+          <p class="num">01 · 按键映射</p>
+          <h3>13 键全映射，点哪个改哪个</h3>
+          <p>RC003 的电源、方向、确认、菜单、TV、语音、音量键全部可改。每个键配一张可编辑卡片，改完自动保存。</p>
+          <ul>
+            <li>基础 / 编辑 双状态，未保存前蓝色高亮</li>
+            <li>支持单键、组合键（Ctrl+Win、Win+Tab）</li>
+            <li>改键无需重启，按下遥控器电脑立刻响应</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="row flip">
+        <div class="copy">
+          <p class="num">02 · 多遥控器切换</p>
+          <h3>3 个独立槽位，换遥控器不用重配</h3>
+          <p>板子支持 3 个槽位：小米的 RC003 预设 + 2 个学习型。切换槽位瞬间完成，不打断当前连接。</p>
+          <ul>
+            <li>槽位状态：已连接 / 未启用 / 未添加设备</li>
+            <li>每个槽位独立保存按键映射与设置</li>
+            <li>显示电量、设备标识、MAC 地址</li>
+          </ul>
+        </div>
+        <div class="shot">
+          <img src="docs/images/ui-slots.png" alt="3 个遥控器槽位页面：RC003 已连接、CMCC_Voice_Remote 未启用、遥控器 03 未添加">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="shot">
+          <img src="docs/images/ui-status.png" alt="系统状态页面：开发板引脚含义 + 实时堆内存">
+        </div>
+        <div class="copy">
+          <p class="num">03 · 系统状态</p>
+          <h3>引脚含义、堆内存、连接状态一目了然</h3>
+          <p>开发板上每个 LED 的呼吸 / 快闪 / 常亮分别代表什么、堆内存水位到多少、历史最低还剩多少——全部实时可见。</p>
+          <ul>
+            <li>D5 / D4 / RST / BOOT 四个关键引脚的语义</li>
+            <li>堆内存环形图：当前、历史最低、最大连续块</li>
+            <li>两个连接状态指示：网页控制 + 被控蓝牙</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
   </section>
 
   <!-- ============ WHY ============ -->
@@ -349,7 +495,7 @@
         <input type="file" id="fileInput" accept=".bin,application/octet-stream" hidden>
       </div>
 
-      <div style="margin-top:24px">
+      <div style="margin-top:28px">
         <button class="btn-connect" id="connectBtn" disabled>连接设备</button>
       </div>
 
