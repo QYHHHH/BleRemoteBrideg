@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MiRemoteBridge — 把蓝牙遥控器变成电脑的标准键盘</title>
+<meta name="description" content="跑在 ESP32-C3 上的开源固件：把蓝牙遥控器变成电脑认得的标准蓝牙键盘。免驱、不装软件、不改系统、不影响游戏反作弊，整套 15-25 元。">
+<style>
+  :root{
+    --bg:#ffffff;
+    --panel:#fafafa;
+    --line:#e9e9ec;
+    --line-strong:#d8d8dd;
+    --ink:#14161a;
+    --ink-2:#4b5058;
+    --ink-3:#8a9099;
+    --accent:#14161a;
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    font-size:16px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  .eyebrow{
+    font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:600;margin:0 0 12px;
+  }
+
+  /* ---------- nav ---------- */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:rgba(255,255,255,.82);
+    backdrop-filter:saturate(180%) blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:-.01em}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--ink);flex:none}
+  .nav a{font-size:14px;color:var(--ink-2);text-decoration:none;margin-left:26px}
+  .nav a:hover{color:var(--ink)}
+
+  /* ---------- hero ---------- */
+  .hero{padding:88px 0 64px}
+  h1{
+    font-size:clamp(34px,5.4vw,54px);
+    line-height:1.12;letter-spacing:-.035em;font-weight:600;
+    margin:0 0 20px;max-width:16ch;
+  }
+  .lede{font-size:19px;color:var(--ink-2);max-width:56ch;margin:0 0 32px}
+  .lede b{color:var(--ink);font-weight:600}
+  .hero-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    height:44px;padding:0 22px;border-radius:999px;
+    font-size:15px;font-weight:500;text-decoration:none;
+    border:1px solid transparent;cursor:pointer;
+    transition:transform .12s ease,background .15s ease,border-color .15s ease,opacity .15s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-dark{background:var(--accent);color:#fff}
+  .btn-dark:hover{background:#000}
+  .btn-ghost{background:#fff;color:var(--ink);border-color:var(--line-strong)}
+  .btn-ghost:hover{border-color:var(--ink)}
+  .meta-note{font-size:13px;color:var(--ink-3);margin-top:18px}
+
+  /* ---------- sections ---------- */
+  section{padding:56px 0}
+  .sec-head{margin-bottom:28px}
+  h2{font-size:26px;letter-spacing:-.02em;font-weight:600;margin:0 0 8px}
+  .sec-sub{color:var(--ink-2);margin:0;max-width:62ch}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+  }
+
+  /* ---------- diagram ---------- */
+  .diagram{padding:28px;text-align:center}
+  .diagram img{max-width:100%;height:auto;display:block;margin:0 auto}
+  .diagram figcaption{font-size:13px;color:var(--ink-3);margin-top:18px}
+
+  /* ---------- features ---------- */
+  .grid{display:grid;gap:14px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .tile{
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;transition:border-color .15s ease,box-shadow .15s ease;
+  }
+  .tile:hover{border-color:var(--line-strong);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .tile h3{margin:0 0 6px;font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .tile p{margin:0;font-size:14px;color:var(--ink-2)}
+  .tile .k{
+    display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:600;margin-bottom:10px;
+  }
+
+  /* ---------- table ---------- */
+  .tbl{width:100%;border-collapse:collapse;font-size:14px}
+  .tbl th,.tbl td{text-align:left;padding:12px 18px;border-bottom:1px solid var(--line)}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl th{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+  .tbl td:first-child{color:var(--ink-2)}
+  .ok{color:#0f7b3f;font-weight:600}
+  .no{color:#b4232a;font-weight:600}
+  .maybe{color:#8a6d1f;font-weight:600}
+
+  /* ---------- steps ---------- */
+  ol.steps{margin:0;padding:0;list-style:none;counter-reset:s}
+  ol.steps li{
+    counter-increment:s;position:relative;padding-left:44px;margin:18px 0;
+    font-size:15px;color:var(--ink-2);
+  }
+  ol.steps li::before{
+    content:counter(s);position:absolute;left:0;top:1px;
+    width:28px;height:28px;border-radius:50%;
+    border:1px solid var(--line-strong);background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:600;color:var(--ink);
+  }
+  ol.steps li b{color:var(--ink);font-weight:600}
+
+  /* ---------- source chooser ---------- */
+  .sources{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0}
+  .src{
+    position:relative;display:block;cursor:pointer;
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;transition:border-color .15s,box-shadow .15s;
+  }
+  .src:hover{border-color:var(--line-strong)}
+  .src input{position:absolute;opacity:0;pointer-events:none}
+  .src.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+  .src .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .src h3{margin:0;font-size:15px;font-weight:600}
+  .src p{margin:6px 0 0;font-size:13px;color:var(--ink-3);line-height:1.55}
+  .badge{
+    font-size:11px;font-weight:600;letter-spacing:.04em;
+    padding:3px 9px;border-radius:999px;border:1px solid var(--line-strong);
+    color:var(--ink-2);white-space:nowrap;
+  }
+  .badge.ready{background:#eaf7ef;border-color:#bfe3cd;color:#0f7b3f}
+  .badge.wait{background:#f3f3f5;border-color:var(--line-strong);color:var(--ink-3)}
+  .src.disabled{opacity:.55;cursor:not-allowed}
+  .src.disabled:hover{border-color:var(--line)}
+
+  /* ---------- dropzone ---------- */
+  .drop{
+    margin-top:14px;border:1px dashed var(--line-strong);border-radius:12px;
+    padding:22px;text-align:center;background:#fff;
+    font-size:14px;color:var(--ink-2);cursor:pointer;
+    transition:border-color .15s,background .15s;
+  }
+  .drop:hover,.drop.over{border-color:var(--ink);background:var(--panel)}
+  .drop b{color:var(--ink)}
+  .drop .file{display:block;margin-top:8px;font-size:13px;color:var(--ink);word-break:break-all}
+  .drop .file span{color:var(--ink-3)}
+
+  /* ---------- connect ---------- */
+  #connect{padding-bottom:88px}
+  .connect-box{padding:32px}
+  .btn-connect{
+    height:52px;padding:0 30px;font-size:16px;border-radius:999px;
+    background:var(--accent);color:#fff;border:1px solid transparent;
+    display:inline-flex;align-items:center;gap:10px;cursor:pointer;
+    transition:background .15s,opacity .15s,transform .12s;
+  }
+  .btn-connect:hover{background:#000}
+  .btn-connect:active{transform:translateY(1px)}
+  .btn-connect[disabled]{background:#e6e6e9;color:#9aa0a8;cursor:not-allowed}
+  .status{margin-top:16px;font-size:14px;color:var(--ink-2);min-height:22px}
+  .status.warn{color:#8a6d1f}
+  .status.err{color:#b4232a}
+  .status.ok{color:#0f7b3f}
+  .device-link{
+    display:none;margin-top:14px;padding:14px 16px;border-radius:12px;
+    background:#eef6f1;border:1px solid #cfe6d9;font-size:14px;
+  }
+  .device-link.show{display:block}
+  .device-link a{font-weight:600;color:#0f7b3f;text-decoration:none}
+
+  .notes{margin-top:26px;border-top:1px solid var(--line);padding-top:22px}
+  .note{display:flex;gap:12px;font-size:13.5px;color:var(--ink-2);margin:12px 0}
+  .note .ic{flex:none;width:18px;color:var(--ink-3);font-weight:600;text-align:center}
+  .note b{color:var(--ink)}
+  code{
+    background:var(--panel);border:1px solid var(--line);
+    padding:1px 6px;border-radius:6px;font-size:12.5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+
+  /* ---------- footer ---------- */
+  footer{border-top:1px solid var(--line);padding:32px 0 56px;font-size:13px;color:var(--ink-3)}
+  .foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  .foot a{color:var(--ink-2);text-decoration:none;margin-right:18px}
+  .foot a:hover{color:var(--ink)}
+
+  .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  @media (max-width:760px){
+    .g3,.g2,.sources{grid-template-columns:1fr}
+    .hero{padding:56px 0 40px}
+    .connect-box{padding:22px}
+    .nav a{margin-left:18px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand"><span class="dot"></span>MiRemoteBridge</div>
+    <nav>
+      <a href="#how">原理</a>
+      <a href="#why">优势</a>
+      <a href="#compat">兼容性</a>
+      <a href="#connect">连接设备</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ HERO ============ -->
+  <div class="hero">
+    <p class="eyebrow">ESP32-C3 · 开源固件 · GPL-3.0</p>
+    <h1>让电脑把遥控器当成普通键盘</h1>
+    <p class="lede">
+      MiRemoteBridge 是一份跑在 ESP32-C3 上的固件。它一边连蓝牙遥控器，一边以
+      <b>标准蓝牙键盘</b>的身份连电脑——<b>免驱</b>、<b>不装软件</b>、<b>不改系统</b>、
+      <b>不影响游戏反作弊</b>、<b>不需要管理员权限</b>。
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-dark" href="#connect">开始使用</a>
+      <a class="btn btn-ghost" href="https://github.com/OWNER/MiRemoteBridge">查看源码</a>
+    </div>
+    <p class="meta-note">整套成本约 15–25 元：开发板 ≈ 10 元 + 遥控器 ≈ 5 元起。</p>
+  </div>
+
+  <!-- ============ HOW ============ -->
+  <section id="how">
+    <div class="sec-head">
+      <p class="eyebrow">工作原理</p>
+      <h2>一个板子，两头都是蓝牙</h2>
+      <p class="sec-sub">
+        板子以 Central 身份连接遥控器，把它的按键码翻译（或透传）成标准 HID 报告，
+        再以 Peripheral 身份发给电脑。电脑看到的只是一个普通的蓝牙键盘，
+        所有翻译都发生在板子上。
+      </p>
+    </div>
+    <figure class="card diagram">
+      <img src="docs/images/architecture.png" alt="MiRemoteBridge 工作原理：蓝牙遥控器 → ESP32-C3 开发板 → 电脑">
+      <figcaption>遥控器 → ESP32-C3 → 电脑。Web 界面只在需要改设置时才出现，平时板子不联网。</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ WHY ============ -->
+  <section id="why">
+    <div class="sec-head">
+      <p class="eyebrow">为什么是它</p>
+      <h2>绕开所有麻烦的那条路</h2>
+      <p class="sec-sub">
+        市面上给电脑配遥控器的方案，几乎都要在电脑上装点什么：驱动、后台服务、
+        虚拟设备、自启动项。这些正是游戏反作弊和杀毒软件最警惕的东西。
+      </p>
+    </div>
+    <div class="grid g3">
+      <div class="tile"><span class="k">成本</span><h3>一杯奶茶的钱</h3><p>ESP32-C3 开发板约 10 元，最便宜的机顶盒蓝牙遥控器 5 元起，整套 15–25 元。</p></div>
+      <div class="tile"><span class="k">免装软件</span><h3>浏览器打开就能烧</h3><p>烧录用 Web Serial，配置用网页。电脑上永远不需要留一个客户端。</p></div>
+      <div class="tile"><span class="k">不改系统</span><h3>不碰驱动和注册表</h3><p>不动 Windows 驱动、不动注册表、不动组策略，卸载就是把 USB 拔了。</p></div>
+      <div class="tile"><span class="k">反作弊</span><h3>纯 HID，不放任</h3><p>输出标准 HID 报告，Riot Vanguard / EAC / BattlEye 等主流反作弊放行。</p></div>
+      <div class="tile"><span class="k">杀毒软件</span><h3>没有任何可疑行为</h3><p>不开后台、不写自启动、不联网（除非你主动打开配置页），零遥测。</p></div>
+      <div class="tile"><span class="k">权限</span><h3>不需要管理员</h3><p>配对走系统蓝牙设置；烧录走 USB 串口，普通用户权限即可。</p></div>
+    </div>
+  </section>
+
+  <!-- ============ COMPAT ============ -->
+  <section id="compat">
+    <div class="sec-head">
+      <p class="eyebrow">兼容性</p>
+      <h2>哪些能用，哪些不能</h2>
+    </div>
+    <div class="card">
+      <table class="tbl">
+        <thead><tr><th>角色</th><th>设备</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td>遥控器</td><td>小米蓝牙遥控器 2 Pro（RC003）</td><td class="ok">实测可用</td></tr>
+          <tr><td>遥控器</td><td>中国移动语音遥控器（CMCC_Voice_Remote）</td><td class="ok">实测可用（部分物理键无响应）</td></tr>
+          <tr><td>遥控器</td><td>其它标准 BLE 遥控器</td><td class="ok">学习型槽位，标准键名自动识别，无需改代码</td></tr>
+          <tr><td>电脑</td><td>Windows 10 / 11</td><td class="ok">实测可用</td></tr>
+          <tr><td>电脑</td><td>Linux / macOS</td><td class="maybe">未验证（标准蓝牙 HID，理论可用）</td></tr>
+          <tr><td>电脑</td><td>iPhone / iPad（iOS）</td><td class="no">不支持</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ CONNECT ============ -->
+  <section id="connect">
+    <div class="sec-head">
+      <p class="eyebrow">开始使用</p>
+      <h2>连接设备</h2>
+      <p class="sec-sub">
+        接上 USB，选固件，点一下。剩下的（配 Wi-Fi、进配置页、改键）页面会带着你走完，
+        <b>全程不需要串口命令</b>。
+      </p>
+    </div>
+
+    <div class="card connect-box">
+      <ol class="steps">
+        <li><b>用 USB 线把 ESP32-C3 开发板接到电脑</b>（数据线，不是纯充电线）</li>
+        <li>在下面选一个<b>固件来源</b>：官方最新固件，或你自己电脑上的文件</li>
+        <li>点<b>「连接设备」</b>，浏览器弹窗里选串口（CH343 / USB Serial / COMx）</li>
+        <li>烧完页面会让你填家里的 Wi-Fi；<b>配网成功后自动跳转到板子的配置界面</b></li>
+      </ol>
+
+      <div class="sources">
+        <label class="src" id="srcRelease">
+          <input type="radio" name="fwsrc" value="release">
+          <div class="row">
+            <h3>官方最新固件</h3>
+            <span class="badge wait" id="relBadge">检查中…</span>
+          </div>
+          <p id="relDesc">从 GitHub Release 拉取编译好的固件，推荐第一次使用。</p>
+        </label>
+
+        <label class="src" id="srcLocal">
+          <input type="radio" name="fwsrc" value="local">
+          <div class="row">
+            <h3>上传本地固件</h3>
+            <span class="badge">自己编译 / 离线</span>
+          </div>
+          <p>从你电脑里选一个 <code>*.merged.bin</code> 文件（约 4 MB）。</p>
+        </label>
+      </div>
+
+      <div class="drop" id="drop" hidden>
+        <b>点击选择固件文件</b>，或把它拖到这里
+        <span class="file" id="fileInfo" hidden></span>
+        <input type="file" id="fileInput" accept=".bin,application/octet-stream" hidden>
+      </div>
+
+      <div style="margin-top:24px">
+        <button class="btn-connect" id="connectBtn" disabled>连接设备</button>
+      </div>
+
+      <div class="status" id="status"></div>
+
+      <div class="device-link" id="devLink">
+        已找到设备：<a id="devHref" href="#" target="_blank" rel="noopener"></a>
+        <span style="color:#4b5058">— 若浏览器没有自动跳转，点这里进入配置界面。</span>
+      </div>
+
+      <div class="notes">
+        <p class="note"><span class="ic">⚠</span><span>
+          <b>必须用 <code>*.merged.bin</code></b>（约 4 MB，含 bootloader + 分区表 + app）。
+          单独那个 1.3 MB 的 app 固件烧进去起不来——bootloader 不在里面。
+        </span></p>
+        <p class="note"><span class="ic">⚠</span><span>
+          <b>浏览器要求：</b>桌面版 <b>Chrome / Edge / Opera</b>。Web Serial 只有它们支持，
+          Firefox、Safari、国产浏览器（QQ / 百度 / UC / 360）以及手机都不行。
+          页面还必须在 HTTPS 或 localhost 下打开，<code>file://</code> 会被 CORS 挡掉。
+        </span></p>
+        <p class="note"><span class="ic">·</span><span>
+          <b>串口命令</b>（<code>status</code> / <code>scan</code> / <code>connect</code> 等）
+          只用于调试，日常使用全部在网页里完成。
+        </span></p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      MiRemoteBridge · GPL-3.0-or-later ·
+      <a href="https://github.com/OWNER/MiRemoteBridge">GitHub</a>
+      <a href="https://github.com/OWNER/MiRemoteBridge#文档导航">文档</a>
+    </div>
+    <div>烧录能力来自 <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a></div>
+  </div>
+</footer>
+
+<!-- ESP Web Tools：真正的烧录由它完成，按钮外观由页面自己控制 -->
+<div class="vh">
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js"></script>
+  <esp-web-install-button id="ewt"></esp-web-install-button>
+</div>
+
+<script>
+(function () {
+  // ── 配置 ────────────────────────────────────────────────
+  // TODO: 换成真实仓库（形如 "yourname/MiRemoteBridge"），
+  //       Release 检测与页脚链接都读这里。
+  var REPO = "OWNER/MiRemoteBridge";
+  var CHIP = "ESP32-C3";
+  var REPO_OK = REPO.indexOf("OWNER") === -1;
+
+  var ewt        = document.getElementById("ewt");
+  var btn        = document.getElementById("connectBtn");
+  var statusEl   = document.getElementById("status");
+  var drop       = document.getElementById("drop");
+  var fileInput  = document.getElementById("fileInput");
+  var fileInfo   = document.getElementById("fileInfo");
+  var relBadge   = document.getElementById("relBadge");
+  var relDesc    = document.getElementById("relDesc");
+  var srcRelease = document.getElementById("srcRelease");
+  var srcLocal   = document.getElementById("srcLocal");
+  var devLink    = document.getElementById("devLink");
+  var devHref    = document.getElementById("devHref");
+
+  var source = null;       // "release" | "local"
+  var release = null;      // { tag, url, name }
+  var localFile = null;    // File
+  var lastManifestUrl = null;
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg || "";
+    statusEl.className = "status" + (kind ? " " + kind : "");
+  }
+
+  function markRelease(text, cls) {
+    relBadge.textContent = text;
+    relBadge.className = "badge " + (cls || "");
+  }
+
+  function refresh() {
+    srcRelease.classList.toggle("on", source === "release");
+    srcLocal.classList.toggle("on", source === "local");
+    drop.hidden = source !== "local";
+
+    var ok = ("serial" in navigator) && window.isSecureContext;
+    if (source === "release") btn.disabled = !(ok && release);
+    else if (source === "local") btn.disabled = !(ok && localFile);
+    else btn.disabled = true;
+
+    if (!ok) {
+      setStatus("当前浏览器不支持网页烧录，请换桌面版 Chrome / Edge / Opera（且页面必须是 HTTPS 或 localhost）。", "err");
+    } else if (source === "release" && !release) {
+      setStatus("官方 Release 固件还没有发布，请先选「上传本地固件」。", "warn");
+    } else if (source === "local" && !localFile) {
+      setStatus("请选择固件文件（*.merged.bin）。", "");
+    } else if (source === "local" && localFile) {
+      setStatus("已选 " + localFile.name + "（" + Math.round(localFile.size / 1048576 * 10) / 10 + " MB），可以开始烧录。", "ok");
+    } else if (source === "release" && release) {
+      setStatus("将烧录官方固件 " + release.tag + "。", "ok");
+    } else {
+      setStatus("");
+    }
+  }
+
+  // ── 探测 GitHub Release ─────────────────────────────────
+  // 找到 *.merged.bin 资源就启用「官方最新固件」；否则置灰，走本地上传。
+  function probeRelease() {
+    if (!REPO_OK) {
+      markRelease("尚未发布", "wait");
+      relDesc.textContent = "仓库地址还没配置（REPO 常量），暂时只能上传本地固件。";
+      srcRelease.classList.add("disabled");
+      return;
+    }
+    fetch("https://api.github.com/repos/" + REPO + "/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" }
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (data) {
+        var asset = (data.assets || []).filter(function (a) {
+          return /\.merged\.bin$/.test(a.name);
+        })[0];
+        if (!asset) return Promise.reject("no-asset");
+        release = { tag: data.tag_name, url: asset.browser_download_url, name: asset.name };
+        markRelease(release.tag, "ready");
+        relDesc.textContent = release.name + " · 由 ESP Web Tools 直接从 GitHub 下载。";
+        if (!source) source = "release";
+        refresh();
+      })
+      .catch(function () {
+        release = null;
+        markRelease("尚未发布", "wait");
+        relDesc.textContent = "GitHub Release 上还没有固件，请选「上传本地固件」。";
+        srcRelease.classList.add("disabled");
+        if (source === "release") source = null;
+        refresh();
+      });
+  }
+
+  // ── 固件来源切换 ────────────────────────────────────────
+  function pick(name) {
+    if (name === "release" && srcRelease.classList.contains("disabled")) return false;
+    source = name;
+    refresh();
+    return true;
+  }
+  function bindCard(card, name) {
+    var radio = card.querySelector('input[type="radio"]');
+    card.tabIndex = 0;
+    card.addEventListener("click", function (e) {
+      if (!pick(name)) { e.preventDefault(); return; }
+      radio.checked = true;
+    });
+    card.addEventListener("keydown", function (e) {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (pick(name)) radio.checked = true; }
+    });
+    radio.addEventListener("change", function () { if (radio.checked) pick(name); });
+  }
+  bindCard(srcRelease, "release");
+  bindCard(srcLocal, "local");
+
+  // ── 本地文件选择 / 拖拽 ─────────────────────────────────
+  drop.addEventListener("click", function () { fileInput.click(); });
+  ["dragenter", "dragover"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); });
+  });
+  drop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files[0]) useFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", function () {
+    if (fileInput.files[0]) useFile(fileInput.files[0]);
+  });
+
+  function useFile(f) {
+    localFile = f;
+    fileInfo.hidden = false;
+    fileInfo.innerHTML = "";
+    fileInfo.appendChild(document.createTextNode(f.name + " "));
+    var s = document.createElement("span");
+    s.textContent = "· " + (Math.round(f.size / 1048576 * 10) / 10) + " MB";
+    fileInfo.appendChild(s);
+
+    if (!/merged/i.test(f.name) || f.size < 2 * 1024 * 1024) {
+      fileInfo.appendChild(document.createElement("br"));
+      var w = document.createElement("span");
+      w.style.color = "#8a6d1f";
+      w.textContent = "⚠ 这个文件看起来不是完整的 merged 固件（应约 4 MB），烧进去可能起不来。";
+      fileInfo.appendChild(w);
+    }
+    refresh();
+  }
+
+  // ── 构造 manifest（blob URL 让本地文件也能烧）────────────
+  // ESP Web Tools 的 flash() 支持 blob:/data: manifest，part.path 用绝对 URL 即可。
+  function manifestUrlFor() {
+    var version, partUrl;
+    if (source === "release") { version = release.tag; partUrl = release.url; }
+    else { version = localFile.name.replace(/\.bin$/i, ""); partUrl = URL.createObjectURL(localFile); }
+
+    var m = {
+      name: "MiRemoteBridge",
+      version: version,
+      new_install_prompt_erase: false,
+      builds: [{ chipFamily: CHIP, parts: [{ path: partUrl, offset: 0 }] }]
+    };
+    if (lastManifestUrl) URL.revokeObjectURL(lastManifestUrl);
+    lastManifestUrl = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: "application/json" }));
+    return lastManifestUrl;
+  }
+
+  // ── 触发烧录 ────────────────────────────────────────────
+  btn.addEventListener("click", function () {
+    if (btn.disabled) return;
+    if (!("serial" in navigator)) { setStatus("浏览器不支持 Web Serial。", "err"); return; }
+    if (!window.isSecureContext) { setStatus("页面必须在 HTTPS 或 localhost 下打开。", "err"); return; }
+
+    var url = manifestUrlFor();
+    ewt.manifest = url;
+    ewt.setAttribute("manifest", url);
+    setStatus("正在准备组件…", "");
+    startFlash();
+  });
+
+  // 组件是动态 import 的，可能还没升级完；等它就绪再点内部的 slot。
+  function startFlash() {
+    var slot = ewt.shadowRoot && ewt.shadowRoot.querySelector("slot");
+    if (slot) {
+      setStatus("等待你在浏览器弹窗里选择串口…", "");
+      slot.click();        // → ESP Web Tools 的 connect()
+      watchDialog();
+      return;
+    }
+    if (!window.customElements) { setStatus("浏览器太旧，无法烧录。", "err"); return; }
+    var settled = false;
+    customElements.whenDefined("esp-web-install-button").then(function () {
+      if (settled) return;
+      settled = true;
+      requestAnimationFrame(startFlash);
+    });
+    setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      setStatus("ESP Web Tools 组件加载失败（可能是网络访问不了 unpkg），请刷新重试。", "err");
+    }, 12000);
+  }
+
+  // ── 配网成功后自动跳转设备配置页 ─────────────────────────
+  // 固件通过 Improv 把配置页地址回传，ESP Web Tools 会把它渲染成链接；
+  // 这里监听该链接（只认局域网 IP），拿到就跳。
+  var watching = false;
+  function watchDialog() {
+    if (watching) return;
+    watching = true;
+    var timer = setInterval(function () {
+      var dlg = document.querySelector("ewt-install-dialog");
+      if (!dlg || !dlg.shadowRoot) return;
+      var links = dlg.shadowRoot.querySelectorAll("a[href]");
+      for (var i = 0; i < links.length; i++) {
+        var u;
+        try { u = new URL(links[i].href); } catch (e) { continue; }
+        if (u.protocol !== "http:") continue;
+        if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(u.hostname)) continue;
+        clearInterval(timer);
+        watching = false;
+        devHref.href = u.href;
+        devHref.textContent = u.href;
+        devLink.classList.add("show");
+        setStatus("配网完成，正在打开设备配置页…", "ok");
+        setTimeout(function () { location.href = u.href; }, 300);
+        return;
+      }
+    }, 500);
+    setTimeout(function () { clearInterval(timer); watching = false; }, 20 * 60 * 1000);
+  }
+
+  // ── 初始化 ──────────────────────────────────────────────
+  probeRelease();
+  refresh();
+})();
+</script>
+
+</body>
+</html>
