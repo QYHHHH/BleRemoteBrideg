@@ -879,7 +879,7 @@ pass clear（串口） → 清除密码，回到 setup 模式
 
 ---
 
-### 4.17 两条链路的"配对信息失效"闭环（2026-09-16，**编译验证 + 宿主端验证，未上机**）
+### 4.17 两条链路的"配对信息失效"闭环（2026-09-16，编译 + 宿主端 + 主机侧上机实测）
 
 本轮把"配对信息失效"从"用户自己猜"变成"固件自己认出来并锁存，网页给出唯一
 正确的下一步"。四组改动：
@@ -893,9 +893,14 @@ pass clear（串口） → 清除密码，回到 setup 模式
   → 新事件 `BR_EV_WIN_AUTH_FAIL` → `hid_server::setHostRepairRequired(true)`，
   网页锁存"请在 Windows 删除 Mi Remote Bridge 后重新添加"。新配对成功
   （`role == SLAVE`、`status == 0`）→ `BR_EV_WIN_AUTH_OK` → 清除锁存。
-- **不宣称"完全消除 Windows 上短暂的连接/断开"**：Windows 在拿到
-  `AUTH_FAIL` 后自己会重试，那一小段连上又断开是它的行为，固件只能保证
-  **不再反复进入加密失败循环**（拒绝 + 锁存提示）。
+- **不宣称"完全消除 Windows 上短暂的连接/断开"**：Windows 在拿到 `AUTH_FAIL`
+  后自己会重试，那一小段连上又断开是它的行为，固件只能保证**固件自己不再重试**
+  （拒绝 + 锁存提示）。
+- **⚠️ 实测更正：这个循环不会自己停。** 见本节末尾"上机实测"——Windows 会以
+  约 2 次/秒的频率持续重连，直到用户在 Windows 里删掉设备。固件侧唯一能真正
+  打断它的手段是暂停广播，而暂停广播会让用户无法从 Windows 重新添加，两个要求
+  直接冲突。**经用户确认，选择保持"一直广播 + 拒绝 + 锁存"**，并把这一事实写进
+  `RECOVERY.md` / `PAIRING.md`，不假装循环已经停止。
 
 **2. 遥控器（上游）侧：`REMOTE_REPAIR_REQUIRED`**
 
@@ -933,7 +938,7 @@ pass clear（串口） → 清除密码，回到 setup 模式
 - **十分钟休眠**对双闪同样生效（提示仍留在网页上）；休眠期间按遥控器按键会让
   D4 亮 140 ms 作为确认，且**不重置**那十分钟的计时。
 
-**验证状态（截至本轮，全部为宿主端）**：
+**验证状态**：
 
 | 检查 | 命令 | 结果 |
 | --- | --- | --- |
@@ -941,9 +946,40 @@ pass clear（串口） → 清除密码，回到 setup 模式
 | 宿主端模型 | `python tests/model/check_vectors.py` | ✅ 11098 断言通过 |
 | 网页断言 | `python tests/tools/check_web_ui.py` | ✅ 161 条通过（新增 8 条覆盖两个锁存提示） |
 | 生成物一致性 | `gen_web_page.py --check` / `gen_vectors.py` | ✅ `web_page_gz.h` 与 `selftest_vectors.h` 均可复现 |
+| 烧录 + 串口冒烟 | `flash.ps1 -Port COM3`（COM3 = 0x1A86:0x55D3，探到 ESP32-C3） | ✅ `UPLOAD OK`、哈希校验通过、启动横幅与控制台正常 |
 
-**真机验证待做**（见 §5.3 第 25–30 项）：Windows 侧旧密钥失败的锁存与清除、
-遥控器侧 `REMOTE_REPAIR_REQUIRED` 的进入/退出、双闪外观、十分钟休眠与按键唤醒。
+**上机实测（2026-09-16，COM3；本轮唯一一次真机观测）**
+
+设备侧的 Bond 恰好处于"Windows 记着旧密钥、C3 这边没有"的状态，于是**主机侧
+那条路径在真机上跑到了**：
+
+```
+[     470][BRIDGE ] host re-pair    : no                      <- 开机时未锁存
+[    2037][WIN    ] host connected (id 1 addr xx:xx:xx:xx:xx:xx mtu 23 total 1)
+[    2097][BLE    ] host authentication failed (status=7)
+[    2109][WIN    ] host disconnected (handle 1, remaining 0)  <- reason=531，Windows 主动断
+[    2110][BRIDGE ] host authentication failed -> re-add the device in Windows
+[    2122][WIN    ] stored host key rejected; re-add "Mi Remote Bridge" in Windows to pair again
+[    2274][BRIDGE ] host re-pair    : required                  <- 锁存生效
+```
+
+**已实测**：失败被识别（`status=7`）、锁存生效（`status` 里 `host re-pair : required`）、
+日志给出正确指引、设备**继续广播**（期间有 `advertising re-armed`）。
+
+**同时实测到的问题（用户已确认按现状处理）**：这个重连**不会自己停**——
+10 秒窗口内 `host connected` 与 `authentication failed` 各 19 次（约 2 次/秒），
+持续数分钟不减。重连由 Windows 发起（`reason=531` = 远端主动断开），固件只能
+拒绝，无法让对端停止重试。要真正打断它，固件侧唯一的办法是暂停广播，而那样
+用户就没法从 Windows 重新添加设备——两个要求互斥。**决定：保持一直广播 +
+拒绝 + 锁存**，用户按提示在 Windows 删除设备后循环立刻结束。这一点已写进
+`RECOVERY.md` §2.1 ① 与 `PAIRING.md` §3。
+
+**尚未实测**：D5 双闪的外观（无法在远端目视确认，代码路径只到
+`hostRepairRequired() -> Show::DoubleFlash`）、清除锁存（需要真的在 Windows 里
+删除设备再添加）、遥控器侧整条 `REMOTE_REPAIR_REQUIRED` 路径（本次没有绑定
+遥控器）、双闪的十分钟休眠与按键唤醒。
+
+**真机验证待做**：见 §5.3.1 第 25–33 项。
 
 ---
 

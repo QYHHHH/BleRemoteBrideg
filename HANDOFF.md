@@ -82,10 +82,13 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 - **抓串口**：Bash 调 `.exe` 可用；PowerShell 工具**无法启动子进程**（沙箱限制），
   但 .NET `SerialPort`（PowerShell 内）可用且要设 `Encoding=UTF8`（否则中文广播名
   变 `?????`）。抓启动横幅先 `RtsEnable=true → 150ms → false`。
+  **⚠️ 绝对不要设 `DtrEnable=true`**：本板 DTR 接的是 BOOT（GPIO9），置位等于
+  按住 BOOT，固件 5 秒后就会执行**恢复出厂**——实测踩过，代价是清空全部配对、
+  Wi-Fi 凭据、网页密码与按键映射。只用 RTS。
 - **测试**：`python tests/model/check_vectors.py`（宿主端 11096 断言）；设备端
   `selftest` 串口命令。改解析/键表/HID 描述符后两者都要跑。
-- **Git**：关键节点自动提交，英文提交信息并注明验证程度（编译验证 vs 真机验证）。
-  已有 60+ 提交，历史在 Git 里可追溯，不要重建仓库。
+- **Git**：关键节点自动提交，**中文提交信息**（见 `AGENTS.md`）并注明验证程度
+  （编译验证 vs 真机验证）。已有 60+ 提交，历史在 Git 里可追溯，不要重建仓库。
 - **文档**：用户要求项目开源，README 面向对外发布；一切"实测/未实测"严格区分。
 - **不用 Wi-Fi 时保持关闭**：`wifi off`（Wi-Fi 与 BLE 共存吃 ~50KB 堆 + 射频时间）。
 

@@ -203,7 +203,7 @@ connect c0:5d:39:xx:xx:xx random
 | Windows 列表里没有设备 | `status` 看是否在广播；`forget win` 强制重广播；关/开 Windows 蓝牙 |
 | 已连接但按键没反应 | 确认日志里有 `report 1 (keyboard) notifications ENABLED`；媒体键还要看 `report 2` |
 | 显示为"未知设备" | 删除该配对，`forget win`，再重新配对（有时 Windows 会缓存旧的描述符） |
-| **D5 双闪 / 网页提示"请在 Windows 删除 Mi Remote Bridge 后重新添加"** | Windows 侧还留着旧密钥，C3 已拒绝它并**停止失败循环**（`status` 里 `host re-pair : required`）。到 Windows **删除设备后重新添加**即可，成功后提示自动消失。C3 全程在广播，不需要点任何按钮。详见 `RECOVERY.md` §2.1 ① |
+| **D5 双闪 / 网页提示"请在 Windows 删除 Mi Remote Bridge 后重新添加"** | Windows 侧还留着旧密钥，C3 已拒绝它并锁存提示（`status` 里 `host re-pair : required`）。到 Windows **删除设备后重新添加**即可，成功后提示自动消失。C3 全程在广播，不需要点任何按钮。注意 **Windows 会一直重连（实测约 2 次/秒），在你删除设备之前不会自己停**，串口日志会持续刷屏，属预期。详见 `RECOVERY.md` §2.1 ① |
 | 出现按键卡住 | 不应当发生；把 `raw on` 日志附上并记下按下的键。任一侧断线都会触发 `releaseAll()` |
 
 ---
