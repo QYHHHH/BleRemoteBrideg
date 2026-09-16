@@ -43,6 +43,11 @@ void forceReAdvertise();
 // Advertise again if we are not currently advertising and nobody is connected.
 void ensureAdvertising();
 
+// Stop the stale-key reconnect loop until the user explicitly starts re-pairing.
+void pauseHostPairing();
+void resumeHostPairing();
+bool hostPairingPaused();
+
 // Forward the RC003's battery level to the host. Called from the bridge loop
 // when the remote reports its charge; clamped to 0-100 and notified on change.
 void setBatteryLevel(uint8_t percent);

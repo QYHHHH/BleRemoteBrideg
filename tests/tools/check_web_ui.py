@@ -39,13 +39,18 @@ FLASH_BUDGET = 24000
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 151
+EXPECTED_CHECKS = 154
 
 TESTS = r"""(async () => {
   const results=[];
   const assert=(condition,name)=>{if(!condition)throw Error(name);results.push(name);};
   while(S.load)await new Promise(r=>setTimeout(r,10));await load();
   assert(S.on && S.ok,'initial API load');
+  assert($('hostRepair').hidden,'host repair prompt hidden normally');
+  __demo.status.hostPairingPaused=true;await load();
+  assert(!$('hostRepair').hidden&&$('hostRepair').textContent.includes('Windows'),'authentication failure shows Windows removal prompt');
+  await $('repairHost').onclick();
+  assert($('hostRepair').hidden&&__demo.calls.some(c=>c.path==='/api/host-pairing'&&c.method==='POST'),'repair action resumes pairing');
   S.busy=true;S.slotBusy=true;btns();assert(!document.querySelector('[data-slot="1"]').disabled,'slot cards stay clickable to interrupt');S.busy=false;S.slotBusy=false;btns();
   const oldConfirm=window.confirm,pairCalls=()=>__demo.calls.filter(c=>c.path==='/api/slot');
   window.confirm=()=>false;await $('pairRemote').onclick();

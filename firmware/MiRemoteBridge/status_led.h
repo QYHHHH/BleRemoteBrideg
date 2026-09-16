@@ -30,4 +30,10 @@ void begin();
 // Call from loop() as often as convenient (it self-throttles).
 void loop();
 
+// Keep normal link indication visible for another ten minutes.
+void wake();
+
+// Acknowledge a key. While asleep D4 flashes without restarting the 10-minute timer.
+void keyActivity();
+
 }  // namespace status_led

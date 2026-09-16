@@ -25,6 +25,8 @@ constexpr uint32_t kBreathPeriodMs = 2000;  // one full fade up + down
 constexpr uint32_t kFastHalfMs = 90;        // ~5.5 Hz blink
 constexpr uint32_t kPwmFreq = 5000;         // above flicker perception
 constexpr uint8_t kPwmBits = 8;
+constexpr uint32_t kIdleOffMs = 10UL * 60UL * 1000UL;
+constexpr uint32_t kKeyFlashMs = 140;
 
 enum class Show { Solid, Breathing, Fast };
 
@@ -37,6 +39,13 @@ struct Blinker {
 
 Blinker s_host{BRIDGE_LED_HOST_PIN};
 Blinker s_remote{BRIDGE_LED_REMOTE_PIN};
+uint32_t s_awakeUntil = 0;
+uint32_t s_keyFlashUntil = 0;
+bool s_keyFlashFromSleep = false;
+
+bool before(uint32_t now, uint32_t deadline) {
+  return (int32_t)(deadline - now) > 0;
+}
 
 // Host (computer) link: nothing -> breathing, linked but HID not usable yet ->
 // fast, HID reports subscribed -> solid. "Linked but not subscribed" is the
@@ -104,6 +113,15 @@ void begin() {
   ledcAttach(BRIDGE_LED_REMOTE_PIN, kPwmFreq, kPwmBits);
   ledcWrite(BRIDGE_LED_HOST_PIN, 0);
   ledcWrite(BRIDGE_LED_REMOTE_PIN, 0);
+  wake();
+}
+
+void wake() { s_awakeUntil = millis() + kIdleOffMs; }
+
+void keyActivity() {
+  const uint32_t now = millis();
+  s_keyFlashFromSleep = !before(now, s_awakeUntil);
+  s_keyFlashUntil = now + kKeyFlashMs;
 }
 
 void loop() {
@@ -114,11 +132,19 @@ void loop() {
   if (now - last < 20) return;
   last = now;
 
+  const bool awake = before(now, s_awakeUntil);
+  const bool keyFlash = before(now, s_keyFlashUntil);
+  if (!awake) {
+    write(s_host, 0);
+    write(s_remote, keyFlash && s_keyFlashFromSleep ? 255 : 0);
+    return;
+  }
+
   run(s_host, hostShow(), false, now);
   // A key being down darkens the REMOTE led: that is the "the bridge heard
   // you" feedback the user asked for, and it uses the same active-key state
   // the console and Web UI show.
-  run(s_remote, remoteShow(), bridge::activeRawCode() != 0, now);
+  run(s_remote, remoteShow(), keyFlash || bridge::activeRawCode() != 0, now);
 }
 
 }  // namespace status_led

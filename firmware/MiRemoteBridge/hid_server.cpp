@@ -60,6 +60,7 @@ constexpr uint16_t kHidServiceUuid = 0x1812;
 
 BLEServer *s_server = nullptr;
 BLEAdvertising *s_adv = nullptr;
+bool s_hostPairingPaused = false;
 
 String s_deviceName = BRIDGE_HID_DEVICE_NAME;
 
@@ -338,6 +339,7 @@ bool slotSwitchSafe() {
 
 void forceReAdvertise() {
   if (!s_adv) return;
+  s_hostPairingPaused = false;
 
   if (s_server && s_server->getConnectedCount() > 0) {
     BR_LOGW(kTag, "dropping host connection so it must re-pair");
@@ -356,11 +358,29 @@ void forceReAdvertise() {
 
 void ensureAdvertising() {
   if (!s_adv) return;
+  if (s_hostPairingPaused) {
+    if (s_adv->isAdvertising()) BLEDevice::stopAdvertising();
+    return;
+  }
   if (s_server && s_server->getConnectedCount() > 0) return;
   if (s_adv->isAdvertising()) return;
   BLEDevice::startAdvertising();
   BR_LOGI(kTag, "advertising re-armed");
 }
+
+void pauseHostPairing() {
+  if (s_hostPairingPaused) return;
+  s_hostPairingPaused = true;
+  if (s_adv && s_adv->isAdvertising()) BLEDevice::stopAdvertising();
+  BR_LOGW(kTagHost, "host pairing paused; remove the old device in Windows, then resume pairing");
+}
+
+void resumeHostPairing() {
+  s_hostPairingPaused = false;
+  forceReAdvertise();
+}
+
+bool hostPairingPaused() { return s_hostPairingPaused; }
 
 int forgetHostBonds() {
   const String remote = settings::rc003Address();

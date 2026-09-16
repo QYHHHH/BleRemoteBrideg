@@ -11,7 +11,9 @@
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLESecurity.h>
+#include <host/ble_gap.h>
 
+#include "event_bus.h"
 #include "log.h"
 #include "rc003_client.h"
 #include <os/os_mbuf.h>
@@ -28,8 +30,17 @@ int diagnosticGap(ble_gap_event *event, void *) {
   }
   if(event->type==BLE_GAP_EVENT_DISCONNECT)
     BR_LOGW(kTag,"disconnect handle=%u reason=%d",event->disconnect.conn.conn_handle,event->disconnect.reason);
-  if(event->type==BLE_GAP_EVENT_ENC_CHANGE)
+  if(event->type==BLE_GAP_EVENT_ENC_CHANGE) {
     BR_LOGI(kTag,"security handle=%u status=%d",event->enc_change.conn_handle,event->enc_change.status);
+    if(event->enc_change.status!=0) {
+      ble_gap_conn_desc desc{};
+      // The shared host owns both links. Slave role is the computer connection.
+      if(!ble_gap_conn_find(event->enc_change.conn_handle,&desc) && desc.role==BLE_GAP_ROLE_SLAVE) {
+        BR_LOGW(kTag,"host authentication failed (status=%d)",event->enc_change.status);
+        event_bus::post(BR_EV_WIN_AUTH_FAIL,(uint8_t)event->enc_change.status);
+      }
+    }
+  }
   return 0;
 }
 

@@ -24,6 +24,7 @@
 #include "log.h"
 #include "rc003_client.h"
 #include "settings.h"
+#include "status_led.h"
 
 namespace {
 
@@ -61,6 +62,7 @@ void releaseActive(const char *why) {
 void handleKeyEvent(uint8_t rawCode, bool pressed, uint32_t tsUs) {
   if (pressed) {
     if (rawCode == 0) return;
+    status_led::keyActivity();
 
     // A new physical key always ends the previous one, even when this key is
     // deliberately not forwarded. The same state drives the LED and the page
@@ -190,14 +192,19 @@ void handleEvent(const bridge_event_t &ev) {
 
     case BR_EV_WIN_LINK_UP:
       BR_LOGI(kTag, "host connected to HID service");
+      status_led::wake();
       bridge::releaseAllKeys();
       break;
 
     case BR_EV_WIN_LINK_DOWN:
-      BR_LOGW(kTag, "host disconnected -> clearing all key state and re-advertising");
+      BR_LOGW(kTag, "host disconnected -> clearing all key state");
       bridge::releaseAllKeys();
-      // Keep the RC003 link exactly as it is (requirement 9): only the
-      // downstream advertising is restarted.
+      break;
+
+    case BR_EV_WIN_AUTH_FAIL:
+      BR_LOGW(kTag, "host authentication failed -> advertising paused until re-pair");
+      hid_server::pauseHostPairing();
+      bridge::releaseAllKeys();
       break;
 
     default:
@@ -304,6 +311,7 @@ void printStatus() {
   BR_LOGI(kTag, "hid device name : %s", hid_server::deviceName());
   BR_LOGI(kTag, "host connected  : %s (%u)", hid_server::hostConnected() ? "yes" : "no",
           (unsigned)hid_server::hostCount());
+  BR_LOGI(kTag, "host re-pair    : %s", hid_server::hostPairingPaused() ? "required" : "no");
   BR_LOGI(kTag, "rc003 state     : %s", rc003_client::stateName());
   BR_LOGI(kTag, "rc003 bound     : %s", rc003_client::boundAddress().c_str());
   BR_LOGI(kTag, "rc003 connected : %s", rc003_client::connectedAddress().c_str());

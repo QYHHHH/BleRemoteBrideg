@@ -29,6 +29,7 @@
 #include "rc003_client.h"
 #include "selftest.h"
 #include "settings.h"
+#include "status_led.h"
 
 namespace {
 
@@ -292,6 +293,7 @@ void execute(char *line) {
     } else if (!strcasecmp(argv[1], "win")) {
       const int removed = hid_server::forgetHostBonds();
       hid_server::forceReAdvertise();
+      status_led::wake();
       Serial.printf("host bond records removed: %d, advertising restarted\n", removed);
       if (removed > 0) {
         Serial.println("Now delete the device in Windows (Settings > Bluetooth) and pair again.");

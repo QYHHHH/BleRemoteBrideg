@@ -24,7 +24,8 @@ typedef enum {
   BR_EV_RC_BOND_FAIL,    // pairing/bonding with the RC003 failed
   BR_EV_RC_BATTERY,      // RC003 reported its charge; `code` = percent (0-100)
   BR_EV_WIN_LINK_UP,     // a host (Windows) connected to our HID server
-  BR_EV_WIN_LINK_DOWN    // the host disconnected
+  BR_EV_WIN_LINK_DOWN,   // the host disconnected
+  BR_EV_WIN_AUTH_FAIL    // downstream encryption/authentication failed
 } bridge_event_type_t;
 
 typedef struct {
