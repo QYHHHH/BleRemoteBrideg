@@ -549,6 +549,8 @@ Windows 动作"如需实现，唯一现实路径是给 C3 加 NFC 读卡模块�
 2. **堆水位**：AP 开启时 free ~20.8 KB（紧张但稳定，min 20.5 KB）；`wifi off` 后
    回落到 ~59 KB（**不会**回到初始 106 KB——Wi-Fi 库保留内部缓冲，属预期；
    完全恢复需重启）。两轮 on/off 循环后 free 稳定在 58.9–59.0 KB，无泄漏。
+   > **注**：`wifi off` 现在已被明确拒绝（配置页常开），这条记录的是**当时**的行为，
+   > 不能照着复现；堆水位结论本身仍然有效。
 3. **共存**：AP 启停期间 RC003 保持 READY 不断链。
 
 ---
@@ -561,7 +563,7 @@ Windows 动作"如需实现，唯一现实路径是给 C3 加 NFC 读卡模块�
 **除了 Chrome 和 Python 之外不需要装任何东西**。
 
 ```bash
-python tests/tools/check_web_ui.py                  # 闪存预算 + 125 项页面断言（约 1 秒）
+python tests/tools/check_web_ui.py                  # 闪存预算 + 161 项页面断言（约 1 秒）
 python tests/tools/check_web_ui.py --check-size     # 只看闪存预算
 python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，便于调试
 ```
@@ -584,7 +586,7 @@ python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，�
 断言失败时的排查工具：`python tests/tools/spot_audit.py`（`--raw 0x52` 可指定键）—— 逐键打印
 三态各自改了哪些计算样式，并把遥控器截图写到 `outputs/`；有死状态就以非零码退出。
 
-**已验证（150 项断言，全部通过）**：
+**已验证（161 项断言，全部通过）**：
 
 > 修正记录：这层断言一度**跑不到也跑不对**，两个独立缺陷 ——
 > ① 执行入口要求传入外部 `agent-browser` 可执行文件，而它不在本仓库工具链里，
@@ -642,7 +644,8 @@ AP 本身约吃 38 KB；BLE 两条链路再把堆压到 13 KB 量级。
 
 **遥控器侧是好的**：串口抓到 `parsed raw=0x4A (HOME) DOWN` / `UP`。
 失效的是下游 —— 日志里 `host connected: no (0)`，按键没有接收方。
-`wifi off` 后堆回到 ~50 KB，桥接器恢复正常。
+`wifi off` 后堆回到 ~50 KB，桥接器恢复正常。（`wifi off` 现已被拒、配置页常开，
+此处记录的是**当时**用来回收堆的手段；结论"堆不够时配置页不可用"仍然有效。）
 
 **页面体积红线（实测）**
 
@@ -698,7 +701,8 @@ void collectHeaders(const char *headerKeys[], const size_t headerKeysCount);
 | ~12944–13568 B | ❌ 客户端关联成功但退化成 `169.254.x.x` |
 
 堆水位取决于 `wifi on` 那一刻的 BLE 状态，因此**同一份固件时而可用、时而不可用**。
-`wifi off` 后堆回到 ~49640 B，桥接器恢复正常。
+`wifi off` 后堆回到 ~49640 B，桥接器恢复正常。（同上：`wifi off` 现已不可关，
+这是当时的记录。）
 
 **这意味着：只要 BLE 链路把堆压到 13 KB 量级，配置界面就无法访问 —— 与页面大小无关。**
 在解决这个之前，Web UI 的可用性取决于运气，不能对外声称可用。
@@ -1113,15 +1117,22 @@ Connect 即可（ESP Web Tools 那一套）。
 > 所以端口打开后毫秒级就有合法帧进来，5 秒判定那一刻 `sessionActive()` 必然为真，
 > 防护生效 —— **这一项现在有代码依据，不再是纯猜测。**
 >
-> 仍未覆盖的是**所有"只收不发"的串口软件**：esp-web-tools 的串口控制台
-> （`ewt-console` 组件）、PuTTY、SSCOM / 各类串口助手都是这一类。它们同样可能
-> 置位 DTR，但走文本通道、不发 Improv 帧，所以防护不适用 —— DTR 连续置位满
-> 5 秒就会触发恢复出厂。**判断方法**：打开软件后看日志里有没有
-> `[BUTTON ] key pressed`，有就说明这个软件置位了 DTR。
+> 防护只在**客户端会发 Improv 帧**时生效，所以还有一类场景覆盖不到：**不发帧的
+> 串口软件**（esp-web-tools 的 `ewt-console` 组件、MobaXterm 等）。它们如果置位了
+> DTR，就是"按住 BOOT"，而"收到过帧"这个判据不成立 —— DTR 连续置位满 5 秒就会
+> 触发恢复出厂。
 >
-> 本项目 `scripts/monitor.ps1 -Seconds` 不受影响（显式设了 `DtrEnable = $false`，
-> `tests/tools/board_auth.py` 同理）；**不带 `-Seconds` 的交互模式走的是
-> `arduino-cli monitor`，DTR 行为未核实**，用之前建议先扫一眼日志。另见 HANDOFF §5。
+> 但**"不发帧"本身不等于危险**，危险的是"DTR 被置位"。置不置位是各软件自己的
+> 默认值，与它是不是串口助手**无关**：
+>
+> - **已实测安全**：MobaXterm 的普通串口（2026-09-16，连上 20 秒，日志里没有
+>   任何 `[BUTTON ]` 行，GPIO9 全程为高）；`scripts/monitor.ps1 -Seconds`
+>   （显式 `DtrEnable = $false`，`tests/tools/board_auth.py` 同理）。
+> - **未核实**：`monitor.ps1` 不带 `-Seconds` 的交互模式走 `arduino-cli monitor`；
+>   PuTTY / SSCOM 等第三方工具。
+>
+> **通用判据**：打开软件后看日志里有没有 `[BUTTON ] key pressed` —— 有就是置位了
+> DTR，赶紧关掉。另见 HANDOFF §5。
 
 ### 5.4 延迟测量
 

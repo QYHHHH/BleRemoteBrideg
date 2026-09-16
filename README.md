@@ -20,6 +20,9 @@ ESP32-C3 双角色 BLE 桥接固件：把**小米蓝牙遥控器 2 Pro（RC003�
 
 > 项目边界：只处理按键。不涉及遥控器麦克风与音频，不实现 USB HID / USB UAC、
 > Windows 伴侣程序、虚拟声卡、内核驱动、注入或 Wi-Fi/Web 后台。
+> （不做音频不是没想过：四种架构的实测内存与延迟评估见
+> [`docs/MIC-AUDIO-FEASIBILITY.md`](docs/MIC-AUDIO-FEASIBILITY.md)，
+> 全部方案要么换芯片、要么免驱不了，结论是不做。）
 >
 > 当前版本 **v0.0.4**：git tag 与固件自报版本（`config.h` 的 `BRIDGE_FW_VERSION`）
 > 手工同步，改一边必须改另一边，固件那侧要重新烧录才生效。
@@ -47,7 +50,7 @@ ESP32-C3 双角色 BLE 桥接固件：把**小米蓝牙遥控器 2 Pro（RC003�
   Windows 上永远不会有键卡住。
 - **测试基建**：宿主端模型检查（11098 项断言，含 4000 步随机不变量测试）+
   设备端自检（143 项向量 + 44 项分发仿真），宿主与设备消费同一份期望值向量；
-  Web 页面另有 **150 项断言**（不接板子，约 1 秒，用本机 Chrome 跑真 DOM）。
+  Web 页面另有 **161 项断言**（不接板子，约 1 秒，用本机 Chrome 跑真 DOM）。
 - **Web 配置界面**：开机自动连上 Wi-Fi 并提供按键映射页面（手机 / 电脑浏览器直接访问），
   逐键绑定电脑快捷键或媒体键，配置持久化；按下遥控器时页面**即时推送**高亮
   （WebSocket，不是轮询）。首次访问设置访问密码，浏览器可保存；忘记密码时
@@ -277,18 +280,21 @@ RC003 上的 NFC 是一张 **ISO 14443-4 智能卡**（复旦微芯片，小米�
   状态，不会卡在"连接中"。
 
 > ⚠️ **已知冲突（2026-09-16 实测确认）**：本板把 USB 串口的 **DTR 接到了 GPIO9**，
-> 也就是 BOOT 键。任何串口软件打开端口时只要置位 DTR，在固件看来就和**按住 BOOT
+> 也就是 BOOT 键。串口软件打开端口时**只要置位 DTR**，在固件看来就和**按住 BOOT
 > 完全一样**——这跟软件**发不发数据无关**，是打开端口那一刻的控制线电平问题。
 >
 > 固件对此有防护：本次按住期间**收到过 Improv 帧**，就不再触发 5 秒恢复出厂。
-> 于是结论有点反直觉：
+> 于是判断分两层，别混在一起：
 >
-> - **配网页（esp-web-tools）是安全的** —— 它打开端口后毫秒级就发 Improv 帧，防护生效。
-> - **普通串口软件是危险的** —— PuTTY、SSCOM/串口助手这类"只收不发"的工具不发
->   Improv 帧，防护不生效，DTR 连续置位满 5 秒就会**清空全部配对与设置**。
+> 1. **这个软件会不会置位 DTR** —— 各软件自己的默认值，跟它是不是"串口助手"
+>    **无关**。已实测不置位的：**MobaXterm 的普通串口**（连上 20 秒无异常）、
+>    本项目 `scripts/monitor.ps1`（显式设了 `DtrEnable = $false`）。
+> 2. **置位了 DTR 的话，防护管不管用** —— 配网页（esp-web-tools）打开端口后
+>    毫秒级就发 Improv 帧，**安全**；不发帧的工具不受保护，DTR 连续置位满 5 秒
+>    就会**清空全部配对与设置**。
 >
-> 用普通串口软件看日志前，先确认它没有置位 DTR。本项目 `scripts/monitor.ps1`
-> 显式设了 `DtrEnable = $false`，可以直接用。串口 `factory` 命令不受影响。
+> **通用判据**：打开软件后看日志里有没有 `[BUTTON ] key pressed`，有就说明这个
+> 软件置位了 DTR，赶紧关掉。串口 `factory` 命令不受影响。
 
 ### 访问密码（可选，首次访问时设置）
 
@@ -297,21 +303,17 @@ RC003 上的 NFC 是一张 **ISO 14443-4 智能卡**（复旦微芯片，小米�
 - **首次访问**（设备无密码）：自动进入**设置页**，填密码并确认一次 →
   **直接跳进应用**（会话当场生效，不用再输一遍）
 - **再次访问**：直接进（cookie 7 天有效）；过期后回到登录页**只填密码**
-- 密码只存 SHA1 哈希；cookie = `HMAC(sha1(密码), 时间戳)`，偷到也不能反推密码
-- 忘记密码：按住 BOOT 5 秒清空一切；或串口 `pass clear`
-
-- 密码**只存 SHA1 哈希**，从不明文落 NVS
-- cookie = `HMAC(sha1(密码), 时间戳)`，有效期 7 天；偷到 cookie 不能反推密码
-- 登出：在浏览器里访问 `/logout`（或清掉 `mrb_sess` cookie）
-
-- 密码以 **SHA1 哈希**存在 NVS，不存明文；页面与 WebSocket 都需要它
+- **登出**：在浏览器里访问 `/logout`（或清掉 `mrb_sess` cookie）
+- 密码**只存 SHA1 哈希**，从不明文落 NVS；cookie = `HMAC(sha1(密码), 时间戳)`，
+  有效期 7 天 —— 偷到 cookie 也不能反推密码
 - WebSocket 无法携带认证头（浏览器的限制），所以页面先用已认证的请求
   `GET /api/token` 取一个**派生令牌**，再用 `ws://…/ws?token=…` 连接
 - 串口命令：`pass <new>` 改密码，`pass clear` 清除（下次访问重新设置），
   `pass` 查看当前状态
 - **忘记密码**：**按住板上的 BOOT 键 5 秒** —— 清空全部设置与配对（Wi-Fi 密码、
   网页密码、按键映射、蓝牙配对）并重启，设备回到出厂状态，重新设置即可
-  （这也是出厂恢复的统一入口）
+  （这也是出厂恢复的统一入口）。只想重置密码、保留配对与键位映射时用串口
+  `pass clear`，下次访问会重新要求设置。
 
 > 安全边界，如实说明：HTTP 与 WebSocket 都是**明文**（这台设备装不下 TLS——
 > mbedtls 会话要 16–40 KB，而双 BLE 链路下只剩约 30 KB）。因此密码防的是
@@ -348,8 +350,9 @@ python tests/tools/web_ui_preview.py
 ```
 
 **联网方式**：配置页走 **STA**——桥接器加入你家 Wi-Fi，和电脑/手机在同一网段，
-开机 8 秒后自动连上（已保存网络时），串口 `wifi status` 打印地址。想彻底关掉用
-`wifi off`；没有可用 Wi-Fi 时 `wifi ap on` 可退回 AP 热点（见下方命令表）。
+开机 8 秒后自动连上（已保存网络时），串口 `wifi status` 打印地址。**配置页是常开的，
+`wifi off` 会被拒绝**（要腾出射频与内存只能改固件）；没有可用 Wi-Fi 时
+`wifi ap on` 可退回 AP 热点（见下方命令表）。
 
 **为什么要知道堆水位**：Wi-Fi 与 BLE 共享射频和内存，开 Wi-Fi 后堆从 ~87 KB 降到
 约 **30 KB**（最大连续块 ~20 KB）。STA 下够用；AP 模式还要再吃掉约 38 KB，
@@ -374,9 +377,10 @@ python tests/tools/web_ui_preview.py
 | `raw on\|off` / `lat on\|off` / `log <0-4>` | 原始报文 / 延迟 / 日志级别 |
 | `map back\|power\|voice <模式>` | 运行时键位，NVS 持久化 |
 | `selftest` / `sim` | 设备端自检（向量 + 分发仿真） |
-| `wifi on\|off\|status` | 开/关 Web 配置页（STA，加入已保存网络；`status` 打印地址与堆余量） |
+| `wifi on` / `wifi status` | 开启 / 查看 Web 配置页（STA，加入已保存网络；`status` 打印地址与堆余量） |
 | `wifi join <ssid> <pass>` | 保存配置页要加入的网络（开放网络用 `""`） |
-| `wifi ap on\|off` | 退回 AP 热点模式（无可用 Wi-Fi 时的兜底，堆占用更高） |
+| `wifi ap on` | 退回 AP 热点模式（无可用 Wi-Fi 时的兜底，堆占用更高） |
+| `wifi off` / `wifi ap off` | **已废弃**：配置页常开，这两个命令只回一句拒绝提示 |
 | `factory` | 清除全部配对与设置并重启 |
 
 ---
@@ -458,7 +462,7 @@ firmware/MiRemoteBridge/
 | --- | --- |
 | L1 编译 | ✅ 编译通过（flash **43%** / 全局 RAM **14%**，DIO + huge_app；不代表 Wi-Fi 运行时堆占用） |
 | L2 宿主端模型验证 | ✅ 11098 项断言（含 HID 描述符真实解析、4000 步随机不变量） |
-| L2 页面回归 | ✅ 150 项断言（不接板子，本机 Chrome 跑真 DOM，约 1 秒；热点三态逐键校验） |
+| L2 页面回归 | ✅ 161 项断言（不接板子，本机 Chrome 跑真 DOM，约 1 秒；热点三态逐键校验） |
 | L3 设备端自检 | ✅ 真机：`143 passed / 0 failed` + 分发仿真 `44 passed / 0 failed` |
 | L4 上游 RC003 → C3 | ✅ 真机：13/13 键、0 未知码；延迟 min 190 / median 215 / max 361 µs |
 | L4 下游 C3 → Windows | ✅ 真机：键盘 + 媒体键；多主机切换（Windows ↔ iPhone） |
@@ -476,7 +480,7 @@ tests/
 ├── vectors/key_vectors.json    解析/状态机/键表/模式 的唯一权威向量
 ├── tools/gen_vectors.py        生成 firmware/MiRemoteBridge/selftest_vectors.h
 ├── tools/gen_web_page.py       把 web_page.h 拆成三份 gzip 资产（web_page_gz.h）
-├── tools/check_web_ui.py       闪存预算 + 125 项页面断言（本机 Chrome，不接板子）
+├── tools/check_web_ui.py       闪存预算 + 161 项页面断言（本机 Chrome，不接板子）
 ├── tools/check_all.py          四项硬件检查一次跑完（需板子）
 ├── tools/spot_audit.py         逐键打印遥控器热点的三态计算样式（诊断用）
 ├── tools/board_auth.py         硬件脚本共用的串口/HTTP/断言工具
