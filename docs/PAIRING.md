@@ -34,7 +34,7 @@
 启动后应看到：
 
 ```
-[   1234][BRIDGE ] MiRemoteBridge v0.0.1
+[   1234][BRIDGE ] MiRemoteBridge v0.0.4
 [   1240][BRIDGE ] console ready at 115200 baud
 [   1250][BRIDGE ] keymap: back=consumer_back power=kb_alt_f4 voice=kb_ralt_comma
 [   1300][BLE    ] host stack: nimble, own address: xx:xx:xx:xx:xx:xx

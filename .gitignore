@@ -31,3 +31,7 @@ __pycache__/
 .env
 .env.local
 
+# Build-time version override written by scripts\build.ps1 -Version.
+# A debug build's suffix is local to whoever made it; only config.h is tracked.
+firmware/MiRemoteBridge/version_local.h
+

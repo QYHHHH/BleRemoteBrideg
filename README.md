@@ -21,8 +21,11 @@ ESP32-C3 双角色 BLE 桥接固件：把**小米蓝牙遥控器 2 Pro（RC003�
 > 项目边界：只处理按键。不涉及遥控器麦克风与音频，不实现 USB HID / USB UAC、
 > Windows 伴侣程序、虚拟声卡、内核驱动、注入或 Wi-Fi/Web 后台。
 >
-> 当前版本 **v0.0.1**：git tag 与固件自报版本（`config.h` 的 `BRIDGE_FW_VERSION`）
+> 当前版本 **v0.0.4**：git tag 与固件自报版本（`config.h` 的 `BRIDGE_FW_VERSION`）
 > 手工同步，改一边必须改另一边，固件那侧要重新烧录才生效。
+> 调试固件在基线后加后缀（如 `v0.0.4-improv`）且不另打 tag，用
+> `.\scripts\build.ps1 -Version v0.0.4-improv` 生成，不必改 `config.h`。
+> 详细约定见 `AGENTS.md`。
 
 ---
 
@@ -151,6 +154,9 @@ RC003 的音量、返回等键把**私有键码**塞在 HID 报文的按键槽�
 
 # 4. 打开串口控制台
 .\scripts\monitor.ps1 -Port COM3
+
+# 打一个带后缀的调试固件（不改 config.h，见 AGENTS.md 的版本约定）
+.\scripts\flash.ps1 -Port COM3 -Version v0.0.4-improv
 ```
 
 不需要硬件就能跑的全部检查：

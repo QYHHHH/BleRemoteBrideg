@@ -4,6 +4,7 @@
 #   .\scripts\flash.ps1 -Port COM3            # explicit confirmation, probe, build, upload
 #   .\scripts\flash.ps1 -Port COM3 -ProbeOnly # read-only chip identification
 #   .\scripts\flash.ps1 -Port COM3 -SkipBuild
+#   .\scripts\flash.ps1 -Port COM3 -Version v0.0.4-improv   # debug build, see config.h
 #
 # This script never guesses a COM port. Without -Port it lists what is really
 # attached and stops; only an explicitly given port is ever uploaded to.
@@ -15,7 +16,8 @@ param(
     [switch] $SkipBuild,
     [switch] $CdcOnBoot,
     [switch] $ProbeOnly,
-    [int]    $Baud = 921600
+    [int]    $Baud = 921600,
+    [string] $Version = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -104,7 +106,7 @@ try {
     # 3. Build (unless skipped) and upload.
     # -----------------------------------------------------------------------
     if (-not $SkipBuild) {
-        $code = Invoke-BridgeBuild -Paths $paths -CdcOnBoot:$CdcOnBoot
+        $code = Invoke-BridgeBuild -Paths $paths -CdcOnBoot:$CdcOnBoot -Version $Version
         if ($code -ne 0) {
             Set-FlashStatus ("NOT FLASHED: the build failed (exit {0})." -f $code)
             exit $code

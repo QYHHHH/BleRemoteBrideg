@@ -13,11 +13,31 @@
 // ---------------------------------------------------------------------------
 // Firmware identity
 // ---------------------------------------------------------------------------
-// Kept in step with the git tag by hand - nothing ties them together
-// automatically. The tag carries the "v" (v0.0.1); this string matches it
-// character for character so the boot banner, `status` and the tag all agree.
+// The git tag is the release; this string is what the device reports. Nothing
+// ties them together automatically, so bump both in the same commit:
+//
+//   release      v0.0.4          tag: v0.0.4
+//   debug build  v0.0.4-improv   tag: unchanged
+//
+// A suffix names the one thing that build was made to test. It never means
+// "newer than the tag" - a build that is ahead of the tag is waiting for the
+// next release, not carrying a suffix. The point of the suffix is that a board
+// found on a desk weeks later still says which experiment is on it.
+//
+// To make a suffixed build without editing this tracked file, pass -Version to
+// scripts\build.ps1 or scripts\flash.ps1. That writes version_local.h (which
+// .gitignore covers) and it wins over the default below.
 #define BRIDGE_FW_NAME        "MiRemoteBridge"
-#define BRIDGE_FW_VERSION     "v0.0.1"
+
+#if defined(__has_include)
+#if __has_include("version_local.h")
+#include "version_local.h"  // build-time override, never committed
+#endif
+#endif
+
+#ifndef BRIDGE_FW_VERSION
+#define BRIDGE_FW_VERSION     "v0.0.4"
+#endif
 
 // ---------------------------------------------------------------------------
 // Downstream (peripheral) role: what Windows sees
