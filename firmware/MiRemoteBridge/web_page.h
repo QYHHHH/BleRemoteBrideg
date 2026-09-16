@@ -106,12 +106,27 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 .rm .body .rb.sel{background:#d7ecff;border-color:#327ede;box-shadow:inset 0 0 0 2px #327ede;color:#1257b5}
 .rm .body .rb.live,.rm .body .rb.pulse{background:#327ede;border-color:#327ede;box-shadow:0 0 0 3px #327ede40;color:#fff}
 .workspace{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:14px;align-items:start}.board{padding:14px}.board svg{display:block;width:100%;height:130px;margin:6px 0}.board p{font-size:12px;margin-top:6px}.memory{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}.memory strong{display:block;font:600 20px Consolas,monospace}.memory small{color:var(--mut)}
+/* Full-screen notice for the moment the 30-minute window runs out. The pill in
+   the top bar counts down; this only appears once it reaches zero and stays up
+   until the board is woken again, because at that point every request fails and
+   the page has nothing else left to tell the user.
+   [hidden] has to be spelled out: a class selector that sets display:flex
+   outranks the UA stylesheet's [hidden]{display:none}, so the attribute alone
+   does nothing - which is exactly how an earlier version of this overlay ended
+   up permanently visible. */
+.closed-overlay{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:22px;background:#0f1a26b8}
+.closed-overlay[hidden]{display:none}
+.closed-card{width:100%;max-width:430px;background:#fff;border-radius:16px;padding:30px 28px;text-align:center;box-shadow:0 20px 60px #0b142066}
+.closed-card h2{margin:0 0 12px;font-size:21px}
+.closed-card .big{display:inline-block;margin:14px 0 16px;padding:9px 24px;border-radius:11px;background:#fff8ee;border:1px solid #f1dfc4;color:#906b34;font:600 26px Consolas,monospace;letter-spacing:2px}
+.closed-card p{font-size:13px;line-height:1.9;color:var(--mut);margin:0}
+.closed-card p b{color:var(--ink)}
 @media(max-width:1100px){.workspace{grid-template-columns:minmax(0,1fr) 260px}.grid{grid-template-columns:minmax(0,1fr) 150px minmax(0,1fr);gap:8px}.k .ed{display:none}}
 @media(max-width:900px){.workspace{grid-template-columns:1fr}.board{display:grid;grid-template-columns:150px 1fr;gap:0 16px}.board svg{grid-row:1/7;height:250px}.board h2{grid-column:2}.memory{grid-column:1/-1}.hero{flex-direction:row}.grid{grid-template-columns:minmax(0,1fr) 170px minmax(0,1fr)}}
 @media(max-width:620px){.grid{grid-template-columns:1fr 1fr}.rm{grid-row:1}.rm .body{margin:-110px -40px}.hero{flex-wrap:wrap}.hero .t{flex-basis:100%}.board{display:block}.board svg{height:210px}}
 main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:stretch}.mapping-panel{padding:16px;display:flex;flex-direction:column;min-height:min(790px,calc(100vh - 118px))}.mapping-panel .head{margin-bottom:14px}.grid{grid-template-columns:minmax(0,1fr) 230px minmax(0,1fr);gap:12px;align-items:center;flex:1}.col{align-self:stretch;justify-content:space-around;gap:12px;padding:12px 0}.k button{min-height:60px;padding:8px 10px;line-height:1.4}.k .r1,.k .act{font-size:13px}.k .ed{display:inline}.rm{padding:0;margin:0;border:0;flex-direction:column;gap:12px;align-self:center}.rm .body{width:132px;height:540px;transform:scale(.86);margin:-37.8px -9.24px}.cap{font-size:11px;text-align:center}.side{display:flex;flex-direction:column;gap:14px;height:100%}
 .rack{padding:14px}.rack-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.rack-heading span{font-size:12px}.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.slot{display:flex;flex-direction:column;align-items:start;gap:8px;text-align:left;padding:13px 11px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;min-width:0}.slot.selected{background:#edf5ff;border-color:#82b7f6;box-shadow:inset 0 3px #1674ed}.slot strong{font-size:18px}.slot-index,.slot-battery,.slot-link{font-size:12px;color:var(--mut)}.slot-link.linked{color:var(--ok)}.slot-wake{font-size:11px;color:#906b34}.slot-id{font-size:11px;color:var(--mut);word-break:break-all}.rack-actions{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px}.rack-actions>div{flex:1;font-size:12px}.rack-actions small{display:block;color:var(--mut);margin-top:3px}.rack-actions .btn{padding:7px 10px}
-.side .board{display:block;flex:1 0 auto;position:relative;align-content:start;padding:16px}.board>h2{margin-bottom:14px}.board>#pH,.board>#pW{float:right;margin:0 0 0 6px}.board-body{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(140px,.8fr);gap:16px;align-items:stretch}.hardware{display:flex;gap:14px;align-items:center}.board .hardware svg{width:220px;height:300px;flex:none;margin:0}.legend{flex:1;min-width:0}.board .legend p{display:block;margin:0;padding:11px 0;border-bottom:1px solid #edf0f3;font-size:13px;line-height:1.7}.board .legend p:last-child{border-bottom:0}.board .memory{border-top:0;border-left:1px solid var(--line);padding:10px 0 10px 16px;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;grid-column:auto}.memory h3{align-self:stretch;text-align:left;margin-bottom:8px}.memory strong{font-size:18px}.board .memory p{font-size:10px;margin:7px 0;line-height:1.7}.memory small{font-size:11px;line-height:1.6}.board .memory #memDetail{white-space:pre-line}
+.side .board{display:block;flex:1 0 auto;position:relative;align-content:start;padding:16px}.board>h2{margin-bottom:14px}.board>#pH,.board>#pW,.board>#pF{float:right;margin:0 0 0 6px}.board-body{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(140px,.8fr);gap:16px;align-items:stretch}.hardware{display:flex;gap:14px;align-items:center}.board .hardware svg{width:220px;height:300px;flex:none;margin:0}.legend{flex:1;min-width:0}.board .legend p{display:block;margin:0;padding:11px 0;border-bottom:1px solid #edf0f3;font-size:13px;line-height:1.7}.board .legend p:last-child{border-bottom:0}.board .memory{border-top:0;border-left:1px solid var(--line);padding:10px 0 10px 16px;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;grid-column:auto}.memory h3{align-self:stretch;text-align:left;margin-bottom:8px}.memory strong{font-size:18px}.board .memory p{font-size:10px;margin:7px 0;line-height:1.7}.memory small{font-size:11px;line-height:1.6}.board .memory #memDetail{white-space:pre-line}
 .empty-remote{min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;color:var(--mut)}.empty-remote h2{color:var(--ink)}.empty-remote p{font-size:12px}.empty-remote small{font-size:10px}.empty-icon{font-size:32px;color:#86a8cf;border:1px dashed #c2d5e9;border-radius:14px;padding:6px 24px}.learn-banner{border-bottom:1px solid var(--line);padding:8px 0 16px}.learn-banner b,.learn-banner span{display:block}.learn-banner span{font-size:13px;color:var(--mut);margin-top:4px}.simulator{display:flex;align-items:center;gap:8px;margin:15px 0;flex-wrap:wrap}.simulator>span{font-size:12px;color:var(--mut)}.learned-keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.learned-key button{min-height:60px;padding:8px 10px}.learned-key.heard{background:#edf5ff;border-color:#1674ed}#slotName{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;border:1px solid #dce1e8;border-radius:7px;background:#fff;color:var(--ink);font:inherit}
 #wires path{stroke:#a6afbc;stroke-opacity:.85;stroke-width:1}#memRing{--used:0%;width:94px;height:94px;flex:none;border-radius:50%;background:conic-gradient(#327ede var(--used),#e9eef2 0);padding:8px;margin:2px 0 10px;display:grid;place-items:center;transform:rotate(-90deg)}#memRing>div{width:100%;height:100%;border-radius:50%;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(90deg)}#memRing b{font:600 19px Consolas,monospace;color:var(--ink)}#memRing span{font-size:10px;color:var(--mut);margin-top:1px}#memTotal{margin-top:3px}.repo-placeholder{font-size:12px;color:var(--blue);padding:4px 9px;border:1px dashed #b9d1ee;border-radius:6px;text-decoration:none;cursor:default}.mapping-panel .head span,.memory #memDetail,.memory #memState{font-size:11px!important}
 @media(max-width:1250px) and (min-width:901px){main{padding:12px}.workspace{gap:12px}.mapping-panel{padding:12px}.grid{grid-template-columns:minmax(0,1fr) 184px minmax(0,1fr);gap:8px}.k .r1,.k .act{font-size:12px}.board-body{grid-template-columns:minmax(0,1fr) 145px;gap:10px}.board .hardware svg{width:170px;height:260px}.rack-actions{flex-wrap:wrap}.rack-actions>div{flex-basis:100%}}
@@ -120,7 +135,7 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
 .mobile-map-fix{display:none}@media(max-width:560px){.mapping-panel{padding:12px}.grid{grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr);gap:5px;align-items:center}.grid #colL{grid-column:1;grid-row:1}.grid .rm{grid-column:2;grid-row:1;flex-direction:column;justify-content:center;gap:6px;padding:0;border:0;margin:0}.grid #colR{grid-column:3;grid-row:1}.grid .col{grid-row:1;gap:8px;padding:0;align-self:stretch;justify-content:space-around}.grid .rm .body{transform:scale(.64);margin:-97.2px -23.76px}.grid .cap{text-align:center;font-size:8px}.grid .k button{min-height:58px;padding:6px}.grid .k .r1,.grid .k .act{font-size:10px}.grid .k .ico{width:13px;height:13px}}
 </style></head><body>
 <div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span><a class="repo-placeholder" aria-disabled="true">代码仓库 · 地址待填写</a>
-<span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>被控蓝牙…</span></span><button class="pill off" id="pW" type="button" title="点击重新连接并夺回控制权"><i></i><span>网页控制连接中…</span></button><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
+<span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>被控蓝牙…</span></span><button class="pill off" id="pW" type="button" title="点击重新连接并夺回控制权"><i></i><span>网页控制连接中…</span></button><span class="pill" id="pF" title="Wi-Fi 开启后 30 分钟自动关闭，按开发板 BOOT 键可重新打开"><i></i><span>Wi-Fi…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
 <main>
 <div class="warn" id="off" hidden><span>无法连接桥接器<span id="offWhy">（连接断开，自动重连中）</span></span><button id="retry">重新连接</button></div>
 <div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">与桥接器连接同一路由器，即可配置。</p><p id="diag" aria-live="polite"></p></div>
@@ -149,9 +164,10 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
 <p><b>D5 · 主机 / GPIO13</b><br>呼吸：未连接；快闪：HID 未就绪；常亮：键盘 HID 已就绪。</p>
 <p><b>D4 · 遥控器 / GPIO12</b><br>呼吸：等待或搜索；快闪：连接中；常亮：就绪。按住遥控器按键时熄灭。</p>
 <p><b>RST</b>：硬件复位重启。</p>
-<p><b>BOOT / GPIO9</b>：运行时短按无操作；<b>长按 5 秒清除全部设置与蓝牙配对并重启</b>。</p>
+<p><b>BOOT / GPIO9</b>：<b>短按打开配置页（30 分钟窗口）</b>，窗口期内再次短按会重置倒计时；<b>长按 5 秒清除全部设置与蓝牙配对并重启</b>。窗口结束后 Wi-Fi 自动关闭。</p>
 <div class="memory"><h3>实时堆内存</h3><strong id="memFree">—</strong><p id="memDetail">等待设备数据</p><small id="memState">随设备状态更新</small></div>
 </aside></div></main>
+<div class="closed-overlay" id="closedOverlay" hidden><div class="closed-card" role="alertdialog" aria-labelledby="closedTitle"><h2 id="closedTitle">Wi-Fi 已关闭</h2><p>30 分钟配置窗口已结束，开发板已断开 Wi-Fi，网页无法再连接。</p><div class="big">BOOT</div><p>按一下开发板上的 <b>BOOT</b> 按键，Wi-Fi 会重新打开 30 分钟。<br>按完等几秒，再刷新本页即可继续。</p></div></div>
 <dialog id="ed"><form id="edF">
 <div class="dh"><div><h2 id="edT">编辑按键</h2><span class="mono mut" id="edC"></span></div><button type="button" class="btn" id="edX" aria-label="关闭">✕</button></div>
 <div class="db">
@@ -181,7 +197,7 @@ for(i=0;i<10;i++)KB.push([30+i,String((i+1)%10)]);
 for(i=0;i<12;i++)KB.push([58+i,'F'+(i+1)]);
 var CS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
 var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
-var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null,wsOpened:false,claimed:false,switching:false};
+var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null,wsOpened:false,claimed:false,switching:false,winState:'',winEnd:0};
 function hx(v){return v.toString(16).toUpperCase().padStart(2,'0')}
 function pick(l,v,d){for(var i=0;i<l.length;i++)if(l[i][0]===v)return l[i][1];return d}
 function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return pick(CS,a.cons,'媒体 0x'+hx(a.cons));
@@ -213,7 +229,6 @@ dropped it without a word and left the page stuck on "waiting to read" forever.
 Anything that must fit in one frame must stay small. */
 function req(u,m){
 return fetch(u,{cache:'no-store',method:m||'GET',headers:m==='POST'?{'X-MRB-Slot':String(selectedSlot)}:{}}).then(function(r){
-if(r.status===401){var e=new Error('登录会话无效，请重新登录');e.relogin=true;throw e}
 return r.json().catch(function(){throw new Error('HTTP '+r.status)}).then(function(j){
 if(!r.ok)throw new Error((j&&j.error)||('HTTP '+r.status));return j})})}
 function pulse(raw){if(!raw)return;Array.prototype.forEach.call($('rmArt').children,function(e){
@@ -231,22 +246,20 @@ function wsOpen(){S.wsRetry=0;S.wsOpened=true;S.claimed=false;load()}
 function wsClosed(e){var taken=S.claimed||(e&&e.code===4001);online(false,taken?'控制权已被另一网页接管，点击可夺回':'连接意外断开，正在自动重连');if(S.wsTimer)clearTimeout(S.wsTimer);S.wsTimer=null;if(!taken){var d=Math.min(8000,600*(S.wsRetry=(S.wsRetry||0)+1));S.wsTimer=setTimeout(function(){connectWS(false)},d)}}
 function connectWS(manual){
 if(S.ws&&S.ws.readyState===1)return;
-/* the socket cannot carry an Authorization header, so fetch the token first
-over an authenticated request and hand it over in the URL */
-fetch('/api/token',{cache:'no-store'}).then(function(r){
-if(r.status===401){var e=new Error('relogin');e.relogin=true;throw e}
-return r.json()}).then(function(j){
-if(!j||typeof j.token!=='string'||!j.token)throw Error('no token');
-if(j.occupied&&!manual){online(false,'另一网页正在控制，点击可夺回控制权');return}
-openSocket(j.token,manual)}).catch(function(e){
-if(e&&e.relogin){location.href='/login';return}   /* session gone: sign in again */
-online(false,'连接意外断开，正在自动重连');if(S.wsTimer)clearTimeout(S.wsTimer);S.wsTimer=setTimeout(function(){connectWS(false)},2500)})}
-function openSocket(token,manual){
+/* No token to fetch any more - there is no auth. If the board is not currently
+running its 30-minute window, the upgrade fails fast and the closed handler
+shows "Wi-Fi 已关闭". A short press of the BOOT key on the board re-opens it. */
+if(manual){online(false,'正在请求控制权...');}
+openSocket(manual).catch(function(){wsClosed();})}
+function openSocket(manual){
+return new Promise(function(resolve,reject){
 try{if(S.ws){S.ws.onclose=null;S.ws.close()}}catch(e){}
 var proto=(location.protocol==='https:')?'wss://':'ws://';
-try{S.ws=new WebSocket(proto+location.host+'/ws?token='+encodeURIComponent(token)+(manual?'&action=claim':''))}catch(e){wsClosed();return}
-S.ws.onopen=wsOpen;S.ws.onclose=wsClosed;S.ws.onerror=function(){};
-S.ws.onmessage=function(ev){var j=null;try{j=JSON.parse(ev.data)}catch(e){return}wsMessage(j)}}
+var ws;
+try{ws=new WebSocket(proto+location.host+'/ws'+(manual?'?action=claim':''))}catch(e){reject(e);return}
+S.ws=ws;resolve();
+ws.onopen=wsOpen;ws.onclose=wsClosed;ws.onerror=function(){};
+ws.onmessage=function(ev){var j=null;try{j=JSON.parse(ev.data)}catch(e){return}wsMessage(j)}})}
 function idx(l){var o={};(l||[]).forEach(function(a){o[a.raw]=a});return o}
 function apply(d){if(!Array.isArray(d.bindings)||!Array.isArray(d.defaults)||!Array.isArray(d.effective))throw Error('按键数据不完整');
 S.b=idx(d.bindings);S.d=idx(d.defaults);S.e=idx(d.effective);S.ok=true;render();if(typeof syncDefault==='function')syncDefault()}
@@ -283,10 +296,43 @@ pill('pR',rc,rc?'遥控器已连接':'遥控器未连接');pill('pH',h,h?'被控
 $('h1').textContent=(rc&&h)?'RC003 已就绪':(rc?'遥控器已连接，等待主机':'等待遥控器连接');
 $('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。');
 connectionHint(j);if(typeof drawSlots==='function')drawSlots();
-if(typeof j.activeKey==='number')highlight(j.activeKey)}
+if(typeof j.activeKey==='number')highlight(j.activeKey);applyWindow(j)}
+function pollWindow(){req('/api/window').then(applyWindow).catch(function(){})}
+/* The 30-minute countdown lives on the page. The board only ever reports how
+many whole seconds are left - on the websocket handshake, on every 5 s
+heartbeat, and in /api/status - and the page turns that into a deadline and
+counts down from it locally, so the pill keeps moving while the socket is idle
+and stays right after the tab has been backgrounded and had its timers
+throttled by the browser.
+Both field shapes are accepted: the heartbeat and /api/status use
+windowActive / windowRemaining / windowAp, /api/window uses active /
+remaining / ap. But a snapshot carrying none of them is ignored rather than
+guessed at - /api/status once omitted the trio and the fallback then read its
+"ap" field, which is the SSID string, so every load() flipped the pill to
+"closed" while the socket was plainly still up. */
+function applyWindow(j){
+var has=function(k){return !!j&&j[k]!==undefined};
+if(!has('windowActive')&&!has('active'))return;
+var active=!!(has('windowActive')?j.windowActive:j.active),
+rem=(has('windowRemaining')?j.windowRemaining:j.remaining)||0,
+isAp=!!(has('windowAp')?j.windowAp:j.ap);
+if(!active)S.winState='off';
+else if(isAp)S.winState='ap';
+else{S.winState='on';S.winEnd=Date.now()+rem*1000}
+paintWindow()}
+function paintWindow(){
+if(S.winState==='on'&&Date.now()>=S.winEnd)S.winState='off';
+var p=$('pF'),txt,cls;
+if(!S.winState){cls='pill';txt='Wi-Fi…'}
+else if(S.winState==='ap'){cls='pill ok';txt='Wi-Fi 常开'}
+else if(S.winState==='on'){var rem=Math.max(0,Math.round((S.winEnd-Date.now())/1000)),m=Math.floor(rem/60),s=rem%60;cls='pill '+(rem<=60?'off':'ok');txt='Wi-Fi 关闭 '+m+':'+(s<10?'0':'')+s}
+else{cls='pill off';txt='Wi-Fi 已关闭'}
+if(p){p.className=cls;p.lastChild.textContent=txt}
+var ov=$('closedOverlay');if(ov)ov.hidden=S.winState!=='off'}
+setInterval(paintWindow,1000);
 function load(manual){if(S.load||S.busy||$('ed').open||$('rd').open)return;S.load=true;const socket=S.ws;btns();
 return req('/api/slots').then(applySlots).then(function(){return req('/api/bindings')}).then(apply).then(function(){return req('/api/status')}).then(function(j){stat(j);online(socket===S.ws&&!!socket&&socket.readyState===1);if(manual)toast('已刷新')})
-.catch(function(e){if(e&&e.relogin){location.href='/login';return}
+.catch(function(e){
 var m=(e&&e.message==='Failed to fetch')?'连接失败，请确认设备和本机在同一网络':((e&&e.message)||'连接失败');
 online(false,m);if(manual)toast(m)}).finally(function(){S.load=false;btns()})}
 function openEd(r){if(!S.ok||!S.on||S.busy||S.load)return;S.sel=r;S.cur=r;var a=cur(r)||{kind:1,mod:0,key:40,cons:233};S.mods=a.mod|0;
@@ -333,7 +379,7 @@ const side=document.createElement('div');side.className='side';workspace.append(
 section.className='card mapping-panel';const shell=$('grid').parentElement;shell.replaceWith($('grid'));
 const legacy=document.createElement('div');legacy.hidden=true;document.body.append(legacy);
 legacy.append(document.querySelector('.hero'),document.querySelector('.foot'),document.querySelector('.note'),$('pR'),$('pB'));
-const board=document.querySelector('.board');side.append(board);board.prepend($('pH'),$('pW'));
+const board=document.querySelector('.board');side.append(board);board.prepend($('pH'),$('pW'),$('pF'));
 const boardTitle=board.querySelector('h2'), art=board.querySelector('svg'), memoryBox=board.querySelector('.memory');
 const ring=document.createElement('div');ring.id='memRing';ring.setAttribute('role','img');ring.innerHTML='<div><b id="memPct">—</b><span>已使用</span></div>';memoryBox.querySelector('h3').after(ring);const total=document.createElement('small');total.id='memTotal';$('memFree').after(total);
 const hardware=document.createElement('div');hardware.className='hardware';const legend=document.createElement('div');legend.className='legend';

@@ -17,7 +17,7 @@ Usage:
 
 This covers page logic only: not the ESP32 HTTP stack, NVS durability,
 Wi-Fi/BLE coexistence headroom or a real phone browser (docs/TESTING.md 4.12).
-Those need a board - see browser_check.py and mobile_login_check.py.
+Those need a board - see browser_check.py.
 """
 import argparse
 import json

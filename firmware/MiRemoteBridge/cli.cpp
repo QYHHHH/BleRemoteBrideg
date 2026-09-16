@@ -96,9 +96,9 @@ void printHelp() {
   Serial.println("  log <0-4>                    log level (0 off .. 4 debug)");
   Serial.println("  selftest                     run the on-device vector + dispatch tests");
   Serial.println("  sim                          run only the dispatch simulation");
-  Serial.println("  wifi on | off | status       config Web UI: join the saved Wi-Fi network");
+  Serial.println("  wifi on | off | status       config Web UI: open / close the 30-minute window");
   Serial.println("  wifi join <ssid> <pass>      save the network the config UI should join");
-  Serial.println("  wifi ap on                   fallback: start an access point instead");
+  Serial.println("  wifi ap on                   fallback: start an access point (no window)");
   Serial.println("  reboot | factory             restart / wipe bonds and settings");
   Serial.println();
 }
@@ -491,8 +491,10 @@ void execute(char *line) {
   if (!strcasecmp(cmd, "wifi")) {
     if (argc < 2 || !strcasecmp(argv[1], "status")) {
       if (wifi_ui::enabled()) {
-        if (wifi_ui::ready()) Serial.printf("config UI : READY (%s) - open http://%s/\n", wifi_ui::mode(), wifi_ui::ip());
-        else Serial.printf("config UI : CONNECTING (%s) - Bluetooth remains active\n", wifi_ui::mode());
+        if (wifi_ui::ready()) {
+          if (wifi_ui::windowActive()) Serial.printf("config UI : READY (%s) at %s - window closes in %u s\n", wifi_ui::mode(), wifi_ui::ip(), (unsigned)wifi_ui::windowRemainingSec());
+          else Serial.printf("config UI : READY (%s) - open http://%s/\n", wifi_ui::mode(), wifi_ui::ip());
+        } else Serial.printf("config UI : CONNECTING (%s) - Bluetooth remains active\n", wifi_ui::mode());
         if (!strcasecmp(wifi_ui::mode(), "ap")) {
           // Associated clients is the fastest way to tell "cannot connect"
           // apart from "connected but never got a DHCP lease".
@@ -504,7 +506,7 @@ void execute(char *line) {
         Serial.println("            run: wifi join <ssid> <password>   (then: wifi on)");
         Serial.println("            or : wifi ap on                   (fallback access point)");
       } else {
-        Serial.printf("config UI : off - saved network \"%s\" (wifi on to join)\n",
+        Serial.printf("config UI : off - saved network \"%s\" (wifi on or short BOOT press to join)\n",
                       settings::wifiSsid().c_str());
       }
       return;
@@ -520,7 +522,7 @@ void execute(char *line) {
     }
     if (!strcasecmp(argv[1], "on")) {
       if (wifi_ui::enable()) {
-        if (wifi_ui::ready()) Serial.printf("config UI ready - open http://%s/\n", wifi_ui::ip());
+        if (wifi_ui::ready()) Serial.printf("config UI ready - open http://%s/ (window closes in 30 minutes)\n", wifi_ui::ip());
         else Serial.println("Wi-Fi connection requested; address will be logged when ready");
       } else {
         Serial.println("could not start the config UI (see the log above)");
@@ -528,7 +530,8 @@ void execute(char *line) {
       return;
     }
     if (!strcasecmp(argv[1], "off")) {
-      Serial.println("config UI is always on - Wi-Fi cannot be turned off");
+      if (wifi_ui::disable()) Serial.println("config UI window closed; press BOOT to reopen it");
+      else Serial.println("config UI is already off");
       return;
     }
     if (!strcasecmp(argv[1], "ap")) {
@@ -539,28 +542,13 @@ void execute(char *line) {
         return;
       }
       if (argc >= 3 && !strcasecmp(argv[2], "off")) {
-        Serial.println("config UI is always on - Wi-Fi cannot be turned off");
+        if (wifi_ui::disable()) Serial.println("fallback AP closed");
         return;
       }
       Serial.println("usage: wifi ap on | wifi ap off");
       return;
     }
     Serial.println("usage: wifi on | wifi off | wifi status | wifi join <ssid> <password> | wifi ap on");
-    return;
-  }
-
-  if (!strcasecmp(cmd, "pass")) {
-    if (argc < 2) {
-      Serial.printf("web console password: %s\n", settings::hasWebPassword() ? "set" : "NOT set (first visit defines it)");
-      return;
-    }
-    if (!strcasecmp(argv[1], "clear")) {
-      settings::clearWebPassword();
-      Serial.println("web console password cleared - the next visit will ask for a new one");
-      return;
-    }
-    settings::setWebPassword(argv[1]);
-    Serial.println("web console password set");
     return;
   }
 

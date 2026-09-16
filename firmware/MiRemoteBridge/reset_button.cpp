@@ -1,10 +1,15 @@
 /*
  * MiRemoteBridge - ESP32-C3 dual-role BLE bridge for Xiaomi RC003 remote
  *
- * reset_button.cpp - BOOT key (GPIO9): hold 5 s = factory reset
+ * reset_button.cpp - BOOT key (GPIO9)
  *
- * A short press deliberately does nothing at all; the hold is the key's only
- * function, so it cannot be triggered by an accidental brush against the board.
+ *   short press (< ~3 s)  -> open / refresh the 30-minute config UI window
+ *                             (calls wifi_ui::triggerRejoin)
+ *   hold >= 5 s           -> factory reset (wipe all bonds and settings, then
+ *                             reboot)
+ *
+ * Progress is logged once per second while held, so the outcome of a press is
+ * always visible on the console.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -18,6 +23,7 @@
 #include "improv_serial.h"
 #include "log.h"
 #include "settings.h"
+#include "wifi_ui.h"
 
 namespace {
 
@@ -28,6 +34,10 @@ const char *kTag = "BUTTON";
 constexpr int kPin = 9;
 // A press shorter than this is mechanical bounce, not intent.
 constexpr uint32_t kDebounceMs = 50;
+// Maximum hold time that still counts as a "short press" for the Wi-Fi window.
+// Longer presses are interpreted as factory reset territory, where the per-
+// second progress log keeps showing the countdown so the user can still bail.
+constexpr uint32_t kShortPressMaxMs = 3000;
 // Holding this long triggers the factory reset while the key is still down.
 constexpr uint32_t kFactoryHoldMs = 5000;
 
@@ -49,6 +59,18 @@ void doFactoryResetAndReboot() {
   ESP.restart();
 }
 
+bool dtrClaimedThisHold() {
+  // Same DTR-sharing rule the factory-reset hold already uses: a browser or
+  // serial tool that is mid-IMPROV handshake keeps DTR low for the whole
+  // provisioning window, so any BOOT press during that window belongs to the
+  // client, not to a finger. Returning true here lets the caller swallow the
+  // press; the improv module's own five-minute session window takes care of
+  // the timing.
+  if (!improv_serial::sessionActive()) return false;
+  s_sessionOwnsPin = true;
+  return true;
+}
+
 }  // namespace
 
 namespace reset_button {
@@ -64,6 +86,7 @@ void poll() {
       if (down) {
         s_state = St::Confirming;
         s_edgeMs = now;
+        s_sessionOwnsPin = false;
       }
       break;
 
@@ -75,7 +98,7 @@ void poll() {
         s_state = St::Pressed;
         s_edgeMs = now;  // restart the clock from the confirmed press
         s_lastProgressMs = now;
-        BR_LOGI(kTag, "key pressed - hold 5 s for factory reset (short press does nothing)");
+        BR_LOGI(kTag, "key pressed - short press opens the config UI; hold 5 s for factory reset");
       }
       break;
 
@@ -84,12 +107,20 @@ void poll() {
         const uint32_t held = now - s_edgeMs;
         s_state = St::Idle;
         s_sessionOwnsPin = false;
-        // Deliberate policy: a short press does NOTHING. The only function of
-        // this key is the 5-second factory-reset hold, which cannot be
-        // triggered accidentally by a quick press. Logged so the press is
-        // still observable on the console.
-        BR_LOGI(kTag, "short press (%lu ms) - no action (hold 5 s for factory reset)",
-                (unsigned long)held);
+        // Short press: open / refresh the 30-minute Wi-Fi window. Anything
+        // under kShortPressMaxMs counts as a deliberate "I want the page"
+        // tap, anything longer is the start of a factory-reset hold and the
+        // user can still back out by releasing early.
+        if (held < kShortPressMaxMs) {
+          if (dtrClaimedThisHold()) {
+            BR_LOGW(kTag, "short press ignored: an Improv provisioning client is using this port (DTR is wired to GPIO9)");
+          } else {
+            wifi_ui::triggerRejoin();
+          }
+        } else {
+          BR_LOGI(kTag, "press held %lu ms - released before factory reset (threshold is 5 s)",
+                  (unsigned long)held);
+        }
         break;
       }
       if (now - s_edgeMs >= kFactoryHoldMs) {

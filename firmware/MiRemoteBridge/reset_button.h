@@ -1,17 +1,18 @@
 /*
  * MiRemoteBridge - ESP32-C3 dual-role BLE bridge for Xiaomi RC003 remote
  *
- * reset_button.h - the board's BOOT key (GPIO9) as a recovery button
+ * reset_button.h - the board's BOOT key (GPIO9)
  *
  * The Hezhou CORE-ESP32 board exposes two keys: RESET (hard reset of the chip,
  * invisible to firmware) and BOOT wired to GPIO9. GPIO9 is a strapping pin for
  * the ROM bootloader (hold it during power-up to enter the download mode), but
  * at runtime it is a free input with an on-board pull-up, pressed = LOW.
  *
- * This module turns it into a recovery button:
+ * This module turns it into the recovery key for the Wi-Fi config UI:
  *
- *   short press  (< 5 s)   -> deliberately does nothing (logged only)
- *   hold >= 5 s            -> factory reset (wipe all bonds and settings, then
+ *   short press (< ~3 s)  -> open or refresh the 30-minute window that keeps
+ *                             the radio up (calls wifi_ui::triggerRejoin)
+ *   hold >= 5 s           -> factory reset (wipe all bonds and settings, then
  *                             reboot)
  *
  * Progress is logged once per second while held, so the outcome of a press is

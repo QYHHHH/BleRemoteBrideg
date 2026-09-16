@@ -1,21 +1,18 @@
 """Run every hardware check and print one verdict.
 
-Four checks cover different layers and none of them subsumes the others:
+The remaining checks cover different layers and none of them subsumes the others:
 
-  auth_guard_check   - auth surface: setup-mode routing, the /setup write gate,
-                       session cookies, token gates (HTTP level, no browser)
-  preconnect_probe   - socket level: is the HTTP slot released promptly?
-  browser_check      - page level: does the real page wire up its own JS?
-  mobile_login_check - phone level: do the real setup/login FORMS work?
+  preconnect_probe - socket level: is the HTTP slot released promptly?
+  browser_check    - page level: does the real page wire up its own JS?
 
-All four need the board reachable over Wi-Fi (`wifi on` first); the three that
-drive the serial console also need COM3 free. Expect a few minutes.
+Both need the board reachable over Wi-Fi (a short BOOT press, or `wifi on`,
+opens the 30-minute window). preconnect_probe speaks HTTP only and leaves no
+trace behind; browser_check drives a real browser and does not touch the
+board's settings.
 
-  * preconnect_probe speaks HTTP only. It neither reboots the board nor touches
-    the password, so it is the one check that leaves no trace behind.
-  * the other three clear the board's web password and finish with the device in
-    SETUP mode, where /login rejects every input. That reads as "my password
-    stopped working", so this script states the auth state it leaves behind.
+  The auth-guard scripts that used to live here (auth_guard_check,
+  mobile_login_check) were removed together with the web console password in
+  2026-09-16. See docs/AUTH.md.
 
 Run: python tests/tools/check_all.py
 """
@@ -30,10 +27,8 @@ sys.path.insert(0, HERE)
 PY = sys.executable
 
 CHECKS = [
-    ('auth_guard_check.py', 'the auth guards hold'),
     ('preconnect_probe.py', 'HTTP slot is released promptly'),
     ('browser_check.py', 'the page works in a real browser'),
-    ('mobile_login_check.py', 'the phone (form) flow works'),
 ]
 
 
@@ -58,20 +53,6 @@ def main():
         print('%-26s %-8s %.0f s' % (script, 'PASS' if rc == 0 else 'FAIL', secs))
 
     failed = [s for s, rc, _ in results if rc != 0]
-
-    # Every check ends in setup mode. Say so here as well, so nobody (human or
-    # agent) reads a green aggregate result and then wonders why the login page
-    # rejects the password they set earlier.
-    try:
-        import board_auth
-        print('\nboard auth state now: %s' % board_auth.state())
-        if board_auth.state() == 'setup':
-            print('  -> the stored password was cleared by these tests. Open '
-                  'http://%s/ and\n     set one; /login is a dead end until then.'
-                  % board_auth.IP)
-    except Exception as e:  # noqa: BLE001
-        print('\ncould not read the board auth state: %r' % (e,))
-
     if failed:
         print('\nFAILED: %s' % ', '.join(failed))
         return 1

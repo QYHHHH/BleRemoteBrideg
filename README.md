@@ -88,6 +88,7 @@
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 代码结构、关键设计决定、模块边界
 - [`docs/TESTING.md`](docs/TESTING.md) — 四层验证状态、实机联调记录、验收清单
 - [`docs/PITFALLS.md`](docs/PITFALLS.md) — 踩坑实录（开源最值钱的部分）
+- [`docs/RELEASING.md`](docs/RELEASING.md) — 固件发布流程、产物清单、命名契约
 - [`docs/AUTH.md`](docs/AUTH.md) — 认证机制设计历史（为什么改成 30 分钟窗口）
 
 ### 调研档案（"为什么不做"）

@@ -59,7 +59,7 @@ python tests/tools/check_all.py        # 一次跑完下面三项，给一个总
 | --- | --- | --- |
 | `preconnect_probe.py` | socket | 槽位是否及时释放（静默连接、keep-alive 都不得堵住真实请求） |
 | `browser_check.py` | 页面 | 真 Chrome 读 live DOM：渲染、绑定、WS、按键实时推送 |
-| `mobile_login_check.py` | 手机 | 模拟 iPhone 走**真实表单**：设置密码 → 登录 → 登出 → 再登录 → 错误密码被拒 |
+| `browser_check.py` | 浏览器 | 真 Chrome 走完页面 JS 与 WS（窗口期内） |
 
 脚本用 CDP 驱动**真实 Chrome**，从 `Runtime.evaluate` 读 live DOM（不靠截图推断），
 并抓 `Network` 域的握手与帧。IP 自动从 `build/.boardip` 取（DHCP 会变），
@@ -82,7 +82,8 @@ python tests/tools/check_all.py        # 一次跑完下面三项，给一个总
 3. **Python 里改 C/JS 源码**：整块 `old_string` 匹配常因缩进/转义失败，且脚本中断后
    **文件不会落盘**。用关键词锚点 + 计数断言，写盘后立即读回验证。
 4. **`esptool --after no-reset` 绝对不能用**：会停在 ROM 下载模式，固件不跑，像死机。
-5. **测试完 `pass clear`**，别把测试密码留在用户设备上。
+5. **测试脚本不再改动板子的认证状态**（2026-09-16 起没有密码可清）。
+   旧版脚本结尾会 `pass clear`，把设备留在"首次设置"状态，这个坑已经不存在了。
 6. **页面顶栏的时间戳曾经必然是错的**。`gen_web_page.py` 把"生成时的时间"写进 gzip
    载荷，所以页面显示的是**生成 web_page_gz.h 那一刻**，不是编译/烧录时刻（出现过
    烧录 12:56、页面显示 10:21）。现在时间戳彻底从页面里拿掉：顶栏读
@@ -95,9 +96,9 @@ python tests/tools/check_all.py        # 一次跑完下面三项，给一个总
    症状是 `Chrome never exposed a page target`。现在 `cdp.py` 每次取**动态空闲端口 +
    独立 profile 目录**，并且 `local_json` **IPv4/IPv6 都试**。
 8. **给"页面渲染完成"留时间再断言。** 落到 `/` 不等于加载完：表头还会停在占位文案、`S.on`
-   还是 false，直到页面取完 `/api/bindings`、`/api/status`、`/api/token` 并开好 WebSocket
+   还是 false，直到页面取完 `/api/bindings`、`/api/status` 并开好 WebSocket
    （实测约 1.1 s）。在稳定之前读 DOM 会把**正常代码判成坏**——和读 `S.keyPress` 是同一个坑。
-   用 `mobile_login_check.py` 里的 `settle()` 那种轮询。
+   用 `browser_check.py` 里的 `settle()` 那种轮询。
 9. **PowerShell 工具不捕获 stdout**，但可以用它做 CIM 查询：把结果写文件再读。
    **不要**从 Bash 里调 powershell（会被安全策略拦下）。查/杀残留进程时，只按命令行里的
    `--remote-debugging-port` 过滤，**绝不**笼统地按进程名杀 —— 用户自己的浏览器在同一台机器上。
@@ -107,5 +108,5 @@ python tests/tools/check_all.py        # 一次跑完下面三项，给一个总
 - `0f9e99c` WS 独立 fd（HTTP 不再被页面阻塞）—— 真机验证
 - `d05a8db` 前四个根因的完整修复 + 页面改为"绑定走 HTTP / socket 只推小帧" + 本文件改写为结案记录
 - 随后一次提交：根因 5（静默连接的 250 ms 宽限）+ 清理死代码（Basic 认证相关）+ 认证现状记录
-  `docs/AUTH.md` + `tests/tools/` 下的 `cdp.py` / `preconnect_probe.py` / `mobile_login_check.py` /
-  `check_all.py` —— **三项硬件检查全部真机通过**
+  `docs/AUTH.md` + `tests/tools/` 下的 `cdp.py` / `preconnect_probe.py` / `browser_check.py` /
+  `check_all.py` —— **两项硬件检查全部真机通过**

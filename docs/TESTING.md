@@ -852,7 +852,7 @@ esptool 直接以 **1 500 000** 波特率烧录为 649.8 kbit/s / 16.4 s——**
 
 ---
 
-### 4.16 WebSocket 事件通道 + 访问密码（2026-09-11 深夜）
+### 4.16 WebSocket 事件通道（2026-09-11 深夜；访问密码部分已于 2026-09-16 移除）
 
 **架构变化**：按键反馈从轮询/长轮询改为**一条 WebSocket 长连接**，双向承载
 按键推送与配置命令。实测（串口注入按键，测应答时刻）：
@@ -870,8 +870,10 @@ esptool 直接以 **1 500 000** 波特率烧录为 649.8 kbit/s / 16.4 s——**
 短按 BOOT（< 3 s）        → 板子加入 Wi-Fi，从拿到 IP 起 30 分钟窗口开始
 串口 wifi on                → 等价
 GET /api/window            → {"active":true,"remaining":<sec>}
-GET /api/window/extend     → 重置 30 分钟计时
-窗口到期                    → 板子主动 WiFi.mode(WIFI_OFF)；页面 ~1 s 内显示 closed overlay
+GET /api/status            → 同样带 windowActive / windowRemaining / windowAp
+WS 握手完成                 → 立刻收到一条 type=status（含剩余秒数），不用等 5 s 心跳
+GET /api/window/extend     → 重置 30 分钟计时（只给脚本用，页面无按钮）
+窗口到期                    → 板子主动 WiFi.mode(WIFI_OFF)；页面倒计时归零弹出 #closedOverlay
 Host: <LAN IP>.local       → 放行
 Host: evil.com             → 403 "host header not on this device's LAN"（防 DNS rebinding）
 POST /api/set              → 校验 Origin == http://<Host> + Sec-Fetch-Site

@@ -1,180 +1,105 @@
-# AUTH.md — 配置页的认证机制：它做了什么、没做什么
+# AUTH.md — 配置页的访问机制：它做了什么、没做什么
 
-> 结论先说：**在"仅限家庭局域网、不暴露到公网"这个前提下，它够用；但它不是一套严密的认证，
-> 仍有几处真实的弱点。**
+> 结论先说：**没有认证**。配置页默认不在网络上。短按 BOOT 键可以打开一个 30 分钟的窗口，窗口期内任何人同网段都能访问。超时或再按一下都会重置倒计时。
 >
-> 本文记录的是**代码实际行为**（2026-09-12 逐行核对 + 真机验证），不是设计意图。凡是"应该"但代码
-> 没做的事，都写在"已知弱点"里。别把这份机制描述得比它更强。
+> 本文记录的是**代码实际行为**（2026-09-16 改版，逐行核对 + 真机待验），不是设计意图。任何"应该"但代码没做的事，都写在"已知限制"里。
 
 ---
 
 ## 1. 机制全貌
 
-一个密码框，没有用户名。
-
 | 环节 | 实际做法 |
 | --- | --- |
-| 存储 | NVS 只存 `sha1Hex(密码)`，**明文不落盘** |
-| 首次设置 | 无密码时 `/` 一律 302 到 `/setup`；表单要填 `password` + `confirm`（≥4 位） |
-| 登录 | 表单 `GET /login?password=<密码>`；服务端算 `sha1Hex(收到的原串)` 与存储值比较 |
-| 会话 | `Set-Cookie: mrb_sess = base64( t(4字节) ‖ HMAC_SHA1(sha1字节, t) )`，`Path=/; HttpOnly; Max-Age=604800; SameSite=Lax` |
-| 会话有效期 | `|t − millis()/1000| ≤ 7 天`（**注意：`millis()` 是开机以来的毫秒数**） |
-| WebSocket | 页面先 `GET /api/token` 拿到 `sha1Hex(sha1Hex(密码) + "mrb-ws")`，再 `GET /ws?token=<token>` |
-| 写操作 | `POST`，要求 `Origin` 等于 `http://<Host>`，且拒绝非空 body、拒绝 `Sec-Fetch-Site: cross-site` |
-| 无密码时 | 除 `/setup`、`/ws`、`/api/token` 外**一律 302 到 `/setup`**（`/login`、`/logout` 也算在内） |
-| 已有密码时 | 除 `/login`、`/logout` 外**一律要求有效会话**（`/setup` 也算在内） |
-| 忘记密码 | 按住 BOOT 5 秒清空整个 NVS（含 Wi-Fi、配对、按键映射） |
+| 开机 | **不自动连 Wi-Fi**。`wifi_ui::begin()` 不再 arm 自动启动。 |
+| 打开窗口 | 两条入口：① **短按 BOOT** 键（`< 3 s`），② 串口 `wifi on`。页面**没有**续期按钮（用户明确不要）；`/api/window/extend` 这个端点还在，但只供脚本调用。 |
+| 计时起点 | 板子**拿到 IP 地址的那一刻**（不是点击、不是访问、不是 BOOT 按下） |
+| 计时长度 | 固定 **30 分钟**（`wifi_ui.cpp` 的 `kWindowMs`） |
+| 计时终点 | 板子**主动关 Wi-Fi**：`WiFi.disconnect(true)` + `WiFi.mode(WIFI_OFF)`。HTTP listener 立即停止。BLE 不受影响。 |
+| 倒计时显示 | 顶栏 `#pF` 胶囊，紧挨 WebSocket 胶囊，同样大小。板子在 **WebSocket 握手完成时**就发一次剩余秒数，之后每 5 s 心跳、`/api/status`、`/api/window` 都会带；网页把它换算成截止时刻后**自己在前端每秒递减**，所以标签页被浏览器降频后回来也是对的。 |
+| 窗口结束提示 | 倒计时归零时页面正中弹出覆盖层 `#closedOverlay`：大字号 **BOOT** + "按一下 BOOT 键重新打开 30 分钟"，一直保留到窗口重新打开（WS 重连带回 `windowActive:true` 才自动收起）。 |
+| Host 白名单 | `Host` 必须是 IPv4 字面量或 `<name>.local`，其它一律 403 —— 这是去密码后堵 DNS rebinding 的唯一手段。 |
+| POST 跨域 | 仍然校验 `Origin == http://<Host>` + `Sec-Fetch-Site`（POST 分支）。 |
+| 凭据 | 无。NVS 不再存密码哈希，不再签发会话 cookie，不再校验 WebSocket token。 |
 
-**cookie 不携带密码本身**，只携带时间戳和它的 HMAC。拿到 cookie 的人无法反推密码，也无法在没有
-存储哈希的情况下伪造一个新 cookie。
+## 2. 两条路由规则（曾经的认证现在砍掉了）
 
-两条路由规则互为镜像，是理解这一层的钥匙：
+- `if (!hostIsLocal(host))` → 403。剩下的请求一律进 dispatch。
+- `if (post) { crossSite || Origin 不匹配 || body 非空 }` → 403 / 400。这条**就是唯一的写保护**了。
 
-- **无密码**：唯一能去的地方是"设一个密码"（`/setup`），`/login` 是死路，所以直接把人送过去。
-- **有密码**：唯一不需要会话的地方是"证明你是你"（`/login`）和"退出"（`/logout`），其余全要会话。
+## 3. 为什么去密码
 
-## 2. 它确实防住了什么
+2026-09-12 的 `docs/AUTH.md` 记录的那套机制做了这些事：
 
-- **没密码时不会裸奔**：未设密码一律跳 `/setup`，不是"直接放行"。
-- **改密接口不再敞开**：已有密码时 `/setup` 需要有效会话，同网段的人无法单方面改掉密码（见 §3.1）。
-- **改键操作有 CSRF 防护**：写操作校验 `Origin` 且检查 `Sec-Fetch-Site`。恶意网页无法在你已登录时
-  偷偷改你的按键映射。
-- **cookie 不可伪造**：HMAC 的密钥是存储里的哈希，攻击者拿不到就无法构造有效 cookie。
-- **`/api/token` 返回 401 JSON 而不是 302**：这是给页面看的（区分"会话过期"和"连接失败"），
-  顺带避免了把 HTML 登录页当成有效 API 响应。
+- 没密码时 302 到 `/setup`，改密要求 ≥4 位
+- 登录走 HMAC-SHA1 签名的会话 cookie（7 天）
+- WebSocket 走 `sha1(sha1(pass) + "mrb-ws")` 派生 token
 
-## 3. 修过的三个洞（2026-09-12，真机验证）
+实际保护力接近零：
 
-这三条都是"看起来无关、实际能绕过认证"的问题。记录在此，因为它们的**症状**比**原因**更容易被
-记住——下次遇到"密码明明对却登不进去"，先怀疑这三条。
+- 密码最短 4 位，无失败计数、无锁定、无延迟（`AUTH.md §4.1`）
+- 密码进 URL（GET 表单）、进浏览器历史
+- SHA1 无盐、单轮；NVS 导出可秒破
+- 派生 token 静态、会进浏览器历史
+- 至少 5 个互不重叠的攻击路径（CSRF、DNS rebinding、setup 模式裸奔、WS 静态 token、爆破）
 
-### 3.1 `/setup` 曾是任何人都能用的改密接口
+把这堆代码删掉，换成"按一下板子 30 分钟"之后，**净效果是正的**——
 
-- **原来**：`/setup` 被排除在会话校验之外，而它的处理逻辑是"收到 password+confirm 就 `setWebPassword()`"。
-  于是 `GET /setup?password=x&confirm=x` —— **一个请求、零凭证** —— 就能改掉存储的密码，而且响应里
-  还附带了新密码签发的会话 cookie，等于直接把配置页交出去。同网段任何设备都能做到。
-- **现在**：一旦有密码，`/setup` 和其它路径一样需要有效会话；它从"首次设置表单"变成"已登录用户的
-  改密表单"。登出链接和登录表单保持开放。
-- **为什么一直没被发现**：所有既有测试都是在**无密码状态下**调用 `/setup` 的——而那正是这个表单
-  唯一被设计过的用法。这个洞只有在"设备已经有密码"的前提下才暴露，恰好没人试过。
-- **验证**：`tests/tools/auth_guard_check.py` 第 4 组。修复前该组 4 项全 FAIL，修复后全 PASS。
+- 攻击窗口从"永远"变成"按下之后 30 分钟"
+- 拿窗口的难度从"破解 4 位密码"变成"按一下板子"
+- 顺带消灭了 5 个已知弱点的连带代码
+- 关机后 BLE 受到的 2.4G 干扰更少（同一颗射频，要么 Wi-Fi 要么 BLE）
 
-### 3.2 无密码时 `/login` 是一条死路
+## 4. 已知限制
 
-- **原来**：`/login` 同样被排除在"无密码 → `/setup`"的重定向之外，所以它照常渲染一个真实的登录表单。
-  但此时**没有任何存储密码可供比对**，所以填什么都返回 `密码错误`。从书签、历史记录或地址栏补全
-  进到 `/login` 的人，会看到一个永远拒绝他的表单，而且没有任何线索提示"这台设备其实在等你设第一个密码"。
-- **现在**：`/login`、`/logout` 与其它路径一样 302 到 `/setup`。
-- **验证**：`auth_guard_check.py` 第 1 组。
+### 4.1 没有任何防爆破
 
-### 3.3 会话 cookie 会吞掉它后面的请求头
+无所谓了——窗口期就是攻击窗口，爆破没有意义。但**窗口期内任何攻击者都能改键映射、配对、清配对**。如果攻击者恰好在你按下 BOOT 之后的 30 分钟内扫描到 LAN，这 30 分钟他就是上帝。
 
-- **原来**：`readSessionCookie()` 用 `strchr(v, ';')` 找 cookie 值的结尾，找不到就取到**缓冲区末尾**。
-  但 `;` 是 `Set-Cookie` 的语法，**请求头里不存在**。于是当 `Cookie:` 后面还有别的请求头时，取到的值变成
-  `"<32字符>\r\nConnection: close\r\n\r\n"`，base64 解码失败，会话被静默丢弃 → 302 `/login`。
-  没有 `;` 时它连行尾都不会停。
-- **证据**（同一个 cookie、同一台设备、连着发四次，唯一差别是一个额外请求头）：
+> 缓解：30 分钟够短；攻击者必须物理上知道你按了 BOOT（你可以等他下班再按）；改键操作会被你肉眼看到（按键不再起作用）。
 
-  | 请求头形态 | 结果 |
-  | --- | --- |
-  | `Host`, `Cookie` | 200 |
-  | `Host`, `Accept-Encoding`, `Cookie` | 200 |
-  | `Host`, `Accept-Encoding`, `Cookie`, `Connection: close` | **302 /login** |
-  | `Cookie`, `Host` | **302 /login** |
+### 4.2 页面是明文 HTTP
 
-- **现在**：值在**行尾**结束（不是缓冲区末尾、也不是只认 `;`），并且允许别的 cookie 排在前面。
-- **为什么浏览器没暴露它**：浏览器通常把 `Cookie` 放在最后几个头里，而且 base64 解码器容忍结尾的
-  CRLF。所以这条 bug 一直"能用"，直到一个会在 Cookie 后面再发头（`Connection: close`）的客户端出现——
-  比如 Python 的 `urllib`。**"浏览器能用"不等于"实现是对的"。**
-- **验证**：`auth_guard_check.py` 第 3/5/6 组用的正是带 `Connection: close` 的客户端，修复前 3 项
-  会话检查全 FAIL，修复后全 PASS。
+密码和 cookie 都没了，但**键映射、按键记录、串口日志**还在明文上。同网段可被嗅探。设计前提不变：**不暴露到公网，不放在不可信的共享网络上**。
 
-## 4. 已知弱点（按建议修复的优先级）
+### 4.3 Host 白名单防 DNS rebinding，但 mDNS 名字仍可被攻击者注册
 
-### 4.1 没有任何防爆破（仍是最该修的一条）
+`hostIsLocal()` 接受 `<name>.local` 形式的 mDNS 主机名。理论上攻击者可以在路由器上劫持该名字（路由器不强制唯一性的话）。在家庭网络里这几乎不会发生，但记一下。
 
-`/login` 没有任何失败计数、延迟或锁定。密码**最短只要 4 位**。同一网段上任何人都可以无限次尝试；
-4 位纯数字只需一万次请求，在局域网里是分钟级。§3.1 修掉之后，这条是绕过认证的**唯一**剩余低成本路径。
+### 4.4 30 分钟窗口是 millis()，49.7 天溢出
 
-> 建议：失败 N 次后返回 429 并冷却一段时间（注意别在 HTTP 路径里做阻塞式延时，会卡住 BLE 转发）；
-> 同时把最短长度提到 8 位。
+页面一秒级刷新，溢出影响只在边界秒可见。下一窗口期会重新对齐。无操作性影响。
 
-### 4.2 密码出现在 URL 里
+### 4.5 `WiFi.mode(WIFI_OFF)` 是否影响 BLE 共存未在改版时验证
 
-表单是 `method="get"`，所以 `GET /login?password=...`：
+ESP32-C3 单射频，理论上 BLE 栈独立不受影响。**这是必须上机验证的第一件事**——按 BOOT 拿 IP，关 Wi-Fi，观察按键是否仍转发。如有掉键，把 `WiFi.mode(WIFI_OFF)` 换成只 `WiFi.disconnect(true)`。
 
-- 密码进入**浏览器历史记录**和地址栏；
-- 服务端**不禁止**把密码放进 URL（`/setup` 同理）；
-- 原因不是疏忽——服务端目前**拒绝非空 `POST` body**（单槽状态机不缓冲请求体），所以表单只能走 GET。
+### 4.6 `Origin` 校验在 GET 上不做
 
-> 建议：允许 `application/x-www-form-urlencoded`、body ≤ 256 字节的 POST，表单改 POST。
+写操作都是 POST，所以写保护仍然有效。但 GET 没有 CSRF 保护——攻击者网页可以任意读 `/api/status`、`/api/bindings`、`/api/nearby`。这本身不是漏洞（同源策略不拦"读响应"，攻击者本来就读不到响应），但意味着 `/api/bindings` 等含键映射的接口**没有认证保护**——任何能读到响应的攻击者（DNS rebinding 绕过 Host 校验的情况）能看到你的映射。
 
-### 4.3 WebSocket 的 token 是静态的、且放在 URL 里
-
-`sha1(sha1(密码) + "mrb-ws")` **只随密码变化**，不会轮换、不会过期。它出现在 URL 里，所以会进
-浏览器历史。任何看到过这个 URL 的人，在该密码存续期间都持有 WebSocket 的访问权——即使他们从未
-知道密码。
-
-> 建议：加一个每次开机的随机盐（`esp_random()`）参与派生；重启即失效，代价是重启后页面需重新取
-> token（页面本来每次加载都会取）。
-
-### 4.4 会话实际上不会按时过期
-
-有效期判断用的是 `|t − millis()/1000|`，即**开机时长**，不是墙上时钟。设备重启后 `millis()` 归零，
-于是很久以前签发的 cookie 的 skew 依然很小 → **重启不会让旧 cookie 失效**。所谓 7 天，只在设备
-连续开机时才近似成立。
-
-> 建议：要么接受（局域网内影响有限），要么用 NVS 里的一个持久化计数器代替 `millis()`。
-> 若引入"每次开机随机盐"，cookie 也应一并绑定该盐——这样重启即失效，语义更干净。
-
-### 4.5 哈希算法陈旧（次要）
-
-`sha1` 单轮、**无盐**。NVS 被导出后，常见密码可被秒破。局域网设备上风险有限，但换了更强的方案
-（mbedTLS 自带 PBKDF2）成本也不高。
-
-> 建议：PBKDF2-HMAC-SHA256 + 随机盐 + 较多轮数。代价是登录/校验时多花几十毫秒。
-
-### 4.6 比较不是恒定时间（低危）
-
-token 用 `String` 的 `!=` 比较，session 的 HMAC 用 `memcmp`。理论上存在时序侧信道；在 Wi-Fi 上
-对这个设备做时序攻击不现实，**不建议为此增加复杂度**，但记录在案。
-
-### 4.7 无 TLS
-
-http 明文。密码和 cookie 在同网段可被嗅探或中间人读取。C3 同时跑 BLE 双链路，加 TLS 需要认真
-评估内存与握手开销，且自签证书会带来浏览器警告。
-
-> 结论：**不要把这个页面暴露到公网**，也不要放在不可信的共享网络上。这是当前设计的前提。
-
-### 4.8 服务端忽略客户端发来的 `Connection: close`
-
-`respond()` 一律回 `Connection: keep-alive`，即使客户端请求关闭。现代客户端不会因此出错（它们直接
-关掉 socket），但这属于协议上的小偏差，记录在案。
+> 缓解：Host 白名单挡 DNS rebinding；30 分钟窗口缩短暴露时间。
 
 ## 5. 已验证 / 未验证
 
-- **已验证（真机，HTTP 层）**：`tests/tools/auth_guard_check.py` —— 26 项断言，覆盖
-  无密码时的路由、`/setup` 的表单校验（<4 位、两次不一致）、首次设置、**匿名改密必须失败**、
-  已登录改密必须成功、错误密码、`/api/token` 的 401、`/ws` 的 token 门。
-- **已验证（真机，浏览器层）**：`tests/tools/mobile_login_check.py` 用模拟 iPhone 走**真实表单**完成
-  设置密码 → 进入配置页 → 登出 → 用登录表单重新登录 → 错误密码被拒绝；含带空格、
-  `&`、`=`、`%` 的密码（验证 URL 编码自洽）。会话 cookie 由浏览器正确保存。
-- **未验证**：§4 的弱点均未修复，因此也未做针对性测试（例如爆破是否真的无阻、重启后旧
-  cookie 是否仍然有效——后者**已由代码推导确认**，但未在真机上逐步复现）。
+- **未验证**（本次改动大，真机未上）：
+  - `WiFi.mode(WIFI_OFF)` 后 BLE 是否仍工作（**第一个必须验证**）
+  - 短按 BOOT 是否真的触发联网（DTR 防护是否漏掉某个真实工具）
+  - `/api/window` 倒计时是否与板子内部计时一致
+  - 30 分钟到期后页面是否在 ~1 秒内看到 closed overlay
+  - `WiFi.ap off` 命令、Improv 配网、串口 `wifi status` 输出是否都符合预期
 
-> 跑硬件检查会**清掉板子上的密码**（`pass clear`）。`check_all.py` 结尾会打印它留下的认证状态；
-> 别把"测试跑绿了"当成"密码还在"。这个坑已经踩过一次。
+> 改版太大，需要全量 `check_all.py` 走一遍。但其中两个脚本（`auth_guard_check.py`、`mobile_login_check.py`）已经删除——它们测的就是已经删掉的密码机制，留着会一直 FAIL。
 
 ## 6. 相关代码位置
 
 | 位置 | 内容 |
 | --- | --- |
-| `settings.cpp` `setWebPassword` / `checkWebPassword` / `webToken` | 密码哈希与 token 派生 |
-| `wifi_ui.cpp` `cookieValue` / `readSessionCookie` | 从 `Cookie:` 请求头里取值（§3.3 的修复点） |
-| `wifi_ui.cpp` `sessionMatches` / `issueSessionCookie` | cookie 签发与校验 |
-| `wifi_ui.cpp` `dispatch()` | 两条路由规则（§1 末）、`Origin` / `Sec-Fetch-Site` / `Content-Length` 校验、`/ws` token 校验 |
-| `wifi_ui.cpp` `isLogin` / `isSetup` 分支 | 登录表单、首次设置 / 改密表单 |
-
-**已删除**（2026-09-12）：`authChallenge`、`authDecodeBasic`、`kSetupDonePage`、`kConsoleUser`。
-设备**不提供 HTTP Basic 认证**，也不应加回来——浏览器弹窗无法解释"首次设置"和"按住 BOOT 找回",
-这些必须由真实页面承载。
+| `wifi_ui.cpp` `hostIsLocal` | Host 白名单，DNS rebinding 防护 |
+| `wifi_ui.cpp` `dispatch` | 去掉所有密码路由后的精简版 |
+| `wifi_ui.cpp` `kWindowMs` / `s_windowStartedMs` | 30 分钟硬窗口 |
+| `wifi_ui.cpp` `disableImpl` / `loop` 头 | 真关 Wi-Fi；到点自动调 |
+| `wifi_ui.cpp` `/api/window` / `/api/window/extend` | 倒计时 + 续期端点（后者只给脚本用） |
+| `wifi_ui.cpp` `wsSendStatus` + `handleStatus` 的 `windowActive`/`windowRemaining`/`windowAp` | WS 心跳**与** `/api/status` 必须都带这三个字段，否则页面会误判窗口已关闭 |
+| `wifi_ui.cpp` `wsHandshake` | 握手一完成就发一次状态，页面不必等 5 s 心跳 |
+| `reset_button.cpp` 短按分支 | 调 `wifi_ui::triggerRejoin()` |
+| `web_page.h` `#pF` / `#closedOverlay` / `applyWindow` / `paintWindow` | 顶栏倒计时胶囊 + 归零覆盖层 |

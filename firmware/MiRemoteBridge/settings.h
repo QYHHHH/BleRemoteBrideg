@@ -80,20 +80,6 @@ String wifiPassword();
 void setWifi(const String &ssid, const String &password);
 void clearWifi();
 
-// --- Web console password -------------------------------------------------
-// Stored as SHA1(password) in NVS, never the plaintext. An empty store means
-// "not set yet": the first visit is allowed to define it. `factory` (BOOT key
-// held 5 s) clears the whole namespace, which is the documented way back in
-// when the password is forgotten.
-bool hasWebPassword();
-bool checkWebPassword(const String &plain);
-void setWebPassword(const String &plain);
-void clearWebPassword();
-// Opaque token handed to the page and required on the websocket URL (the
-// browser cannot attach an Authorization header to a WebSocket).
-String webToken();
-String webPassHash();
-
 // Wipe every key this module owns. Used by `factory`.
 void clearAll();
 

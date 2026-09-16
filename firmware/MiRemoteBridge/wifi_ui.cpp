@@ -47,15 +47,24 @@ Mode s_mode = Mode::Off;
 bool s_enabled = false;
 bool s_hadAddress = false;
 bool s_eventsRegistered = false;
+// The dispatch / wsSendStatus helpers below live in this anonymous namespace
+// but call the public window helpers from `namespace wifi_ui`. Unqualified
+// name lookup across two namespaces in C++ requires either a fully qualified
+// call or a using-declaration, and there are six call sites - the using-
+// declarations keep them readable.
+using wifi_ui::windowActive;
+using wifi_ui::windowRemainingSec;
+using wifi_ui::windowUnlimited;
+using wifi_ui::triggerRejoin;
 uint32_t s_joinStarted = 0;
 uint32_t s_retryAt = 0;
 int s_listener = -1;
-// Always-on policy (user requirement): with credentials stored, the config UI
-// comes up by itself after boot and cannot be turned off. The start is
-// deferred a few seconds so the BLE links - the product's actual job - are
-// established before the Wi-Fi stack takes its share of heap and airtime.
-bool s_autoStartPending = false;
-constexpr uint32_t kAutoStartDelayMs = 8000;
+// 30-minute reachability window. The clock starts the moment the station gets
+// an IP address - that is what the user perceives as "Wi-Fi came up". Once
+// it expires, disable() takes the radio down until the BOOT key brings it
+// back. No auth, just time.
+uint32_t s_windowStartedMs = 0;
+constexpr uint32_t kWindowMs = 30UL * 60UL * 1000UL;
 
 // One active HTTP exchange, bounded accept backlog. Browsers may queue asset
 // requests; they do not allocate unbounded application buffers on the MCU.
@@ -388,9 +397,16 @@ void handleStatus(bool head) {
   out.add(",\"fwVersion\":");
   out.quoted(BRIDGE_FW_VERSION);
   out.add(",\"buildTime\":\"%s %s\"", __DATE__, __TIME__);
-  out.add(",\"httpRequests\":%lu,\"httpCompleted\":%lu,\"httpAborted\":%lu,\"httpBackPressure\":%lu}",
+  out.add(",\"httpRequests\":%lu,\"httpCompleted\":%lu,\"httpAborted\":%lu,\"httpBackPressure\":%lu",
       (unsigned long)s_requests, (unsigned long)s_completed, (unsigned long)s_aborted,
       (unsigned long)s_backPressure);
+  // The same trio the websocket heartbeat carries. It has to be here as well:
+  // the page reads this endpoint on every load(), including when the user comes
+  // back to the tab, and without these fields it fell back to the "ap" field
+  // above - which is the SSID string, not a flag - and reported the window as
+  // closed while the socket was demonstrably still up.
+  out.add(",\"windowActive\":%s,\"windowRemaining\":%u,\"windowAp\":%s}",
+      boolean(windowActive()), (unsigned)windowRemainingSec(), boolean(windowUnlimited()));
   jsonResult(out, head);
 }
 
@@ -466,73 +482,6 @@ void handleReset() {
   respond(200, "OK", "application/json", "{\"ok\":true}", 11);
 }
 
-// --- Console authentication --------------------------------------------------
-//
-// One password field, no user name. It is never stored in the clear: NVS holds
-// only sha1(password). Signing in sets a session cookie that is
-// base64(uptime(4) || HMAC_SHA1(sha1(password), uptime)) - so the cookie proves
-// knowledge of the hash without carrying it, and cannot be forged by anyone who
-// does not already have the stored hash.
-//
-// The websocket cannot use the cookie the way fetch() does, so the page first
-// fetches a derived token (sha1(sha1(password) + "mrb-ws")) over an
-// authenticated request and passes it in the URL.
-//
-// Known limits, deliberate for a LAN-only config page. Do not describe this as
-// more than it is:
-//   * plain HTTP - password and cookie are readable by anyone on the Wi-Fi
-//   * the password rides in the login URL (the form uses GET), so it lands in
-//     browser history; the server refuses non-empty POST bodies
-//   * the websocket token is static per password and travels in a URL, so it
-//     does not expire on its own
-//   * no rate limiting or lockout on /login
-//   * sha1 is unsalted and single-round; NVS dumped means fast cracking
-//
-// With no password stored the device is in setup mode: the first visit lands on
-// a real setup page (see kSetupPage), and whatever the user types becomes the
-// password. BOOT held for 5 s clears the namespace, which is the way back in
-// when the password is forgotten.
-//
-// There is no HTTP Basic support and none should be added back: a browser dialog
-// cannot explain setup mode or the BOOT recovery hint, and the page needs a real
-// form for that.
-
-// First-run form (no password stored) and, once a session is held, the
-// change-password form. The copy has to read correctly in both states, so it
-// says "set or change" rather than promising the device has no password.
-const char kSetupPage[] =
-    "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-    "<title>设置访问密码</title><style>"
-    "body{font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;"
-    "background:#f4f5fa;color:#1c2333;margin:0;padding:24px;display:flex;justify-content:center}"
-    ".c{background:#fff;border:1px solid #e6e9f2;border-radius:16px;padding:26px;max-width:420px;width:100%}"
-    "h1{font-size:19px;margin:0 0 10px}p{font-size:13px;color:#5a627a;line-height:1.7;margin:0 0 18px}"
-    "label{display:block;font-size:12px;color:#8a93a6;margin:14px 0 6px}"
-    "input{width:100%;box-sizing:border-box;padding:11px;border:1px solid #e6e9f2;border-radius:9px;font-size:14px}"
-    "button{margin-top:20px;width:100%;padding:12px;border:0;border-radius:10px;background:#3b6ef6;"
-    "color:#fff;font-size:14px;cursor:pointer}"
-    ".hint{font-size:12px;color:#8a93a6;margin-top:16px;line-height:1.7}"
-    "</style></head><body><div class=\"c\">"
-    "<h1>设置访问密码</h1>"
-    "<p>设置或修改这台设备的访问密码。设置后浏览器会提示保存，以后自动填入。</p>"
-    "<form method=\"get\" action=\"/setup\">"
-    "<label>访问密码（至少 4 位）</label>"
-    "<input type=\"password\" name=\"password\" required minlength=\"4\" autofocus>"
-    "<label>再输入一次</label>"
-    "<input type=\"password\" name=\"confirm\" required minlength=\"4\">"
-    "<button type=\"submit\">设置密码</button></form>"
-    "<p class=\"hint\">忘记密码时：按住板上 BOOT 键 5 秒，即可清除全部设置与配对"
-    "（Wi-Fi 密码、访问密码、按键映射、蓝牙配对）恢复出厂。</p>"
-    "</div></body></html>";
-
-const char kSetupMismatchPage[] =
-    "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-    "<title>两次输入不一致</title></head><body style=\"font-family:system-ui,sans-serif;padding:24px\">"
-    "<h1 style=\"font-size:18px\">两次输入的密码不一致</h1>"
-    "<p><a href=\"/\">返回重试</a></p></body></html>";
-
 // Pull one query parameter out of a raw query string ("a=1&b=2").
 bool queryValue(const char *query, const char *name, char *out, size_t cap) {
   if (!query || !name || !out || cap == 0) return false;
@@ -554,175 +503,48 @@ bool queryValue(const char *query, const char *name, char *out, size_t cap) {
   return false;
 }
 
-// --- Login page + HMAC-signed session cookie -------------------------------
-//
-// The board never stores the plaintext password. Only sha1(password) lives in
-// NVS, and the cookie is HMAC_SHA1(sha1(password), timestamp). A leaked cookie
-// therefore proves knowledge of the hash - not the password - and cannot be
-// regenerated by anyone who does not already have the hash.
-//
-// All page bodies are PROGMEM constants, so serving them costs no heap.
-
-const char *kCookieName = "mrb_sess";
-constexpr uint32_t kSessionSeconds = 7 * 24 * 3600;
-
-bool base64Encode(const uint8_t *in, size_t inLen, char *out, size_t outCap) {
-  size_t olen = 0;
-  if (mbedtls_base64_encode((unsigned char *)out, outCap, &olen, in, inLen) != 0) return false;
-  out[olen] = 0;
-  return true;
-}
-
-// Pull one "name=value" pair out of a Cookie header VALUE. The value stops at
-// the end of the header LINE, not at the end of the buffer, and not only at
-// ';' - a request has no ';' separator at all (that is Set-Cookie syntax), so
-// looking for ';' alone made the value run on into whatever headers followed:
-//
-//   Cookie: mrb_sess=<32 chars>\r\nConnection: close\r\n\r\n
-//                                  ^ stopped here, 24 bytes of garbage
-//
-// The base64 decode then failed and the session was dropped. It only ever
-// worked because browsers tend to send Cookie late, and because trailing CRLF
-// happens to be tolerated by the decoder. Scanning the pairs also means other
-// cookies may precede ours. Measured on hardware: identical request, cookie
-// accepted without a trailing header, rejected with `Connection: close`.
-bool cookieValue(const char *value, const char *name, char *out, size_t outCap) {
-  const size_t nameLen = strlen(name);
-  const char *at = value;
-  while (at && *at) {
-    while (*at == ' ' || *at == '\t') ++at;
-    const char *end = at;
-    while (*end && *end != ';' && *end != '\r' && *end != '\n') ++end;
-    if ((size_t)(end - at) > nameLen && strncmp(at, name, nameLen) == 0 && at[nameLen] == '=') {
-      const char *v = at + nameLen + 1;
-      size_t len = (size_t)(end - v);
-      if (len >= outCap) len = outCap - 1;
-      memcpy(out, v, len);
-      out[len] = 0;
-      return true;
+// True iff `host` looks like the LAN address the page is served from. The
+// service lives on a single station address (or the AP default), so anything
+// else is either an attacker's name (DNS rebinding) or a misconfiguration.
+// We allow:
+//   * <a>.<b>.<c>.<d>   (IPv4 literal, including the AP default 192.168.4.1)
+//   * <name>.local       (mDNS name)
+// Bare hostnames like "evil.com" or hex IPv6 are rejected. The 64-byte buffer
+// matches the cap we already use in dispatch().
+bool hostIsLocal(const char *host) {
+  if (!host || !*host) return false;
+  size_t i = 0;
+  int dots = 0, segs[4] = {0, 0, 0, 0};
+  for (size_t k = 0; k < 4; ++k) segs[k] = -1;
+  while (host[i] && host[i] != ':') {
+    if (host[i] == '.') {
+      if (i == 0 || !isdigit((unsigned char)host[i - 1])) return false;
+      if (++dots > 3) break;  // fall through to the .local check
+      segs[dots - 1] = atoi(host);
+      ++i;
+      continue;
     }
-    at = (*end == ';') ? end + 1 : nullptr;
+    if (!isdigit((unsigned char)host[i])) break;
+    ++i;
+  }
+  if (dots == 3 && !host[i]) {
+    segs[3] = atoi(host + (strchr(host, '.') ? (size_t)((strrchr(host, '.') - host) + 1) : 0));
+    for (int k = 0; k < 4; ++k) if (segs[k] < 0 || segs[k] > 255) return false;
+    return true;
+  }
+  // The "<name>.local" form: an mDNS name. Anything else is suspicious.
+  static const char kLocal[] = ".local";
+  const size_t suffixLen = sizeof(kLocal) - 1;
+  const size_t total = strlen(host);
+  if (total > suffixLen && strcasecmp(host + total - suffixLen, kLocal) == 0) {
+    for (size_t k = 0; k + 1 < total - suffixLen; ++k) {
+      const char c = host[k];
+      if (!(isalnum((unsigned char)c) || c == '-' || c == '_')) return false;
+    }
+    return true;
   }
   return false;
 }
-
-bool readSessionCookie(const char *headers, char *out, size_t outCap) {
-  if (!headers) return false;
-  const char *p = headers;
-  while ((p = strcasestr(p, "\r\nCookie:")) != nullptr) {
-    const char *v = p + 9;              // past "\r\nCookie:"
-    while (*v == ' ' || *v == '\t') ++v;
-    if (cookieValue(v, kCookieName, out, outCap)) return true;
-    p = v;
-  }
-  return false;
-}
-
-static int hexNibble(char c) {
-  if (c >= '0' && c <= '9') return c - '0';
-  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-  return -1;
-}
-
-// The cookie is base64(timestamp(4) || HMAC_SHA1(stored_hash, timestamp)).
-// We re-derive both halves and compare. Lifetime is enforced by the timestamp
-// window alone.
-bool sessionMatches(const char *cookie) {
-  if (!cookie || !*cookie) return false;
-  unsigned char blob[4 + 20];
-  size_t blobLen = 0;
-  if (mbedtls_base64_decode(blob, sizeof(blob), &blobLen,
-                            (const unsigned char *)cookie, strlen(cookie)) != 0
-      || blobLen != sizeof(blob)) {
-    return false;
-  }
-  const uint32_t t = ((uint32_t)blob[0] << 24) | ((uint32_t)blob[1] << 16)
-                    | ((uint32_t)blob[2] << 8) |  (uint32_t)blob[3];
-  const uint32_t now = (uint32_t)(millis() / 1000);
-  const uint32_t skew = (t > now) ? (t - now) : (now - t);
-  if (skew > kSessionSeconds) return false;
-  const String stored = settings::webPassHash();
-  if (stored.length() != 40) return false;
-  uint8_t keyBytes[20];
-  for (int i = 0; i < 20; ++i) {
-    const int hi = hexNibble(stored[i * 2]);
-    const int lo = hexNibble(stored[i * 2 + 1]);
-    if (hi < 0 || lo < 0) return false;
-    keyBytes[i] = (uint8_t)((hi << 4) | lo);
-  }
-  uint8_t expected[20];
-  const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
-  if (!info) return false;
-  if (mbedtls_md_hmac(info, keyBytes, sizeof(keyBytes), blob, 4, expected) != 0) return false;
-  return memcmp(expected, blob + 4, 20) == 0;
-}
-
-// Issue Set-Cookie + 302 to /. The token is HMAC(stored_hash, now).
-void issueSessionCookie() {
-  const uint32_t t = (uint32_t)(millis() / 1000);
-  uint8_t t4[4];
-  t4[0] = (uint8_t)(t >> 24); t4[1] = (uint8_t)(t >> 16);
-  t4[2] = (uint8_t)(t >> 8);  t4[3] = (uint8_t)t;
-  const String stored = settings::webPassHash();
-  uint8_t keyBytes[20];
-  for (int i = 0; i < 20; ++i) {
-    const int hi = hexNibble(stored[i * 2]);
-    const int lo = hexNibble(stored[i * 2 + 1]);
-    keyBytes[i] = (uint8_t)((hi << 4) | lo);
-  }
-  uint8_t mac[20];
-  const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA1);
-  if (!info || mbedtls_md_hmac(info, keyBytes, sizeof(keyBytes), t4, 4, mac) != 0) {
-    errorResponse(500, "Internal Server Error", "session token error");
-    return;
-  }
-  uint8_t blob[24];
-  memcpy(blob, t4, 4); memcpy(blob + 4, mac, 20);
-  char token[64];
-  if (!base64Encode(blob, sizeof(blob), token, sizeof(token))) {
-    errorResponse(500, "Internal Server Error", "session token error");
-    return;
-  }
-  const int n = snprintf(s_http.header, sizeof(s_http.header),
-      "HTTP/1.1 302 Found\r\n"
-      "Set-Cookie: %s=%s; Path=/; HttpOnly; Max-Age=604800; SameSite=Lax\r\n"
-      "Location: /\r\nCache-Control: no-store\r\n"
-      "Content-Length: 0\r\nConnection: close\r\n\r\n",
-      kCookieName, token);
-  if (n < 0 || (size_t)n >= sizeof(s_http.header)) { closeExchange(false); return; }
-  s_http.headerLen = (size_t)n; s_http.headerSent = 0;
-  s_http.body = ""; s_http.bodyLen = 0; s_http.bodySent = 0;
-  s_http.sending = true; s_http.progress = millis();
-}
-
-// One password field, no user name.
-const char kLoginPage[] =
-    "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-    "<title>登录 - MiRemoteBridge</title><style>"
-    "body{font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;"
-    "background:#f4f5fa;color:#1c2333;margin:0;padding:24px;display:flex;justify-content:center}"
-    ".c{background:#fff;border:1px solid #e6e9f2;border-radius:16px;padding:26px;max-width:380px;width:100%}"
-    "h1{font-size:18px;margin:0 0 8px}p{font-size:13px;color:#5a627a;line-height:1.7;margin:0 0 18px}"
-    "label{display:block;font-size:12px;color:#8a93a6;margin:14px 0 6px}"
-    "input{width:100%;box-sizing:border-box;padding:11px;border:1px solid #e6e9f2;border-radius:9px;font-size:14px}"
-    "button{margin-top:20px;width:100%;padding:12px;border:0;border-radius:10px;background:#3b6ef6;"
-    "color:#fff;font-size:14px;cursor:pointer}"
-    "</style></head><body><div class=\"c\">"
-    "<h1>登录</h1><p>输入访问密码即可进入配置界面。浏览器会记住会话，下次自动登录。</p>"
-    "<form method=\"get\" action=\"/login\">"
-    "<label>访问密码</label>"
-    "<input type=\"password\" name=\"password\" required autofocus>"
-    "<button type=\"submit\">登录</button></form>"
-    "</div></body></html>";
-
-const char kLoginFailPage[] =
-    "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-    "<meta http-equiv=\"refresh\" content=\"0;url=/login\">"
-    "<title>密码错误</title></head><body style=\"font-family:system-ui,sans-serif;padding:24px\">"
-    "<p>密码错误，正在返回登录页...</p></body></html>";
 
 // --- WebSocket plumbing -----------------------------------------------------
 
@@ -794,16 +616,18 @@ void wsSendStatus() {
   // Sized for the worst case with every counter at its maximum and the longest
   // state name ("REMOTE_REPAIR_REQUIRED"): that combination needs 352 bytes, so
   // a smaller buffer would silently drop the heartbeat. Still far below the
-  // 768-byte frame limit - see the note above about oversized frames.
-  char buf[448];
+  // 768-byte frame limit - see the note above about oversized frames. The
+  // window/remaining pair adds 30 bytes at most, still well within budget.
+  char buf[512];
   Json out(buf, sizeof(buf));
   out.add("{\"type\":\"status\",\"keyPresses\":%lu,\"keyEvents\":%lu,\"lastKey\":%u,\"activeKey\":%u,"
-          "\"remoteConnected\":%s,\"remoteRepairRequired\":%s,\"remoteState\":\"%s\",\"hostConnected\":%s,\"hostRepairRequired\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
+          "\"remoteConnected\":%s,\"remoteRepairRequired\":%s,\"remoteState\":\"%s\",\"hostConnected\":%s,\"hostRepairRequired\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u,\"windowActive\":%s,\"windowRemaining\":%u,\"windowAp\":%s}",
       (unsigned long)bridge::keyPresses(), (unsigned long)bridge::keyEvents(), bridge::lastKeyRaw(), bridge::activeRawCode(),
       boolean(rc003_client::connected()), boolean(rc003_client::repairRequired()), rc003_client::stateName(),
       boolean(hid_server::hostConnected()), boolean(hid_server::hostRepairRequired()),
       rc003_client::batteryLevel(), (unsigned)keymap_binding_count(),
-      (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+      (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap(),
+      boolean(windowActive()), (unsigned)windowRemainingSec(), boolean(windowUnlimited()));
   if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);
 }
 
@@ -953,6 +777,11 @@ void wsHandshake(const char *key) {
   s_ws = false;
   s_wsInLen = s_wsOutLen = s_wsOutSent = 0;
   s_wsLastKeyEvents = bridge::keyEvents();
+  // First heartbeat goes out the moment the handshake completes - the page
+  // would otherwise have to wait up to 5 s for its first window status, which
+  // is enough time for the user to switch tabs back and see a stale "closed"
+  // pill. wsSendStatus() queues onto s_wsOutBuf; pollHttp() pushes it.
+  wsSendStatus();
   s_wsLastStatusMs = millis();
   s_wsLastRecvMs = millis();
   s_wsLastPingMs = s_wsLastRecvMs;
@@ -1005,6 +834,20 @@ void dispatch() {
   const bool head = strcmp(method, "HEAD") == 0;
   const bool post = strcmp(method, "POST") == 0;
   if (!get && !head && !post) { errorResponse(405, "Method Not Allowed", "use GET, HEAD or POST"); return; }
+
+  // DNS-rebinding guard. With the password gone there is no cookie holding the
+  // line on its own: a hostile page can rebind a hostname to this IP and then
+  // issue cross-origin POSTs whose Origin matches Host (because both are the
+  // attacker's domain) and read the response. Rejecting anything that is not
+  // a literal IPv4 address or an mDNS ".local" name means a rebinding attack
+  // never sees its Host header accepted, so the request never gets dispatched.
+  if (!hostIsLocal(host)) {
+    errorResponse(403, "Forbidden", "host header not on this device's LAN"); return;
+  }
+  // For POST, also demand the Origin line agrees with Host (same as before,
+  // but now applied unconditionally: there is no password to fall back on).
+  // Origin is allowed to be missing entirely - some clients omit it, and the
+  // Host check above is what makes that case safe.
   if (post) {
     char expected[104]; snprintf(expected, sizeof(expected), "http://%s", host);
     if (crossSite || (origin[0] && strcmp(origin, expected) != 0)) {
@@ -1015,137 +858,13 @@ void dispatch() {
   char *query = strchr(target, '?');
   if (query) *query++ = 0;
 
-  // Authentication. The cookie is HMAC(sha1(password), timestamp) - no plaintext
-  // is ever on the device. The websocket still exchanges its token in the
-  // query string because browsers do not attach cookies to secure handshakes
-  // the way they do for ordinary fetches.
   const bool isWs = strcmp(target, "/ws") == 0;
-  const bool isLogin = strcmp(target, "/login") == 0;
-  const bool isLogout = strcmp(target, "/logout") == 0;
-  const bool isSetup = strcmp(target, "/setup") == 0;
-  char session[64] = {};
-  const bool hasSession = readSessionCookie(s_http.io, session, sizeof(session));
-
-  // Setup mode: force the visitor to define a password before anything else
-  // is served. (Without this, an unset password meant "wide open", which read
-  // as a cache bug to the user: the page just opened with no prompt at all.)
-  //
-  // /login and /logout are deliberately NOT exempt here. With no password
-  // stored the login form cannot succeed - there is nothing to compare the
-  // typed value against - so every submission came back "密码错误". A user who
-  // reached /login (bookmark, history, autocomplete) therefore saw a form that
-  // rejected whatever they typed, with no hint that the device was waiting for
-  // its FIRST password instead. Send them to the setup form.
-  if (!settings::hasWebPassword() && !isSetup && !isWs
-      && strcmp(target, "/api/token") != 0) {
-    const int n = snprintf(s_http.header, sizeof(s_http.header),
-        "HTTP/1.1 302 Found\r\nLocation: /setup\r\nCache-Control: no-store\r\n"
-        "Content-Length: 0\r\nConnection: close\r\n\r\n");
-    if (n < 0 || (size_t)n >= sizeof(s_http.header)) { closeExchange(false); return; }
-    s_http.headerLen = (size_t)n; s_http.headerSent = 0;
-    s_http.body = ""; s_http.bodyLen = 0; s_http.bodySent = 0;
-    s_http.sending = true; s_http.progress = millis();
-    return;
-  }
-
-  if (isWs) {
-    if (settings::hasWebPassword()) {
-      char token[64] = {};
-      const String expected = settings::webToken();
-      if (!queryValue(query, "token", token, sizeof(token)) ||
-          expected.length() == 0 || expected != String(token)) {
-        errorResponse(401, "Unauthorized", "websocket token required");
-        return;
-      }
-    }
-  } else if (settings::hasWebPassword()) {
-    if (!hasSession || !sessionMatches(session)) {
-      if (strcmp(target, "/api/token") == 0) {
-        // A JSON 401 rather than a redirect: the page checks for exactly this
-        // and sends the user to /login. A 302 would look like valid HTML to
-        // fetch(), which is what kept the websocket retrying forever.
-        errorResponse(401, "Unauthorized", "session expired - sign in again");
-        return;
-      }
-        BR_LOGI(kTag, "no/bad session for %s -> /login", target);
-      // /setup is NOT exempt once a password exists. It is a password-CHANGING
-      // form in that state, and it used to be honoured with no session at all:
-      // a single GET /setup?password=x&confirm=x from anyone on the Wi-Fi
-      // silently replaced the stored password (and signed that caller in).
-      // With a password set, /setup now needs a valid session like everything
-      // else - only the login form and the logout link stay open.
-      if (!isLogin && !isLogout) {
-        const int n = snprintf(s_http.header, sizeof(s_http.header),
-            "HTTP/1.1 302 Found\r\nLocation: /login\r\nCache-Control: no-store\r\n"
-            "Content-Length: 0\r\nConnection: close\r\n\r\n");
-        if (n < 0 || (size_t)n >= sizeof(s_http.header)) { closeExchange(false); return; }
-        s_http.headerLen = (size_t)n; s_http.headerSent = 0;
-        s_http.body = ""; s_http.bodyLen = 0; s_http.bodySent = 0;
-        s_http.sending = true; s_http.progress = millis();
-        return;
-      }
-    }
-  }
-  // Setup mode (no password yet), and /login, /logout, /setup themselves are open.
 
   if(post && expectedSlot>=0 && expectedSlot!=settings::activeSlot()) {
     errorResponse(409,"Conflict","active slot changed");return;
   }
   if (post && rc003_client::slotBusy() && strcmp(target, "/api/slot") != 0) {
     errorResponse(409,"Conflict","slot changing"); return;
-  }
-  if (isLogin) {
-    // The form submits with GET (the server refuses non-empty POST bodies), so
-    // a password may ride in the query string. Present -> verify and set the
-    // cookie; absent -> show the form.
-    if (get || head || post) {
-      char pw[64] = {};
-      const bool havePw = query && queryValue(query, "password", pw, sizeof(pw)) && strlen(pw) > 0;
-      if (havePw) {
-        if (!settings::checkWebPassword(String(pw))) {
-          respond(200, "OK", "text/html; charset=utf-8", kLoginFailPage, strlen(kLoginFailPage));
-        } else {
-          issueSessionCookie();
-        }
-        return;
-      }
-      respond(200, "OK", "text/html; charset=utf-8", kLoginPage, strlen(kLoginPage));
-      return;
-    }
-  }
-
-  if (isLogout) {
-    if (get || head) {
-      const int n = snprintf(s_http.header, sizeof(s_http.header),
-          "HTTP/1.1 302 Found\r\n"
-          "Set-Cookie: %s=; Path=/; Max-Age=0; SameSite=Lax\r\n"
-          "Location: /login\r\nCache-Control: no-store\r\n"
-          "Content-Length: 0\r\nConnection: close\r\n\r\n",
-          kCookieName);
-      if (n < 0 || (size_t)n >= sizeof(s_http.header)) { closeExchange(false); return; }
-      s_http.headerLen = (size_t)n; s_http.headerSent = 0;
-      s_http.body = ""; s_http.bodyLen = 0; s_http.bodySent = 0;
-      s_http.sending = true; s_http.progress = millis();
-      return;
-    }
-  }
-
-  if (isSetup) {
-    if (get || head) {
-      char pw[64] = {}, confirm[64] = {};
-      const bool havePw = queryValue(query, "password", pw, sizeof(pw));
-      const bool haveConfirm = queryValue(query, "confirm", confirm, sizeof(confirm));
-      if (!havePw || strlen(pw) < 4) {
-        respond(200, "OK", "text/html; charset=utf-8", kSetupPage, strlen(kSetupPage));
-      } else if (!haveConfirm || strcmp(pw, confirm) != 0) {
-        respond(200, "OK", "text/html; charset=utf-8", kSetupMismatchPage, strlen(kSetupMismatchPage));
-      } else {
-        settings::setWebPassword(String(pw));
-        BR_LOGI(kTag, "setup page stored the password and signed the user in");
-        issueSessionCookie();
-      }
-      return;
-    }
   }
 
   if (get || head) {
@@ -1156,18 +875,39 @@ void dispatch() {
     else if (strcmp(target, "/api/slots") == 0) handleSlots(head);
     else if (strcmp(target, "/api/nearby") == 0) handleNearby(head);
     else if (strcmp(target, "/api/bindings") == 0) handleBindings(head);
-    else if (strcmp(target, "/api/token") == 0) {
-      // In setup mode (no password yet) there is no derived token - hand back
-      // a placeholder so the page can still open the websocket (the /ws gate
-      // allows setup mode regardless of the token value).
-      const String tok = settings::hasWebPassword() ? settings::webToken()
-                                                    : String("setup");
+    else if (strcmp(target, "/api/window") == 0) {
+      // "How long until the radio goes off". The page's countdown reads this
+      // once per second and again on every websocket status heartbeat, so it
+      // is always within one tick of the board's actual timer.
       const int n = snprintf(s_http.io, sizeof(s_http.io),
-                             "{\"token\":\"%s\",\"occupied\":%s}",
-                             tok.c_str(), s_ws ? "true" : "false");
+                             "{\"active\":%s,\"remaining\":%u,\"ap\":%s}",
+                             windowActive() ? "true" : "false",
+                             (unsigned)windowRemainingSec(),
+                             windowUnlimited() ? "true" : "false");
       respond(200, "OK", "application/json", s_http.io, n > 0 ? (size_t)n : 0);
     }
-    else if (strcmp(target, "/ws") == 0 && get) {
+    else if (strcmp(target, "/api/window/extend") == 0) {
+      // Reset the 30-minute timer. Used by the "再开 30 分钟" button on the
+      // page - the only on-screen way to extend the window without walking
+      // back to the board to press BOOT.
+      triggerRejoin();
+      const int n = snprintf(s_http.io, sizeof(s_http.io),
+                             "{\"active\":%s,\"remaining\":%u,\"ap\":%s}",
+                             windowActive() ? "true" : "false",
+                             (unsigned)windowRemainingSec(),
+                             windowUnlimited() ? "true" : "false");
+      respond(200, "OK", "application/json", s_http.io, n > 0 ? (size_t)n : 0);
+    }
+    else if (strcmp(target, "/api/token") == 0) {
+      // Kept as a no-op so older pages and tests that ping /api/token still
+      // get a 200 rather than a 404. The body is the same shape it used to
+      // have, with a constant token - there is no token check any more.
+      const int n = snprintf(s_http.io, sizeof(s_http.io),
+                             "{\"token\":\"open\",\"occupied\":%s}",
+                             s_ws ? "true" : "false");
+      respond(200, "OK", "application/json", s_http.io, n > 0 ? (size_t)n : 0);
+    }
+    else if (isWs && get) {
       // Upgrade only: a plain GET here is a mistake, not a page request.
       char key[64] = {};
       for (char *line = strstr(s_http.io, "\r\n"); line && line[2];) {
@@ -1536,18 +1276,20 @@ bool startStation() {
 
 namespace wifi_ui {
 void begin() {
-  // Always-on policy: if a network is already configured, arm the automatic
-  // start. The actual enable() happens in loop() once the BLE side has had a
-  // few seconds to connect, and it is non-blocking there.
-  if (!settings::wifiSsid().isEmpty()) {
-    s_autoStartPending = true;
-    BR_LOGI(kTag, "config UI armed to auto-start %u ms after boot (network \"%s\")",
-            (unsigned)kAutoStartDelayMs, settings::wifiSsid().c_str());
-  }
+  // On-demand: do nothing. The radio is off until the BOOT key starts a
+  // 30-minute window (`wifi on` does the same thing from the console).
 }
 
 bool enable() {
-  if (s_enabled) return s_mode == Mode::Station;
+  if (s_enabled) {
+    // Already up - treat the call as a window refresh. Improv serial reprovision
+    // hits this path with new credentials; the "no-op when running" branch
+    // below handles the credentials-update side, this branch covers the
+    // "user pressed the button again while the page is open" case.
+    s_windowStartedMs = millis();
+    BR_LOGI(kTag, "config UI window refreshed (30 minutes from now)");
+    return s_mode == Mode::Station;
+  }
   const String ssid = settings::wifiSsid();
   if (ssid.isEmpty()) { BR_LOGE(kTag, "configure a network with wifi join <ssid> <password> first"); return false; }
   BR_LOGI(kTag, "joining saved network; heap %u B, largest %u B, host %d, remote %d",
@@ -1558,9 +1300,8 @@ bool enable() {
 
 bool rejoin() {
   // Used by the Improv serial transport after a client hands over new
-  // credentials. enable() deliberately does nothing while the UI is already
-  // up, and disable() refuses to stop it at all (always-on policy), so a
-  // re-provision needs this entry point rather than a disable/enable pair.
+  // credentials. Drops any current association and rejoins; disable() is no
+  // longer needed because the radio is not kept up between presses.
   const String ssid = settings::wifiSsid();
   if (ssid.isEmpty()) {
     BR_LOGE(kTag, "rejoin refused: no network configured");
@@ -1598,16 +1339,42 @@ bool enableAp() {
   s_mode = Mode::Ap;
   s_hadAddress = true;
   s_retryAt = 0;
+  // The fallback AP is meant for "router out of reach / unknown creds". It does
+  // not run the 30-minute timer - the page stays reachable until the user turns
+  // it off (`wifi ap off`).
+  s_windowStartedMs = 0;
   if (!startHttp()) { disable(); return false; }
   return true;
 }
 
-bool disable() {
-  // Always-on policy (user requirement): the config UI must stay reachable, so
-  // stopping it is refused outright rather than obeyed. boot without stored
-  // credentials is the one case where it never came up in the first place.
-  BR_LOGW(kTag, "config UI is always on - refusing to stop Wi-Fi (wifi status to see it)");
-  return false;
+// Power the radio down, drop the listener and any station/AP state. Bluetooth
+// stays up - that is the product, not Wi-Fi. Safe to call from any state.
+static bool disableImpl() {
+  if (s_enabled) {
+    stopHttp();
+    WiFi.disconnect(true);   // drop association AND clear the stored profile
+    WiFi.mode(WIFI_OFF);     // take the radio down; BLE stays on its own
+    s_enabled = false;
+    s_mode = Mode::Off;
+    s_hadAddress = false;
+    s_windowStartedMs = 0;
+    BR_LOGI(kTag, "config UI window closed; BLE links remain up");
+  }
+  return true;
+}
+
+bool disable() { return disableImpl(); }
+
+bool triggerRejoin() {
+  // Wired to a short press of the BOOT key. No-op when the page is already
+  // open (the user must have done it themselves) and otherwise starts a fresh
+  // 30-minute window from this moment.
+  if (s_enabled) {
+    s_windowStartedMs = millis();
+    BR_LOGI(kTag, "BOOT short press: window refreshed (30 minutes from now)");
+    return true;
+  }
+  return enable();
 }
 
 bool enabled() { return s_enabled; }
@@ -1622,28 +1389,41 @@ const char *ip() {
   return buf;
 }
 
+// The fallback AP is reachable for as long as it is up - it deliberately does
+// not run the 30-minute timer - so "active" has to include it. Reporting
+// inactive here would make the page show "Wi-Fi 已关闭" over a radio that is
+// very much on, which is worse than showing no status at all.
+bool windowActive() { return s_enabled && (s_mode == Mode::Ap || s_windowStartedMs != 0); }
+
+// True when the radio is up but nothing is counting down: the fallback AP only.
+bool windowUnlimited() { return s_enabled && s_mode == Mode::Ap; }
+
+uint32_t windowRemainingSec() {
+  if (!windowActive()) return 0;
+  if (windowUnlimited()) return 0;  // no countdown to report; see windowActive()
+  const uint32_t elapsed = millis() - s_windowStartedMs;
+  if (elapsed >= kWindowMs) return 0;
+  return (kWindowMs - elapsed + 999) / 1000;  // round up: show 1s before expiring
+}
+
 void loop() {
   const uint32_t now = millis();
 
-  // Always-on: bring the UI up by itself after boot (BLE first - the delay
-  // above), and keep trying if credentials are not usable yet, because
-  // `wifi join` may set them at any time during this session.
-  if (s_autoStartPending && !s_enabled && now > kAutoStartDelayMs && now - s_retryAt > 5000) {
-    s_retryAt = now;
-    if (enable()) {
-      s_autoStartPending = false;
-      BR_LOGI(kTag, "always-on config UI starting; BLE links remain up");
-    }
-    return;
+  // Close the window as soon as the timer expires. Done before the HTTP work
+  // so the page being open at the moment of expiry sees a single, clean
+  // disconnect rather than a stale response followed by a half-second of
+  // nothing.
+  if (s_enabled && s_windowStartedMs != 0 && (now - s_windowStartedMs) >= kWindowMs) {
+    BR_LOGI(kTag, "30-minute window expired; closing the radio");
+    disableImpl();
   }
-
   if (!s_enabled) return;
 
   if (s_mode == Mode::Station) {
     if (WiFi.status() != WL_CONNECTED || (uint32_t)WiFi.localIP() == 0) {
       if (s_listener >= 0) { stopHttp(); BR_LOGW(kTag, "Wi-Fi lost; BLE continues, reconnecting"); }
-      // Always-on: a failing join is retried forever instead of stopping the
-      // UI. Router reboots and corrected credentials then heal on their own.
+      // On-demand retry: keep trying within the window so a flaky router still
+      // has a chance to recover; but give up when the window closes.
       if (!s_hadAddress && now - s_joinStarted > 15000) {
         BR_LOGW(kTag, "Wi-Fi join still failing (status %d); retrying with saved credentials",
                 (int)WiFi.status());
@@ -1659,7 +1439,14 @@ void loop() {
       if (s_hadAddress && now - s_retryAt > 15000) { s_retryAt = now; WiFi.reconnect(); }
       return;
     }
-    s_hadAddress = true;
+    // First time we have a valid IP: start the window. Subsequent loop() passes
+    // take the else branch and just keep the listener warm.
+    if (!s_hadAddress) {
+      s_hadAddress = true;
+      s_windowStartedMs = millis();
+      BR_LOGI(kTag, "config UI ready at %s - window closes in 30 minutes; press BOOT to extend",
+              ip());
+    }
   }
   if (s_listener < 0 && now - s_retryAt > 500) { s_retryAt = now; startHttp(); }
   pollHttp();
