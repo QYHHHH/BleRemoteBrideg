@@ -13,15 +13,17 @@
 遥控器，把键码翻译成标准 HID 报告，再以"蓝牙键盘 + 媒体设备"的外设身份发给主机。
 免驱、免伴侣程序。
 
-**边界**（用户明确的红线）：只做按键转发；不做音频/USB/驱动/注入/宏；不做常驻
-Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
+**边界**（用户明确的红线）：只做按键转发；不做音频/USB/驱动/注入/宏。Web 配置界面
+**已从按需改为常开**（只要存过 Wi-Fi 凭据，开机后自行起来；`wifi off` / `wifi ap off`
+只回一句拒绝提示）。射频与内存是被 BLE 与 Wi-Fi 分摊的，但配置可达性优先。
 
 **许可**：GPL-3.0-or-later（2026-09-11 应作者决定由 MIT 改为 GPL-3.0，全树 SPDX
 已更新）。要开源发布，README 已按对外标准写好。
 
-## 2. 当前状态（截至 2026-09-12 上午）
+## 2. 当前状态
 
-**全部核心功能真机可用**，工作树干净：
+下表的能力条目为 **2026-09-12 真机实测**；此后（2026-09-13 起）又合入了三项，
+列在表后。**全部核心功能真机可用**，工作树干净：
 
 | 功能 | 验证 |
 | --- | --- |
@@ -32,11 +34,20 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 | iPhone 连接（音量/方向键） | ✅ 用户实测 |
 | 多主机轮换（Windows↔iPhone <0.1s 接管） | ✅ 实测 |
 | BOOT 键：短按无操作 / 长按 5s 恢复出厂 | ⚠️ 代码完成已烧录，物理按压待用户验证 |
-| **Web 配置 UI（`wifi on` → 页面注册/改键/实时按键）** | ✅ **真 Chrome 端到端 8/8 通过**（`tests/tools/browser_check.py`，读 live DOM，含按键实时推送） |
+| **Web 配置 UI（页面注册/改键/实时按键）** | ✅ **真 Chrome 端到端 8/8 通过**（`tests/tools/browser_check.py`，读 live DOM，含按键实时推送） |
 | `bind` 串口命令（设置/列表/解除） | ✅ 实测 |
 
+**2026-09-13 之后合入的**（不在上表的旧实测范围内，验证程度见各自提交）：
+
+| 改动 | 验证 |
+| --- | --- |
+| Improv 串口配网（`3860ead`，兼容 esp-web-tools / web.esphome.io） | 与串口控制台共用 USB 口；DTR 会拉 GPIO9，已有防护 |
+| 版本号构建期覆盖 `v0.0.4` + 调试后缀（`fa26dbd`） | 见 `AGENTS.md` 的版本约定 |
+| DTR 防护的代码依据（`f3b4a3a`） | 收到过 Improv 帧就不再触发 5 秒恢复出厂 |
+
 **待办**：`docs/TESTING.md` §5.3 的边界清单（长按、连按、休眠唤醒、两侧同时重启、
-卡键）尚未逐项验收；README 提到的英文版/CI 未做。
+卡键）尚未逐项验收。（旧版这里还写着"README 提到的英文版/CI 未做"——
+README 早已不含英文版与 CI 的计划，那条已删除。）
 
 **Web UI 的修复过程与必须守住的不变量**见 `docs/HANDOFF-websocket-debug.md`
 （该文件已从"排查任务书"改写为结案记录 —— 它原来的三个猜测**全是错的**，别再照着排查）。
@@ -85,12 +96,25 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
   **⚠️ 绝对不要设 `DtrEnable=true`**：本板 DTR 接的是 BOOT（GPIO9），置位等于
   按住 BOOT，固件 5 秒后就会执行**恢复出厂**——实测踩过，代价是清空全部配对、
   Wi-Fi 凭据、网页密码与按键映射。只用 RTS。
-- **测试**：`python tests/model/check_vectors.py`（宿主端 11096 断言）；设备端
+  另外**释放顺序是承重的**：pyserial 打开端口时 DTR 与 RTS **默认都置位**，
+  随后必须**先放 DTR、再放 RTS**。反过来的话，EN 拉高（复位释放）那一刻 GPIO9
+  还是低的，芯片会**进下载模式、固件根本不跑**，症状只是"串口没输出"。
+  `tests/tools/board_auth.py` 的 `_SER.dtr = False` / `_SER.rts = False` 两行
+  别调换顺序（已加注释）。
+  **"只收不发"的串口软件不等于危险**：危险的是"DTR 被置位"，与它发不发数据无关。
+  已实测 MobaXterm 普通串口不置位 DTR。判断方法：打开软件后看日志有没有
+  `[BUTTON ] key pressed`。详见 README 的 ⚠️ 块与 TESTING §5.3.2。
+- **测试**：`python tests/model/check_vectors.py`（宿主端 11098 断言）；设备端
   `selftest` 串口命令。改解析/键表/HID 描述符后两者都要跑。
+  页面断言 `python tests/tools/check_web_ui.py`（**161 项**，见
+  `EXPECTED_CHECKS`；README/TESTING 里出现过 125/150 都是旧值）。
 - **Git**：关键节点自动提交，**中文提交信息**（见 `AGENTS.md`）并注明验证程度
-  （编译验证 vs 真机验证）。已有 60+ 提交，历史在 Git 里可追溯，不要重建仓库。
+  （编译验证 vs 真机验证）。已有 103 次提交，历史在 Git 里可追溯，不要重建仓库。
 - **文档**：用户要求项目开源，README 面向对外发布；一切"实测/未实测"严格区分。
-- **不用 Wi-Fi 时保持关闭**：`wifi off`（Wi-Fi 与 BLE 共存吃 ~50KB 堆 + 射频时间）。
+- **Wi-Fi 是常开的，关不掉**：`wifi off` / `wifi ap off` 都被明确拒绝
+  （见 `cli.cpp` 的 wifi 分支与 `wifi_ui.h` 的 ALWAYS-ON 注释）。**别再写
+  "不用时 `wifi off`" 这类指引**——它已经不成立，README 早期版本也留过这种残留。
+  Wi-Fi 与 BLE 共存吃 ~50KB 堆 + 射频时间，这是已知代价，不是待办。
 
 ## 6. 已知问题 / 注意
 
@@ -106,8 +130,11 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
   300 ms / 还没发过请求（预测性连接）250 ms / 请求或响应在动 4 s。把中间那种并到 4 s 里，
   会让手机端的预测性连接把槽位堵死 —— 实测三条静默连接让真实请求等 29 s，
   表现为"手机登录不进去"。见 `docs/HANDOFF-websocket-debug.md` 根因 5。
-- **认证机制的现状与已知弱点**（无防爆破、密码走 URL、WS token 静态、cookie 到期语义
-  依赖开机时长、sha1 无盐、无 TLS）见 `docs/AUTH.md`。**别把它的防护能力说得比实际强**；
+- **认证机制的现状与已知弱点**（无防爆破、token 走 URL、WS token 按密码静态、
+  cookie 固定 7 天且**无法提前失效**（只有改密码才会作废旧会话）、sha1 无盐、无 TLS）
+  见 `docs/AUTH.md`。**别把它的防护能力说得比实际强**；
+  （旧版写的"cookie 到期语义依赖开机时长"是错的：代码里 `kSessionSeconds` 是
+  `7 * 24 * 3600` 的固定值，与开机时长无关，见 `wifi_ui.cpp`。）
   前提是**仅限局域网，不要暴露到公网**。
 - **认证层的两条路由规则互为镜像，改动前先读 `docs/AUTH.md` §1/§3**：
   无密码时除 `/setup`、`/ws`、`/api/token` 外一律跳 `/setup`（`/login` 也跳，否则是一个
@@ -149,7 +176,7 @@ Wi-Fi（Wi-Fi 仅用于按需的 Web 配置界面，`wifi on/off`）。
 #      所以只有开端口的那次调用需要等，见 tests/tools/board_auth.py）
 # 不接板子先跑宿主侧全套（含页面断言，约 1 秒，只需要 Chrome + Python）：
 #   .\scripts\test.ps1
-#   python tests/tools/check_web_ui.py            # 闪存预算 + 125 项页面断言
+#   python tests/tools/check_web_ui.py            # 闪存预算 + 161 项页面断言
 #
 # 两个可选环境变量（都没配时脚本会明确报错，不会猜）：
 #   MRB_IP=<板子地址>        板子走 DHCP，地址会变；`wifi on` 会写入 build/.boardip

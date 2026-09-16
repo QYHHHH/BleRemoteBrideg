@@ -84,6 +84,14 @@ def ser(port=DEFAULT_PORT, baud=DEFAULT_BAUD):
     if _SER is None:
         _import_pyserial()
         import serial  # noqa: PLC0415
+        # Order matters, and it is not cosmetic. pyserial 3.5 asserts both DTR and
+        # RTS inside the constructor (SerialBase.__init__ sets _dtr_state and
+        # _rts_state to True, then calls open()). On this board RTS is wired to EN
+        # and DTR to GPIO9, which is the BOOT strap - and a strap is latched at the
+        # instant reset is released. So DTR has to come back up *before* RTS does:
+        # that is what makes the chip boot normally instead of into download mode.
+        # Swap these two lines and the firmware never starts; the only symptom is
+        # _read_until('console ready') timing out 10 s later.
         _SER = serial.Serial(port, baud, timeout=0.3, dsrdtr=False, rtscts=False)
         _SER.dtr = False
         _SER.rts = False
