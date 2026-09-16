@@ -34,6 +34,8 @@ const char *bridge_event_name(uint8_t type) {
     case BR_EV_WIN_LINK_UP:   return "WIN_LINK_UP";
     case BR_EV_WIN_LINK_DOWN: return "WIN_LINK_DOWN";
     case BR_EV_WIN_AUTH_FAIL: return "WIN_AUTH_FAIL";
+    case BR_EV_RC_AUTH_FAIL:  return "RC_AUTH_FAIL";
+    case BR_EV_WIN_AUTH_OK:   return "WIN_AUTH_OK";
     case BR_EV_NONE:
     default:                  return "NONE";
   }

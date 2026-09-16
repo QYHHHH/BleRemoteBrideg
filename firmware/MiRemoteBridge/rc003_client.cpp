@@ -81,6 +81,7 @@ enum class St : uint8_t {
   DISCOVERING,
   READY,            // connected + subscribed
   BACKOFF,          // idle between scan bursts
+  REMOTE_REPAIR_REQUIRED,  // stored key is dead; wait for the user to pick a device
 };
 
 St s_state = St::IDLE;
@@ -88,6 +89,12 @@ volatile bool s_slotBusy = false;
 volatile bool s_slotPaused = false;
 uint8_t s_slotTarget = 0, s_slotAction = 0;
 const char *s_slotError = "";
+
+// Set when a stored upstream link key is confirmed dead, cleared when a later
+// pairing authenticates. While set nothing reconnects or pairs by itself: the
+// bond, the learned keys and the shortcuts all stay exactly as they are, and
+// the slot only moves on after the user picks a device from the page.
+volatile bool s_repairRequired = false;
 
 
 BLEClient *s_client = nullptr;
@@ -141,6 +148,10 @@ volatile bool s_reqScanNow = false;
 volatile bool s_reqReconnect = false;
 volatile bool s_reqForget = false;
 volatile bool s_reqConnect = false;
+// This connect request replaces a pairing whose stored key no longer works, so
+// the old bond may be dropped - but only here, i.e. only after the user picked
+// a device. It is consumed by the same request, never left set.
+volatile bool s_reqRepair = false;
 char s_reqAddr[kAddrStrLen] = {0};
 uint8_t s_reqAddrType = BLE_ADDR_PUBLIC;
 char s_reqName[32] = {0};
@@ -510,6 +521,11 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
     if (name.length() > 0) {
       BR_LOGD(kTagScan, "%s %s rssi=%d type=%u", name.c_str(), addr.c_str(), rssi, (unsigned)addrType);
     }
+
+    // Repair mode: the saved key is dead, so re-matching the saved address here
+    // would reconnect-and-fail in a loop. The scan still runs, purely so the
+    // page can list what is nearby for the user to choose from.
+    if (s_repairRequired) return;
 
     portENTER_CRITICAL(&s_pendMux);
     const bool alreadyPending = s_pendValid;
@@ -972,6 +988,7 @@ void handleRequests() {
   bool doScan = false;
   bool doReconnect = false;
   bool doConnect = false;
+  bool doRepair = false;
   char addr[kAddrStrLen] = {0};
   uint8_t type = BLE_ADDR_PUBLIC;
   char name[32] = {0};
@@ -992,6 +1009,8 @@ void handleRequests() {
   if (s_reqConnect) {
     s_reqConnect = false;
     doConnect = true;
+    doRepair = s_reqRepair;
+    s_reqRepair = false;
     copyFixed(addr, sizeof(addr), s_reqAddr);
     type = s_reqAddrType;
     copyFixed(name, sizeof(name), s_reqName);
@@ -1015,7 +1034,17 @@ void handleRequests() {
   }
 
   if (doConnect) {
-    BR_LOGI(kTag, "console requested connect to %s (type %u)", addr, (unsigned)type);
+    BR_LOGI(kTag, "connect requested to %s (type %u)%s", addr, (unsigned)type, doRepair ? " (replacing a dead pairing)" : "");
+    if (doRepair && settings::hasRc003()) {
+      // The user explicitly picked this device, which is the only moment the
+      // old bond may go. Everything else in the slot - learned keys, their
+      // names and every shortcut - lives in the slot's NVS namespace and is
+      // deliberately left alone, so the mapping survives the re-pairing.
+      BR_LOGW(kTag, "repair: dropping the dead bond for %s", settings::rc003Address().c_str());
+      ble_bonds::removePeer(BLEAddress(settings::rc003Address(), settings::rc003AddrType()));
+      settings::clearRc003();
+      settings::setPairingEnabled(true);
+    }
     if (s_client && s_client->isConnected()) {
       s_client->disconnect();
       vTaskDelay(pdMS_TO_TICKS(80));
@@ -1040,7 +1069,9 @@ void handleRequests() {
     }
     clearPending();
     s_directAttempts = 0;
-    setState(settings::hasRc003() ? St::DIRECT_CONNECT : St::SCANNING, "manual reconnect");
+    // A dead key cannot be fixed by reconnecting to the same address, so a
+    // manual reconnect must not bypass the repair state.
+    setState(!s_repairRequired && settings::hasRc003() ? St::DIRECT_CONNECT : St::SCANNING, "manual reconnect");
   }
 
   if (doScan) {
@@ -1083,6 +1114,14 @@ void taskLoop() {
     return;
   }
 
+  // A dead stored key parks the slot in its own state: the scan keeps the
+  // "nearby devices" list fresh, but nothing is matched and nothing connects
+  // until the user chooses a device (which arrives as a CONNECTING request).
+  if (s_repairRequired && s_state != St::REMOTE_REPAIR_REQUIRED &&
+      s_state != St::BACKOFF && s_state != St::CONNECTING && s_state != St::DISCOVERING) {
+    setState(St::REMOTE_REPAIR_REQUIRED, "waiting for the user to choose a device");
+  }
+
   switch (s_state) {
     case St::IDLE:
       setState(settings::hasRc003() ? St::DIRECT_CONNECT : St::SCANNING, "boot");
@@ -1119,7 +1158,11 @@ void taskLoop() {
       break;
     }
 
-    case St::SCANNING: {
+    case St::SCANNING:
+    // Repair mode scans for exactly the same reason and in exactly the same
+    // way; the difference is that the scan callback refuses to match, so this
+    // state can only ever end through a device the user picked.
+    case St::REMOTE_REPAIR_REQUIRED: {
       if (s_scanBurstStartMs == 0) {
         s_scanBurstStartMs = nowMs();
         s_scanStarts++;
@@ -1143,7 +1186,7 @@ void taskLoop() {
     case St::BACKOFF:
       if (nowMs() >= s_idleUntilMs) {
         s_scanBurstStartMs = 0;
-        setState(St::SCANNING, "backoff over");
+        setState(s_repairRequired ? St::REMOTE_REPAIR_REQUIRED : St::SCANNING, "backoff over");
       } else {
         vTaskDelay(pdMS_TO_TICKS(100));
       }
@@ -1194,6 +1237,13 @@ void taskLoop() {
         settings::setPairingEnabled(false);
         s_newPeer="";
         s_slotError="";
+        // A successful subscription is the proof the pairing works again, so
+        // this is where the repair latch is released - both for the page's
+        // notice and for the LED rhythm.
+        if (s_repairRequired) {
+          s_repairRequired = false;
+          BR_LOGI(kTag, "repair complete: the selected device is paired and usable");
+        }
         setState(St::READY, "subscribed");
         event_bus::post(BR_EV_RC_READY);
         requestBatteryRead();
@@ -1317,6 +1367,11 @@ void serviceSlot() {
     s_slotError="槽位操作失败，保留原配置";
     settings::selectSlot(old);
     if(addr.length()) ble_bonds::restoreSlot(old,BLEAddress(addr,type));
+  } else {
+    // A completed slot operation moves to a slot whose own state applies, so
+    // the repair latch of the old slot must not leak into it. A failed
+    // operation restored the original slot and therefore keeps the latch.
+    s_repairRequired=false;
   }
   s_connectedAddr=""; s_connectedName=""; s_connectedIdentity=""; s_identityReadAttempted=false;
   s_remoteBatteryValid=false; s_scanBurstStartMs=0; s_directAttempts=0;
@@ -1391,7 +1446,7 @@ void requestForget() {
   portEXIT_CRITICAL(&s_reqMux);
 }
 
-bool requestConnect(const String &address, uint8_t addrType, const String &name) {
+bool requestConnect(const String &address, uint8_t addrType, const String &name, bool replacingDeadPairing) {
   if (address.length() != 17 || address.length() >= sizeof(s_reqAddr)) {
     BR_LOGE(kTag, "\"%s\" is not a valid BLE address", address.c_str());
     return false;
@@ -1400,10 +1455,24 @@ bool requestConnect(const String &address, uint8_t addrType, const String &name)
   copyFixed(s_reqAddr, sizeof(s_reqAddr), address.c_str());
   s_reqAddrType = addrType;
   copyFixed(s_reqName, sizeof(s_reqName), name.c_str());
+  s_reqRepair = replacingDeadPairing;
   s_reqConnect = true;
   portEXIT_CRITICAL(&s_reqMux);
   return true;
 }
+
+void enterRepairRequired() {
+  if (s_repairRequired) return;
+  s_repairRequired = true;
+  // Whatever was in flight is pointless now: reconnecting to the same address
+  // would fail on the same dead key. Cancel it from here (loop task) so the
+  // central task reaches its repair branch promptly instead of waiting out a
+  // connect attempt.
+  clearPending();
+  cancelCentralOperation();
+}
+
+bool repairRequired() { return s_repairRequired; }
 
 const char *stateName() {
   switch (s_state) {
@@ -1414,6 +1483,7 @@ const char *stateName() {
     case St::DISCOVERING:    return "DISCOVERING";
     case St::READY:          return "READY";
     case St::BACKOFF:        return "BACKOFF";
+    case St::REMOTE_REPAIR_REQUIRED: return "REMOTE_REPAIR_REQUIRED";
     default:                 return "?";
   }
 }

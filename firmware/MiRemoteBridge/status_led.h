@@ -5,13 +5,20 @@
  *
  * Hezhou CORE-ESP32: D4 = GPIO12, D5 = GPIO13, both active HIGH.
  *
- *   D5  connection to the computer (host)  - slow blink: no link
+ *   D5  connection to the computer (host)  - breathing: no link yet
  *                                            fast blink: linked, HID not ready
  *                                            solid:      HID subscribed
- *   D4  connection to the remote           - slow blink: searching
+ *                                            double flash: re-add it in Windows
+ *   D4  connection to the remote           - breathing: searching
  *                                            fast blink: connecting
  *                                            solid:      ready
  *                                            dark while a remote key is down
+ *                                            double flash: pairing must be redone
+ *
+ * The double flash is "on 120 ms, off 120 ms, on 120 ms" once per ~1.6 s. Both
+ * LEDs still go dark after ten minutes without activity - including the double
+ * flash - while the Web UI keeps showing the notice, because the page is where
+ * the instruction lives.
  *
  * The dark-on-press behaviour is the "the bridge heard you" feedback: it uses
  * the same active-key state the console and the Web UI report.

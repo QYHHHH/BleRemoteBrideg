@@ -26,6 +26,15 @@ bool slotBusy();
 const char *slotError();
 void serviceSlot();
 
+// ----- repair state --------------------------------------------------------
+// Entered only when a stored link key is confirmed dead (see ble_core). While
+// it is set the central task stops reconnecting, stops matching advertisements
+// and never pairs on its own: the slot's bond, learned keys and shortcuts are
+// all left untouched, and nothing is deleted until the user picks a device
+// again from the page. Scanning continues so that device list can be filled.
+void enterRepairRequired();
+bool repairRequired();
+
 
 // ----- console API ---------------------------------------------------------
 // All of these are safe to call from the Arduino loop / console task; they only
@@ -33,7 +42,11 @@ void serviceSlot();
 void requestScanNow();
 void requestReconnect();
 void requestForget();              // forget bond + saved address, then rescan
-bool requestConnect(const String &address, uint8_t addrType, const String &name);
+// `replacingDeadPairing` may only be true for a device the user picked out of
+// the nearby list while repairRequired() is set; it is what authorises dropping
+// the slot's old bond. The shortcuts and learned keys are never touched.
+bool requestConnect(const String &address, uint8_t addrType, const String &name,
+                    bool replacingDeadPairing = false);
 
 // ----- status --------------------------------------------------------------
 const char *stateName();

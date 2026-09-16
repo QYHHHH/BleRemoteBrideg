@@ -356,10 +356,11 @@ void handleStatus(bool head) {
   out.add("{\"wifi\":true,\"ap\":");
   const String network = s_mode == Mode::Ap ? String(kApSsid) : settings::wifiSsid();
   out.quoted(network.c_str());
-  out.add(",\"hostConnected\":%s,\"hostPairingPaused\":%s,\"hostCount\":%u,\"keyboardSubscribed\":%s,\"consumerSubscribed\":%s",
-      boolean(hid_server::hostConnected()), boolean(hid_server::hostPairingPaused()), hid_server::hostCount(),
+  out.add(",\"hostConnected\":%s,\"hostRepairRequired\":%s,\"hostCount\":%u,\"keyboardSubscribed\":%s,\"consumerSubscribed\":%s",
+      boolean(hid_server::hostConnected()), boolean(hid_server::hostRepairRequired()), hid_server::hostCount(),
       boolean(hid_gatt::keyboardSubscribed()), boolean(hid_gatt::consumerSubscribed()));
-  out.add(",\"remoteConnected\":%s,\"remoteState\":", boolean(rc003_client::connected()));
+  out.add(",\"remoteConnected\":%s,\"remoteRepairRequired\":%s,\"remoteState\":",
+      boolean(rc003_client::connected()), boolean(rc003_client::repairRequired()));
   out.quoted(rc003_client::stateName());
   out.add(",\"remoteName\":");
   const String remote = rc003_client::connectedName();
@@ -790,13 +791,17 @@ bool wsQueueRaw(const uint8_t *payload, size_t len, uint8_t opcode) {
 void wsQueue(const char *payload) { wsQueueRaw((const uint8_t *)payload, strlen(payload), 0x1); }
 
 void wsSendStatus() {
-  char buf[352];
+  // Sized for the worst case with every counter at its maximum and the longest
+  // state name ("REMOTE_REPAIR_REQUIRED"): that combination needs 352 bytes, so
+  // a smaller buffer would silently drop the heartbeat. Still far below the
+  // 768-byte frame limit - see the note above about oversized frames.
+  char buf[448];
   Json out(buf, sizeof(buf));
   out.add("{\"type\":\"status\",\"keyPresses\":%lu,\"keyEvents\":%lu,\"lastKey\":%u,\"activeKey\":%u,"
-          "\"remoteConnected\":%s,\"remoteState\":\"%s\",\"hostConnected\":%s,\"hostPairingPaused\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
+          "\"remoteConnected\":%s,\"remoteRepairRequired\":%s,\"remoteState\":\"%s\",\"hostConnected\":%s,\"hostRepairRequired\":%s,\"battery\":%d,\"bindings\":%u,\"heapTotal\":%u,\"heapFree\":%u,\"heapMin\":%u,\"heapLargest\":%u}",
       (unsigned long)bridge::keyPresses(), (unsigned long)bridge::keyEvents(), bridge::lastKeyRaw(), bridge::activeRawCode(),
-      boolean(rc003_client::connected()), rc003_client::stateName(), boolean(hid_server::hostConnected()),
-      boolean(hid_server::hostPairingPaused()),
+      boolean(rc003_client::connected()), boolean(rc003_client::repairRequired()), rc003_client::stateName(),
+      boolean(hid_server::hostConnected()), boolean(hid_server::hostRepairRequired()),
       rc003_client::batteryLevel(), (unsigned)keymap_binding_count(),
       (unsigned)ESP.getHeapSize(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   if (out.ok()) wsQueueRaw((const uint8_t *)buf, out.size(), 0x1);
@@ -1188,17 +1193,9 @@ void dispatch() {
       }
     }
     else if (strcmp(target, "/favicon.ico") == 0) respond(204, "No Content", "image/x-icon", "", 0);
-    else if (strcmp(target, "/api/set") == 0 || strcmp(target, "/api/reset") == 0 ||
-             strcmp(target, "/api/host-pairing") == 0)
+    else if (strcmp(target, "/api/set") == 0 || strcmp(target, "/api/reset") == 0)
       errorResponse(405, "Method Not Allowed", "writes require POST");
     else errorResponse(404, "Not Found", "not found");
-  } else if (strcmp(target, "/api/host-pairing") == 0) {
-    const int removed = hid_server::forgetHostBonds();
-    hid_server::resumeHostPairing();
-    status_led::wake();
-    char body[64];
-    const int n = snprintf(body, sizeof(body), "{\"ok\":true,\"removed\":%d}", removed);
-    respond(200, "OK", "application/json", body, (size_t)n);
   } else if (strcmp(target, "/api/slot") == 0) {
     char slot[4]={},action[8]={};
     if(!queryValue(query,"slot",slot,sizeof(slot)) || strlen(slot)!=1 || slot[0]<'0' || slot[0]>'2' ||
@@ -1211,7 +1208,13 @@ void dispatch() {
     else { if(op==1) status_led::wake(); respond(202,"Accepted","application/json","{\"ok\":true}",11); }
   } else if (strcmp(target, "/api/connect") == 0) {
     char addr[18]={},type[4]={};
-    if(!settings::pairingEnabled() || settings::hasRc003() ||
+    // Two ways in, and both need the user to have picked this exact device out
+    // of the nearby list: adding a device to an empty slot, or re-pairing a
+    // slot whose stored key turned out to be dead. The repair case keeps the
+    // slot's address until this moment - the bond is only dropped once the
+    // user has actually chosen a replacement.
+    const bool repair = rc003_client::repairRequired();
+    if ((!repair && (!settings::pairingEnabled() || settings::hasRc003())) ||
        !queryValue(query,"address",addr,sizeof(addr)) ||
        !queryValue(query,"type",type,sizeof(type))) {
       errorResponse(400,"Bad Request","enable pairing first");return;
@@ -1225,11 +1228,14 @@ void dispatch() {
           String saved,label;uint8_t at;settings::slotInfo(j,saved,label,at);
           if(saved.equalsIgnoreCase(a))used=true;
         }
-        if(!used) matched=rc003_client::requestConnect(a,t,n);
+        if(!used) matched=rc003_client::requestConnect(a,t,n,repair);
         break;
       }
     }
-    if(matched)respond(202,"Accepted","application/json","{\"ok\":true}",11);
+    // Re-pairing is a deliberate act on the LEDs' behalf too: the double flash
+    // is subject to the ten-minute idle window, so the user starting the repair
+    // is what makes it visible again.
+    if(matched) { if(repair) status_led::wake(); respond(202,"Accepted","application/json","{\"ok\":true}",11); }
     else errorResponse(409,"Conflict","device unavailable or already assigned");
   } else if (strcmp(target, "/api/key") == 0) {
     char raw[4]={},name[224]={},action[8]={};

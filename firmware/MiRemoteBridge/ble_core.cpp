@@ -12,6 +12,8 @@
 #include <BLEDevice.h>
 #include <BLESecurity.h>
 #include <host/ble_gap.h>
+#include <host/ble_hs.h>
+#include <nimble/ble.h>
 
 #include "event_bus.h"
 #include "log.h"
@@ -22,6 +24,22 @@ namespace {
 
 static const char *kTag = "BLE";
 bool s_started = false;
+
+// Is this ENC_CHANGE status a *confirmed* key/authentication failure, as opposed
+// to a timeout or a plain link loss?
+//
+// The distinction is the whole point of the upstream repair state: a remote that
+// went to sleep, walked out of range or lost power produces a disconnect (and
+// sometimes a timeout), and latching "your pairing is dead" on any of those
+// would strand a perfectly good remote. Only these two HCI codes mean the two
+// sides disagree about the link key:
+//   0x05 Authentication Failure - the peer rejected our key
+//   0x06 PIN or Key Missing     - the peer asked for a key one of us no longer has
+bool keyFailure(int status) {
+  return status == BLE_HS_ERR_HCI_BASE + BLE_ERR_AUTH_FAIL ||
+         status == BLE_HS_ERR_HCI_BASE + BLE_ERR_PINKEY_MISSING;
+}
+
 int diagnosticGap(ble_gap_event *event, void *) {
   if(event->type==BLE_GAP_EVENT_NOTIFY_RX) {
     uint8_t data[32];size_t length=OS_MBUF_PKTLEN(event->notify_rx.om);
@@ -32,12 +50,21 @@ int diagnosticGap(ble_gap_event *event, void *) {
     BR_LOGW(kTag,"disconnect handle=%u reason=%d",event->disconnect.conn.conn_handle,event->disconnect.reason);
   if(event->type==BLE_GAP_EVENT_ENC_CHANGE) {
     BR_LOGI(kTag,"security handle=%u status=%d",event->enc_change.conn_handle,event->enc_change.status);
-    if(event->enc_change.status!=0) {
-      ble_gap_conn_desc desc{};
-      // The shared host owns both links. Slave role is the computer connection.
-      if(!ble_gap_conn_find(event->enc_change.conn_handle,&desc) && desc.role==BLE_GAP_ROLE_SLAVE) {
-        BR_LOGW(kTag,"host authentication failed (status=%d)",event->enc_change.status);
-        event_bus::post(BR_EV_WIN_AUTH_FAIL,(uint8_t)event->enc_change.status);
+    ble_gap_conn_desc desc{};
+    // One host stack owns both links, so the role is what tells them apart:
+    // slave is the computer we serve (downstream), master is the remote we
+    // drive (upstream). Never guess from the handle alone.
+    if(!ble_gap_conn_find(event->enc_change.conn_handle,&desc)) {
+      if(desc.role==BLE_GAP_ROLE_SLAVE) {
+        if(event->enc_change.status==0) {
+          event_bus::post(BR_EV_WIN_AUTH_OK);
+        } else {
+          BR_LOGW(kTag,"host authentication failed (status=%d)",event->enc_change.status);
+          event_bus::post(BR_EV_WIN_AUTH_FAIL,(uint8_t)event->enc_change.status);
+        }
+      } else if(desc.role==BLE_GAP_ROLE_MASTER && keyFailure(event->enc_change.status)) {
+        BR_LOGW(kTag,"remote authentication/key failure (status=%d)",event->enc_change.status);
+        event_bus::post(BR_EV_RC_AUTH_FAIL,(uint8_t)event->enc_change.status);
       }
     }
   }

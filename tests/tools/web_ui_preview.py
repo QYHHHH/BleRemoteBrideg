@@ -34,7 +34,7 @@ def demo_html():
   const base = defaults.map(a => a.raw === 62 ? {...a, mod:9, key:0} : {...a});
   let bindings = [];
   try { bindings = JSON.parse(sessionStorage.getItem('mrb-ui-demo') || '[]'); } catch (_) {}
-  const control = window.__demo = {fault:null, calls:[], status:{heapTotal:204800,heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,hostPairingPaused:false,remoteConnected:true,remoteName:'小米蓝牙语音遥控器',remoteId:'',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
+  const control = window.__demo = {fault:null, calls:[], status:{heapTotal:204800,heapFree:28774,heapMin:6554,heapLargest:15872,wifi:true,ap:'MiRemoteBridge',hostConnected:true,hostRepairRequired:false,remoteConnected:true,remoteRepairRequired:false,remoteName:'小米蓝牙语音遥控器',remoteId:'',battery:97,fwVersion:'v0.0.1',buildTime:'Sep 12 2026 12:56:33'}};
   let active=0;
   const devices=[{name:'RC003',address:'',identity:''},{name:'',address:'',identity:''},{name:'',address:'',identity:''}],maps=[bindings,[],[]],keys=[[],[],[]];
   control.devices=devices;control.keys=keys;
@@ -54,7 +54,6 @@ def demo_html():
     if (method !== 'POST') return json({error:'not found'},404);
     if (control.fault === 'write') return json({error:'模拟：设备拒绝保存'},400);
     if (control.fault === 'mismatch') return json({ok:true});
-    if (u.pathname === '/api/host-pairing') { control.status.hostPairingPaused=false; return json({ok:true,removed:1}); }
     if (u.pathname === '/api/slot') {
       maps[active]=bindings;active=+u.searchParams.get('slot');bindings=maps[active];
       const action=u.searchParams.get('action');

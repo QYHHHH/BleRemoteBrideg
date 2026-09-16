@@ -39,18 +39,33 @@ FLASH_BUDGET = 24000
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 154
+EXPECTED_CHECKS = 161
 
 TESTS = r"""(async () => {
   const results=[];
   const assert=(condition,name)=>{if(!condition)throw Error(name);results.push(name);};
   while(S.load)await new Promise(r=>setTimeout(r,10));await load();
   assert(S.on && S.ok,'initial API load');
-  assert($('hostRepair').hidden,'host repair prompt hidden normally');
-  __demo.status.hostPairingPaused=true;await load();
-  assert(!$('hostRepair').hidden&&$('hostRepair').textContent.includes('Windows'),'authentication failure shows Windows removal prompt');
-  await $('repairHost').onclick();
-  assert($('hostRepair').hidden&&__demo.calls.some(c=>c.path==='/api/host-pairing'&&c.method==='POST'),'repair action resumes pairing');
+  assert($('hostRepair').hidden&&$('remoteRepair').hidden,'both repair notices hidden normally');
+  __demo.status.hostRepairRequired=true;await load();
+  assert(!$('hostRepair').hidden&&$('hostRepair').textContent.includes('请在 Windows 删除 Mi Remote Bridge 后重新添加'),'stale computer key tells the user to re-add it in Windows');
+  assert(!document.querySelector('#hostRepair button'),'the computer notice has no button to press');
+  assert(__demo.calls.every(c=>c.path!=='/api/host-pairing'),'nothing ever posts to the removed host-pairing endpoint');
+  __demo.status.hostRepairRequired=false;__demo.status.remoteRepairRequired=true;await load();
+  assert($('hostRepair').hidden&&!$('remoteRepair').hidden,'the remote notice shows independently of the computer one');
+  assert($('remoteRepair').textContent.includes('遥控器配对信息已失效，已停止自动连接。如果要继续使用，请让遥控器进入配对模式，然后从附近设备中选择。'),'remote notice carries the exact instruction');
+  wsMessage({type:'status',...__demo.status});
+  assert(!$('remoteRepair').hidden,'the notice stays latched across a status heartbeat');
+  $('repairRemote').onclick();
+  assert(pairing.open,'the remote notice opens the device picker');
+  const connects=()=>__demo.calls.filter(c=>c.path==='/api/connect').length;
+  const before=connects();
+  await $('nearby').onclick({target:{closest:()=>({dataset:{address:'00:11:22:33:44:00',type:'0'}})}});
+  assert(connects()===before+1,'picking a device from the list sends the connect request');
+  pairing.close();
+  __demo.devices[0]={name:'RC003',address:'',identity:''};
+  __demo.status.remoteRepairRequired=false;await load();
+  assert($('remoteRepair').hidden,'the notice clears once the pairing works again');
   S.busy=true;S.slotBusy=true;btns();assert(!document.querySelector('[data-slot="1"]').disabled,'slot cards stay clickable to interrupt');S.busy=false;S.slotBusy=false;btns();
   const oldConfirm=window.confirm,pairCalls=()=>__demo.calls.filter(c=>c.path==='/api/slot');
   window.confirm=()=>false;await $('pairRemote').onclick();

@@ -20,7 +20,8 @@
 namespace {
 
 // Rhythms. The "waiting" state breathes (PWM fade up and down) instead of
-// blinking, the "connecting" state blinks fast, "ready" is steady on.
+// blinking, the "connecting" state blinks fast, "ready" is steady on, and the
+// two "this pairing needs your attention" states double-flash.
 constexpr uint32_t kBreathPeriodMs = 2000;  // one full fade up + down
 constexpr uint32_t kFastHalfMs = 90;        // ~5.5 Hz blink
 constexpr uint32_t kPwmFreq = 5000;         // above flicker perception
@@ -28,7 +29,16 @@ constexpr uint8_t kPwmBits = 8;
 constexpr uint32_t kIdleOffMs = 10UL * 60UL * 1000UL;
 constexpr uint32_t kKeyFlashMs = 140;
 
-enum class Show { Solid, Breathing, Fast };
+// Double flash: on 120 ms, off 120 ms, on 120 ms, then dark for the rest of a
+// ~1.6 s window. It is deliberately unlike both the 2 s breath and the 90 ms
+// fast blink, so "the pairing needs to be redone" cannot be misread as
+// "waiting" or "connecting". Every LED, including this one, still goes dark
+// after kIdleOffMs with no activity; the page keeps showing the notice.
+constexpr uint32_t kDoubleFlashPeriodMs = 1600;
+constexpr uint32_t kDoubleFlashOnMs = 120;
+constexpr uint32_t kDoubleFlashGapMs = 120;
+
+enum class Show { Solid, Breathing, Fast, DoubleFlash };
 
 struct Blinker {
   int pin = -1;
@@ -47,19 +57,25 @@ bool before(uint32_t now, uint32_t deadline) {
   return (int32_t)(deadline - now) > 0;
 }
 
-// Host (computer) link: nothing -> breathing, linked but HID not usable yet ->
-// fast, HID reports subscribed -> solid. "Linked but not subscribed" is the
-// window Windows spends enumerating the device, so fast blink is accurate.
+// Host (computer) link: stale key -> double flash, nothing -> breathing, linked
+// but HID not usable yet -> fast, HID reports subscribed -> solid. "Linked but
+// not subscribed" is the window Windows spends enumerating the device, so fast
+// blink is accurate. The stale-key case outranks all of them because nothing
+// else the user does will help until the device is re-added in Windows.
 Show hostShow() {
+  if (hid_server::hostRepairRequired()) return Show::DoubleFlash;
   if (!hid_server::hostConnected()) return Show::Breathing;
   if (!hid_gatt::keyboardSubscribed()) return Show::Fast;
   return Show::Solid;
 }
 
 // Remote link: the upstream state machine's own phases map straight onto the
-// three rhythms (IDLE/SCANNING/BACKOFF = waiting, the connect+discover legs =
-// connecting, subscribed = ready).
+// rhythms (IDLE/SCANNING/BACKOFF = waiting, the connect+discover legs =
+// connecting, subscribed = ready). A confirmed dead key outranks all of them:
+// the remote will not come back on its own, so the bridge says so instead of
+// breathing as if it were still looking.
 Show remoteShow() {
+  if (rc003_client::repairRequired()) return Show::DoubleFlash;
   if (rc003_client::notified()) return Show::Solid;
   const char *st = rc003_client::stateName();
   if (!strcmp(st, "CONNECTING") || !strcmp(st, "DIRECT") || !strcmp(st, "DISCOVERING")) {
@@ -96,6 +112,18 @@ void run(Blinker &b, Show want, bool forceOff, uint32_t now) {
       }
       duty = b.fastOn ? 255 : 0;
       break;
+    case Show::DoubleFlash: {
+      // Derived from the clock alone, so there is no phase state to keep and
+      // nothing to go wrong when millis() wraps: the modulo is unsigned and the
+      // comparisons are all on the wrapped value.
+      const uint32_t t = now % kDoubleFlashPeriodMs;
+      const uint32_t pulse = kDoubleFlashOnMs;
+      duty = (t < pulse) ? 255
+           : (t < pulse + kDoubleFlashGapMs) ? 0
+           : (t < pulse * 2 + kDoubleFlashGapMs) ? 255
+           : 0;
+      break;
+    }
     default:
       duty = 0;
       break;

@@ -36,17 +36,26 @@ uint8_t hostCount();
 bool slotSwitchSafe();
 
 // Stop advertising, drop the host connection (if any) and start advertising
-// again. Used after the Windows bond is deleted so the host is forced to pair
-// again, and to recover from a wedged advertising state.
+// again. Used after the Windows bond is deleted from this side so the host is
+// forced to pair again, and to recover from a wedged advertising state.
 void forceReAdvertise();
 
 // Advertise again if we are not currently advertising and nobody is connected.
 void ensureAdvertising();
 
-// Stop the stale-key reconnect loop until the user explicitly starts re-pairing.
-void pauseHostPairing();
-void resumeHostPairing();
-bool hostPairingPaused();
+// Latch "the stored link key no longer works, the user has to re-add this
+// device in Windows". Set when a host fails authentication against a stale
+// bond, cleared when a later pairing authenticates successfully.
+//
+// Advertising is deliberately NOT stopped while this is set. The recovery is
+// entirely on the Windows side (delete the device, add it again), and Windows
+// can only find the bridge while it advertises - pausing would turn a
+// recoverable state into a dead end that needed a click on the config page.
+// Windows may still briefly connect and drop while its stale key is in place;
+// nothing here can stop that, and it must not be described as if it could.
+void setHostRepairRequired(bool required);
+void clearHostRepair();
+bool hostRepairRequired();
 
 // Forward the RC003's battery level to the host. Called from the bridge loop
 // when the remote reports its charge; clamped to 0-100 and notified on change.

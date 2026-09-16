@@ -25,7 +25,12 @@ typedef enum {
   BR_EV_RC_BATTERY,      // RC003 reported its charge; `code` = percent (0-100)
   BR_EV_WIN_LINK_UP,     // a host (Windows) connected to our HID server
   BR_EV_WIN_LINK_DOWN,   // the host disconnected
-  BR_EV_WIN_AUTH_FAIL    // downstream encryption/authentication failed
+  BR_EV_WIN_AUTH_FAIL,   // downstream encryption/authentication failed
+  // Appended, not inserted: the earlier values are already in use and the
+  // numbers are never persisted, but keeping them stable avoids a silent
+  // renumbering of the two links' events.
+  BR_EV_RC_AUTH_FAIL,    // upstream encryption failed on a stored key
+  BR_EV_WIN_AUTH_OK      // downstream link came up encrypted (pairing is valid)
 } bridge_event_type_t;
 
 typedef struct {

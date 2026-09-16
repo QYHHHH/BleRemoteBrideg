@@ -175,6 +175,16 @@ void handleEvent(const bridge_event_t &ev) {
       bridge::releaseAllKeys();
       break;
 
+    case BR_EV_RC_AUTH_FAIL:
+      // Only a confirmed key failure reaches here (see ble_core::keyFailure):
+      // the remote's stored key no longer matches ours. Stop the automatic
+      // reconnection, keep the bond and every mapping, and let the user pick
+      // the device again from the page. A plain disconnect never lands here.
+      BR_LOGW(kTag, "RC003 authentication failed -> stopping automatic reconnection");
+      rc003_client::enterRepairRequired();
+      bridge::releaseAllKeys();
+      break;
+
     case BR_EV_RC_BOND_FAIL:
       BR_LOGW(kTag, "RC003 pairing/discovery failed, will retry");
       bridge::releaseAllKeys();
@@ -202,9 +212,21 @@ void handleEvent(const bridge_event_t &ev) {
       break;
 
     case BR_EV_WIN_AUTH_FAIL:
-      BR_LOGW(kTag, "host authentication failed -> advertising paused until re-pair");
-      hid_server::pauseHostPairing();
+      // The host still holds an old link key. Advertising stays on so the user
+      // can delete the device in Windows and add it again; the page shows that
+      // instruction until a pairing authenticates.
+      BR_LOGW(kTag, "host authentication failed -> re-add the device in Windows");
+      hid_server::setHostRepairRequired(true);
       bridge::releaseAllKeys();
+      break;
+
+    case BR_EV_WIN_AUTH_OK:
+      // Encryption succeeded on the host link, so whatever key it now holds is
+      // the one we have. That is the success signal the notice waits for.
+      if (hid_server::hostRepairRequired()) {
+        BR_LOGI(kTag, "host link encrypted again -> clearing the re-pair notice");
+        hid_server::clearHostRepair();
+      }
       break;
 
     default:
@@ -311,8 +333,9 @@ void printStatus() {
   BR_LOGI(kTag, "hid device name : %s", hid_server::deviceName());
   BR_LOGI(kTag, "host connected  : %s (%u)", hid_server::hostConnected() ? "yes" : "no",
           (unsigned)hid_server::hostCount());
-  BR_LOGI(kTag, "host re-pair    : %s", hid_server::hostPairingPaused() ? "required" : "no");
+  BR_LOGI(kTag, "host re-pair    : %s", hid_server::hostRepairRequired() ? "required" : "no");
   BR_LOGI(kTag, "rc003 state     : %s", rc003_client::stateName());
+  BR_LOGI(kTag, "rc003 repair    : %s", rc003_client::repairRequired() ? "required" : "no");
   BR_LOGI(kTag, "rc003 bound     : %s", rc003_client::boundAddress().c_str());
   BR_LOGI(kTag, "rc003 connected : %s", rc003_client::connectedAddress().c_str());
   BR_LOGI(kTag, "rc003 name      : %s", rc003_client::connectedName().c_str());

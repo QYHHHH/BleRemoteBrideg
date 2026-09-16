@@ -128,9 +128,12 @@
 
 // Status LEDs (status_led.cpp). Two on-board LEDs report the two links:
 //   D5 = link to the computer   breathing = waiting, fast blink = linked but
-//                               HID not ready, solid = subscribed
-//   D4 = link to the remote     same three rhythms, plus dark while a remote
-//                               key is held
+//                               HID not ready, solid = subscribed,
+//                               double flash = re-add the device in Windows
+//   D4 = link to the remote     same rhythms, double flash = pairing must be
+//                               redone, plus dark while a remote key is held
+// Both LEDs go dark after ten minutes with no activity; the double flash is
+// subject to the same window and the Web UI keeps showing the notice.
 // Hezhou CORE-ESP32 wiring: D4 = GPIO12, D5 = GPIO13, both active HIGH. They
 // are free only because this board runs its flash in DIO mode (see the
 // FlashMode note above) - in QIO they double as SPIHD/SPIWP.
