@@ -27,3 +27,7 @@ Thumbs.db
 __pycache__/
 *.pyc
 
+# Local secrets - never commit Wi-Fi credentials
+.env
+.env.local
+
