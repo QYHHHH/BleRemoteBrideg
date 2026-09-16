@@ -18,6 +18,7 @@
 | L4 重连速度 | 重启到按键生效 | **优化至 3.3 s**（原始 9.5 s；根因与修复见 §4.8） | `build/reconnect-timing*.log` |
 | L4 Web 配置界面 | Web UI + NVS 绑定持久化 | **部分**：AP/HTTP/绑定 API 在旧版页面下实测通过；页面重做后浏览器逻辑 85 项通过（§4.12），但**真机回归未通过**（§4.13：页面体积超出内存余量、AP 的 DHCP 低水位下发不出租约） | §4.11、§4.12、§4.13 |
 | L4 边界与恢复 | 长按、连按、休眠唤醒、两侧重启、卡键 | **部分**：蓝牙关→开重连、长静置首按即时已验证；其余 §5.3 |
+| L4 Improv 串口配网 | 公开网页（ESP Web Tools）走 Web Serial 下发 Wi-Fi 凭据 | **L1 通过，L4 未上机**：`improv_serial.{h,cpp}` + `wifi_ui::rejoin()` 已落地并编译通过（2026-09-16，零警告），**真机一项未验**；验收清单见 §5.3.2 |
 
 已确证的硬件：ESP32-C3 rev v0.3 / 4MB Macronix flash / COM3(CH343) / MAC `60:55:f9:xx:xx:xx`；
 RC003 `c0:5d:39:xx:xx:xx`（公开地址），广播名「小米蓝牙语音遥控器」。
@@ -53,6 +54,16 @@ Sketch uses 1392931 bytes (44%) of program storage space. Maximum is 3145728 byt
 Global variables use 41220 bytes (12%) of dynamic memory, leaving 286460 bytes for local variables. Maximum is 327680 bytes.
 ```
 
+2026-09-16 加上 Improv 串口配网（`improv_serial.{h,cpp}`）之后：
+
+```
+Sketch uses 1383947 bytes (43%) of program storage space. Maximum is 3145728 bytes.
+Global variables use 62108 bytes (18%) of dynamic memory, leaving 265572 bytes for local variables. Maximum is 327680 bytes.
+```
+
+新增模块的静态占用约 **2.2 KB RAM**（发送帧缓冲 522 B、结果编码缓冲 512 B、
+扫描结果字符串 24×40 B、接收帧 128 B），flash 约 +5.9 KB。
+
 全局 RAM 占用不代表 Wi-Fi 启用后的空闲堆；新版页面/API 在低堆水位下仍需真机回归。
 
 无 warning、无 error。（体积会随每次改动小幅变化，以实际输出为准。）
@@ -62,6 +73,7 @@ Global variables use 41220 bytes (12%) of dynamic memory, leaving 286460 bytes f
 | 现象 | 原因与处理 |
 | --- | --- |
 | `.\scripts\build.ps1` 跑完"什么都没有发生"、没有输出、也没有生成 bin | PowerShell 5.1 在启动子进程时会用环境变量构造一个**大小写不敏感**的字典；若环境里同时存在 `http_proxy` 和 `HTTP_PROXY`，构造会抛异常，表现就是子进程静默不执行。`scripts/_common.ps1` 启动时会自动删除重复项并打印一行提示。若仍无效，用系统级命令 `set HTTP_PROXY=` 后重开终端 |
+| `arduino-cli compile` **卡住不动**（十几分钟零输出、`tasklist` 里只有 `arduino-cli.exe` 而没有 `cc1plus`、构建目录无改动） | 代理变量把它的网络请求挂死了。**清空代理再跑**：`unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy; export NO_PROXY='*' no_proxy='*'`。判断依据：清掉后 `arduino-cli core list` 会秒回 |
 | 中文路径编译报错 | 工具链必须留在 `C:\code\arduino-c3-data`。见 `arduino-cli.yaml` 的注释 |
 | 提示找不到 arduino-cli | 不要重装。工具链由提交 `16b3766` 固定，检查 `.tools\arduino-cli-1.5.1\arduino-cli.exe` 是否存在 |
 
@@ -1070,6 +1082,29 @@ pass clear（串口） → 清除密码，回到 setup 模式
 | 31 | 指示灯休眠 | 静置 10 分钟不按键 | 两个灯都熄灭（含双闪态）；网页提示仍在 | ☐ |
 | 32 | 休眠后唤醒 | 第 31 项之后按一下遥控器键 | D4 短暂亮一下（约 140 ms）后重新熄灭，**不**重新点亮十分钟 | ☐ |
 | 33 | 重启/恢复出厂唤醒 | 第 31 项之后 `reboot`，再重复一次用 BOOT 长按恢复出厂 | 两种情况下两灯都重新按当前状态指示 | ☐ |
+
+### 5.3.2 Improv 串口配网（免装软件配网，本轮新增）
+
+用公开网页配网，需要桌面版 Chrome / Edge。页面用 https://web.esphome.io/ 的
+Connect 即可（ESP Web Tools 那一套）。
+
+**当前状态：编译通过（2026-09-16，零警告），下列各项一项未做。**
+
+| # | 项目 | 操作 | 期望 | 结果 |
+| --- | --- | --- | --- | --- |
+| 34 | 端口被识别 | 打开网页点 Connect，看端口列表 | 列出 CH343 那个口；取消选择会弹出组件自带的驱动提示框 | ☐ |
+| 35 | 设备信息 | 选口后页面读到的设备信息 | 名称 `Mi Remote Bridge`、固件 `MiRemoteBridge` / `v0.0.1`、芯片 ESP32-C3 | ☐ |
+| 36 | **DTR 冲突（最要紧）** | 保持端口连接 30 秒以上，什么都不做 | 板子**不重启、不进下载模式、不恢复出厂**。若出现其中任一情况，就是 DTR→GPIO9 这条接线的问题 | ☐ |
+| 37 | 配网成功 | 选 Wi-Fi、填密码、提交 | 串口出现 `[IMPROV] credentials for "..." received; joining`；随后网页自动跳到 `http://<ip>/`；`wifi status` 显示 `READY (sta)` | ☐ |
+| 38 | 配错密码 | 故意填错密码 | 约 20 秒后网页提示连接失败，且**可以再试一次**（不会卡在"连接中"） | ☐ |
+| 39 | 换网络重配 | 对已联网的板子再配一次另一个网络 | 切到新网络，配置页仍可访问（HTTP 监听器跨重连存活） | ☐ |
+| 40 | 与控制台共存 | 配网客户端空闲时，在同一个口敲 `status` | 命令正常执行；`IMPROV` 之类的半截输入不会把命令吞掉 | ☐ |
+| 41 | 扫描列表 | 在页面上请求扫描 | 列出附近网络；超过 6 个时会拆成多条结果，最后一条为空 | ☐ |
+
+> 第 36 项是这一轮唯一**无法在代码里证明**的风险点。本板 USB 串口的 DTR 接在
+> GPIO9（BOOT）上，而 Windows 打开串口时默认置位 DTR。固件已做防护（收到过
+> Improv 帧后本次按住不再触发恢复出厂），但**如果浏览器在打开端口的瞬间就把
+> 板子拉进下载模式，那是接线问题，需要改硬件**。
 
 ### 5.4 延迟测量
 

@@ -32,6 +32,13 @@ bool disable();
 bool enabled();
 bool ready();
 
+// Re-associate with the credentials currently stored, leaving the fallback
+// access point first if it is the one running. Needed because enable() does
+// nothing once the UI is already up and disable() refuses to stop it, so a
+// re-provision (Improv over serial) has no other way in. Returns false when no
+// network is configured or the station interface cannot be brought up.
+bool rejoin();
+
 // `wifi ap on`: start the fallback access point instead of joining a network.
 bool enableAp();
 

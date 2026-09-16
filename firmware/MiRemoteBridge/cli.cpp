@@ -23,6 +23,7 @@
 #include "config.h"
 #include "event_bus.h"
 #include "hid_server.h"
+#include "improv_serial.h"
 #include "key_definitions.h"
 #include "keymap.h"
 #include "log.h"
@@ -579,6 +580,34 @@ void execute(char *line) {
   Serial.printf("unknown command \"%s\" - try `help`\n", cmd);
 }
 
+// One byte of console input, assembled into a line.
+//
+// This is split out of poll() so the Improv transport can hand back the bytes
+// it looked at and then decided were not part of a frame. Without that, a
+// command line beginning with 'I' would be swallowed by the frame parser.
+void pushByte(char c) {
+  if (c == '\r' || c == '\n') {
+    if (s_overflow) {
+      Serial.println("line too long, discarded");
+      s_overflow = false;
+      s_len = 0;
+      return;
+    }
+    if (s_len == 0) return;
+    s_line[s_len] = '\0';
+    execute(s_line);
+    s_len = 0;
+    return;
+  }
+
+  if (s_len + 1 >= sizeof(s_line)) {
+    s_overflow = true;
+    s_len = 0;
+    return;
+  }
+  s_line[s_len++] = c;
+}
+
 }  // namespace
 
 namespace cli {
@@ -595,26 +624,13 @@ void poll() {
     const int c = Serial.read();
     if (c < 0) break;
 
-    if (c == '\r' || c == '\n') {
-      if (s_overflow) {
-        Serial.println("line too long, discarded");
-        s_overflow = false;
-        s_len = 0;
-        continue;
-      }
-      if (s_len == 0) continue;
-      s_line[s_len] = '\0';
-      execute(s_line);
-      s_len = 0;
-      continue;
-    }
+    // The Improv Wi-Fi transport shares this port with the console. It claims
+    // the bytes belonging to its own frames and hands back everything else, so
+    // a provisioning client in the browser (ESPHome Web / esp-web-tools) and a
+    // human typing commands can use the same USB port at the same time.
+    if (improv_serial::feedByte(static_cast<uint8_t>(c), &pushByte)) continue;
 
-    if (s_len + 1 >= sizeof(s_line)) {
-      s_overflow = true;
-      s_len = 0;
-      continue;
-    }
-    s_line[s_len++] = (char)c;
+    pushByte(static_cast<char>(c));
   }
 
   if (s_overflow && Serial.available() == 0) {

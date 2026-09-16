@@ -23,6 +23,7 @@
 #include "bridge.h"
 #include "cli.h"
 #include "config.h"
+#include "improv_serial.h"
 #include "log.h"
 #include "reset_button.h"
 #include "status_led.h"
@@ -46,10 +47,15 @@ void setup() {
   // and it is settings::begin() (inside bridge::begin) that loads it. Calling
   // this earlier would always see an empty SSID and never arm the auto-start.
   wifi_ui::begin();
+
+  // The console and the Improv Wi-Fi transport share this port; the transport
+  // only needs its own state reset, since cli::poll() does the reading.
+  improv_serial::begin();
 }
 
 void loop() {
-  cli::poll();
+  cli::poll();  // also feeds the Improv Wi-Fi transport on the same port
+  improv_serial::loop();
   reset_button::poll();
   status_led::loop();
   bridge::loop();  // drain key releases before each bounded HTTP step

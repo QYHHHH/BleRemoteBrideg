@@ -1501,6 +1501,37 @@ void onApEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     default: break;
   }
 }
+// The join itself, shared by enable() and rejoin(). Everything above this is
+// the "is this allowed" question; everything below is the "do it".
+//
+// No modem sleep. This is the single biggest lever on how "live" the page
+// feels: with the default sleep enabled, every status poll waits for the
+// next beacon window and answers 100-300 ms late, which is exactly what
+// makes the key highlight trail the physical press. Disabled, requests
+// answer in single-digit milliseconds. The cost is a higher receive duty
+// cycle, acceptable here because the board is USB-powered and the poll is
+// small; it is re-enabled during the join only if that ever proves too
+// greedy for Bluetooth coexistence.
+bool startStation() {
+  // Read into locals rather than calling c_str() on the temporaries inline:
+  // both pointers have to stay valid for the whole WiFi.begin() call.
+  const String ssid = settings::wifiSsid();
+  const String pass = settings::wifiPassword();
+  if (ssid.isEmpty()) return false;
+
+  WiFi.persistent(false);
+  WiFi.setSleep(false);
+  if (!WiFi.mode(WIFI_STA)) return false;
+  WiFi.begin(ssid.c_str(), pass.c_str());
+  s_enabled = true;
+  s_mode = Mode::Station;
+  s_hadAddress = false;
+  s_joinStarted = s_retryAt = millis();
+  // Association completes in loop(). Do NOT delay here: the same loop owns
+  // HID press/release dispatch, even though BLE radio tasks run separately.
+  return true;
+}
+
 }  // namespace
 
 namespace wifi_ui {
@@ -1519,29 +1550,41 @@ bool enable() {
   if (s_enabled) return s_mode == Mode::Station;
   const String ssid = settings::wifiSsid();
   if (ssid.isEmpty()) { BR_LOGE(kTag, "configure a network with wifi join <ssid> <password> first"); return false; }
-  const String pass = settings::wifiPassword();
   BR_LOGI(kTag, "joining saved network; heap %u B, largest %u B, host %d, remote %d",
       (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap(),
       (int)hid_server::hostConnected(), (int)rc003_client::connected());
-  WiFi.persistent(false);
-  // No modem sleep. This is the single biggest lever on how "live" the page
-  // feels: with the default sleep enabled, every status poll waits for the
-  // next beacon window and answers 100-300 ms late, which is exactly what
-  // makes the key highlight trail the physical press. Disabled, requests
-  // answer in single-digit milliseconds. The cost is a higher receive duty
-  // cycle, acceptable here because the board is USB-powered and the poll is
-  // small; it is re-enabled during the join only if that ever proves too
-  // greedy for Bluetooth coexistence.
-  WiFi.setSleep(false);
-  if (!WiFi.mode(WIFI_STA)) return false;
-  WiFi.begin(ssid.c_str(), pass.c_str());
-  s_enabled = true;
-  s_mode = Mode::Station;
-  s_hadAddress = false;
-  s_joinStarted = s_retryAt = millis();
-  // Association completes in loop(). Do NOT delay here: the same loop owns
-  // HID press/release dispatch, even though BLE radio tasks run separately.
-  return true;
+  return startStation();
+}
+
+bool rejoin() {
+  // Used by the Improv serial transport after a client hands over new
+  // credentials. enable() deliberately does nothing while the UI is already
+  // up, and disable() refuses to stop it at all (always-on policy), so a
+  // re-provision needs this entry point rather than a disable/enable pair.
+  const String ssid = settings::wifiSsid();
+  if (ssid.isEmpty()) {
+    BR_LOGE(kTag, "rejoin refused: no network configured");
+    return false;
+  }
+
+  // The fallback access point has to come down first: the station interface
+  // cannot be brought up while it is running.
+  if (s_enabled && s_mode == Mode::Ap) {
+    BR_LOGI(kTag, "leaving the fallback access point to join \"%s\"", ssid.c_str());
+    stopHttp();
+    WiFi.softAPdisconnect(true);
+    s_enabled = false;
+    s_mode = Mode::Off;
+  }
+
+  // An already-bound HTTP listener is deliberately left alone. It listens on
+  // every local address, so the page keeps answering across the re-join
+  // instead of going dark until the new lease arrives.
+  if (s_enabled) {
+    BR_LOGI(kTag, "re-joining \"%s\" with new credentials", ssid.c_str());
+    WiFi.disconnect(false);  // drop the association, keep the stored profile
+  }
+  return startStation();
 }
 
 bool enableAp() {
