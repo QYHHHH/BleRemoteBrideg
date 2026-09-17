@@ -12,10 +12,16 @@
 # 分块 manifest 的零件，不是给用户单独下载的固件。
 #
 # 第 3 项有两份：manifest.json（完整安装）和 manifest-app.json（仅升级 APP）。
-# 网页按固定名从 latest 取，所以**不需要把 manifest 提交回仓库** —— 版本信息
-# 只存在 Release 里，发新版不用改网页。网络差、下不动 Release 的用户走网页的
-# 「本地固件文件」入口：自己下 bin，再用浏览器选中它，页面用 blob 清单交给官方
-# 组件，全程不联网取固件。
+#
+# GitHub Release 附件不带 CORS 头，网页在 GitHub Pages 上用 fetch() 跨域读不到
+# （manifest 本身能下，但 esp-web-tools 紧接着要 fetch 的每个 .bin 分块一样会
+# 被浏览器拦下，实测复现过）。所以这两份 manifest 连同它们指向的固件，还要
+# **再镜像一份到仓库自己的 firmware-dist/latest/ 目录**，跟 index.html 同源
+# 托管，只保留 latest、每次发布覆盖，不留历史版本。网页默认就读这份同源镜像
+# （见 index.html 的 MRB_CONFIG.fullManifest/appManifest）。Release 上传的那两份
+# （带绝对 GitHub 链接）仍然保留，给手动 esptool 烧录时复制链接用。网络差、
+# 下不动的用户还有网页的「本地固件文件」入口：自己下 bin，再用浏览器选中它，
+# 页面用 blob 清单交给官方组件，全程不联网取固件。
 #
 # 改文件名要同步两处：manifest 是用下面的名字拼出来的，而网页
 # （index.html 的 MRB_CONFIG.releaseManifest）只认这份 manifest 里的
@@ -209,6 +215,78 @@ jobs:
           write(f'out/manifest-app-{v}.json', app_only)
           PY
 
+      - name: 确保 tag 存在（手动触发时）
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.ver.outputs.version }}"
+          git push origin "${{ steps.ver.outputs.version }}"
+
+      - name: 同步同源固件镜像（GitHub Pages 用，规避 Release 附件跨域限制）
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          V="$VERSION"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 这一步会把 worktree 切到 master——必须放在"确保 tag 存在"之后，
+          # 否则 workflow_dispatch 手动触发时会把 tag 打在这次新提交上，
+          # 而不是打在产出这份固件的源码提交上。
+          # checkout@v4 只拉了这次 tag 需要的那点历史，master 分支引用本地还没有。
+          git fetch --depth=1 origin master
+          git checkout -B master origin/master
+
+          # 只留 latest，不留历史版本；产物是上一步在 out/ 里生成的，
+          # 切分支不会动未跟踪目录，仍然在磁盘上。
+          rm -rf firmware-dist/latest
+          mkdir -p firmware-dist/latest
+          cp "out/MiRemoteBridge-$V-bootloader.bin" firmware-dist/latest/
+          cp "out/MiRemoteBridge-$V-partitions.bin" firmware-dist/latest/
+          cp "out/MiRemoteBridge-$V-boot-app0.bin"  firmware-dist/latest/
+          cp "out/MiRemoteBridge-$V-app.bin"        firmware-dist/latest/
+
+          python3 - <<'PY'
+          import json, os
+          v = os.environ['VERSION']
+
+          def build(parts):
+              return {
+                  "name": "MiRemoteBridge",
+                  "version": v,
+                  "home_assistant_domain": "remote",
+                  "new_install_prompt_erase": False,
+                  "builds": [{"chipFamily": "ESP32-C3", "parts": parts}],
+              }
+
+          # 路径是裸文件名（没有 firmware-dist/latest/ 前缀）：manifest 和这些
+          # .bin 是兄弟文件，esp-web-tools 按 manifest 自己的地址解析相对路径。
+          full = build([
+              {"path": f"MiRemoteBridge-{v}-bootloader.bin", "offset": 0},
+              {"path": f"MiRemoteBridge-{v}-partitions.bin", "offset": 0x8000},
+              {"path": f"MiRemoteBridge-{v}-boot-app0.bin", "offset": 0xe000},
+              {"path": f"MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
+          ])
+          app_only = build([
+              {"path": f"MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
+          ])
+
+          for name, obj in (("manifest.json", full), ("manifest-app.json", app_only)):
+              with open(f"firmware-dist/latest/{name}", "w", encoding="utf-8") as f:
+                  json.dump(obj, f, indent=2, ensure_ascii=False)
+                  f.write("\n")
+          PY
+
+          git add -f firmware-dist/latest
+          if git diff --cached --quiet; then
+            echo "firmware-dist/latest 内容没变化，跳过提交"
+          else
+            git commit -m "chore(pages): 同步 $V 的同源固件镜像（供网页一键安装，规避 Release 附件跨域限制）"
+            git push origin master
+          fi
+
       - name: 写发布说明
         env:
           VERSION: ${{ steps.ver.outputs.version }}
@@ -254,14 +332,6 @@ jobs:
             echo "所以发新版不用改网页；带版本号的 \`manifest-$V.json\` 是存档。"
           } > out/notes.md
           cat out/notes.md
-
-      - name: 确保 tag 存在（手动触发时）
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "${{ steps.ver.outputs.version }}"
-          git push origin "${{ steps.ver.outputs.version }}"
 
       - name: 发布到 Release
         uses: softprops/action-gh-release@v2

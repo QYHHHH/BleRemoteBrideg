@@ -2,6 +2,8 @@
 
 > ESP32-C3 双角色 BLE 桥接固件，把**蓝牙遥控器**变成电脑认得的标准蓝牙键盘 + 媒体控制设备。
 
+🔗 官网（烧录 / 配网 / 改键都在这）：**https://qyhhhh.github.io/BleRemoteBrideg/**
+
 <img src="docs/images/architecture.png" alt="MiRemoteBridge 工作原理" width="720">
 
 ## 这是什么
@@ -49,18 +51,17 @@
 | 角色 | 设备 | 状态 |
 | --- | --- | --- |
 | 遥控器（上游） | 小米蓝牙遥控器 2 Pro（RC003） | ✅ 实测（13 键 + 电量） |
-| 遥控器（上游） | 中国移动语音遥控器（`CMCC_Voice_Remote`） | ✅ 实测**端到端可用**：按键后电脑确实响应。22 个键码、2 个认不出名字；**部分物理键无响应**（见 [`docs/CMCC-BLE-REMOTE.md`](docs/CMCC-BLE-REMOTE.md)） |
+| 遥控器（上游） | 中国移动语音遥控器（`CMCC_Voice_Remote`） | ✅ 实测端到端可用，**部分物理键无响应**（详见 [`docs/CMCC-BLE-REMOTE.md`](docs/CMCC-BLE-REMOTE.md)） |
 | 主机（下游） | Windows 10 / 11 | ✅ 实测（键盘 + 媒体键 + 蓝牙关开 + 多多主机切换） |
 | 主机（下游） | Linux / macOS | 未验证；标准蓝牙 HID，理论可用，欢迎反馈 |
-| 主机（下游） | iPhone / iPad / iOS | ✅ 实测（键盘 + 媒体键 + 多主机切换，见 [`docs/PAIRING.md` §2.5](docs/PAIRING.md)） |
+| 主机（下游） | iPhone / iPad / iOS | ✅ 实测（键盘 + 媒体键 + 多主机切换，详见 [`docs/PAIRING.md`](docs/PAIRING.md)） |
 | 遥控器（上游） | 其它标准 BLE 遥控器 | 走**学习型槽位**，标准 HID 键名自动识别，**无需改代码**。仅 CMCC 一款逐键实测过 |
 
 ## 快速开始
 
 整套烧录、配 Wi-Fi、改键都在网页里完成——**不需要装软件、不需要串口命令**。
 
-1. **打开官网**：访问本项目的 GitHub Pages（仓库 README 顶部有入口；
-   仓库启用 Pages 后会部署在 `https://<owner>.github.io/MiRemoteBridge/`）
+1. **打开官网**：https://qyhhhh.github.io/BleRemoteBrideg/ （见本文顶部链接）
 2. **接上板子**：用 USB 线把 ESP32-C3 开发板接到电脑
 3. **网页烧录**：在官网页面点"安装"按钮，浏览器自动选串口并烧录固件
    （用的是 [ESP Web Tools](https://esphome.github.io/esp-web-tools/)，基于 Web Serial，

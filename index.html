@@ -38,6 +38,7 @@ header{position:sticky;top:0;z-index:25;background:#ffffffed;backdrop-filter:blu
 .nav-links>a{font-size:13px;color:#526172;font-weight:550;white-space:nowrap}
 .nav-links>a:hover{color:var(--blue)}
 .nav-links .nav-cta{color:var(--blue-dark);background:var(--soft);padding:8px 15px;border:1px solid #d0e3fb;border-radius:8px}
+.nav-github{display:flex;align-items:center;color:#526172}.nav-github .icon{width:19px;height:19px}.nav-github:hover{color:var(--blue)}
 .menu-toggle{display:none;align-items:center;justify-content:center;background:white;border:1px solid var(--line);width:38px;height:38px;border-radius:8px}
 .hero-surface{background:linear-gradient(140deg,#f9fbff 0%,#edf5ff 55%,#f6f7f9 100%);border-bottom:1px solid #e1eaf5}
 .hero{display:grid;grid-template-columns:1fr 1.12fr;gap:42px;align-items:center;padding:48px 0 34px}
@@ -476,7 +477,7 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
  <a class="brand" href="#main"><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bridge"/></svg></span>MiRemoteBridge</a>
  <button class="menu-toggle" id="menuToggle" aria-label="展开导航" aria-expanded="false" aria-controls="mainNav"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-menu"/></svg></button>
  <nav class="nav-links" id="mainNav" aria-label="主导航">
-  <a href="#cases">使用场景</a><a href="#ui">配置界面</a><a href="#why">项目优势</a><a href="#compat">兼容性</a><a class="nav-cta" href="#connect">连接设备 ↗</a>
+  <a href="#cases">使用场景</a><a href="#ui">配置界面</a><a href="#why">项目优势</a><a href="#compat">兼容性</a><a class="nav-github" href="https://github.com/QYHHHH/BleRemoteBrideg" target="_blank" rel="noopener" aria-label="在 GitHub 上查看源码"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-github"/></svg></a><a class="nav-cta" href="#connect">连接设备 ↗</a>
  </nav>
 </div></header>
 <main id="main">
@@ -488,7 +489,7 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
    <p class="lede">刷剧、Vibe Coding、演示、快捷键。<br>把常用操作，交给手边的遥控器。</p>
    <div class="hero-features"><span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg> 免驱使用</span><span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg> 不装客户端</span><span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg> 不改系统</span></div>
    <div class="actions hero-actions"><a class="btn btn-primary" href="#connect">连接设备 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="btn" href="#ui">看看怎么用 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-monitor"/></svg></a></div>
-   <p class="price-note">已有兼容遥控器？开发板约 10 元；全套约 15–25 元。<br>价格为项目估算，购买前请先查看兼容性。</p>
+   <p class="price-note">已有兼容遥控器？ESP32-C3 开发板约 10 元；全套约 15–25 元。<br>价格为项目估算，购买前请先查看兼容性。</p>
   </div>
   <div class="demo-stage" aria-label="浏览器交互示意，不连接真实设备">
    <div class="stage-top"><div class="stage-guide" id="remoteGuide"><span class="stage-guide-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-remote"/></svg></span><span class="stage-guide-copy"><b>左侧遥控器可以直接点</b><small>试试 OK / 方向键，右侧电脑会立即响应</small></span></div><span class="demo-badge">DEMO</span></div>
@@ -664,6 +665,7 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
  <div class="sec-head split"><div><p class="eyebrow">04 / COMPATIBILITY</p><h2>先看兼容性，再开始改造。</h2></div><p class="sec-sub">以下状态来自提供的项目 README，<br>未验证的平台不当作已支持。</p></div>
  <div class="compat-wrap" tabindex="0" role="region" aria-label="兼容性表格，可横向滚动">
   <table><thead><tr><th>角色</th><th>设备 / 平台</th><th>项目记录</th></tr></thead><tbody>
+   <tr><td>开发板</td><td>ESP32-C3 · 约 10 元</td><td><span class="chip ok">已实测 · 唯一支持的主控</span></td></tr>
    <tr><td>遥控器</td><td>小米蓝牙遥控器 2 Pro · RC003</td><td><span class="chip ok">已实测 · 13 键 + 电量</span></td></tr>
    <tr><td>遥控器</td><td>中国移动 · CMCC_Voice_Remote</td><td><span class="chip ok">已实测 · 部分物理键无响应</span></td></tr>
    <tr><td>遥控器</td><td>其它标准 BLE 遥控器</td><td><span class="chip warn">学习型接入 · 需逐款验证</span></td></tr>
@@ -746,18 +748,22 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
 <noscript><p style="padding:20px">本页的设备连接、固件安装和交互演示需要 JavaScript。</p></noscript>
 <!--
   Deployment settings. 正常情况下一个字都不用改：
-  两份 manifest 都由 .github/workflows/release.yml 在每次发布时生成并传到 Release，
-  本页永远取 latest 那份，所以发了新版这里自动跟上。
-  仓库名取 MRB_CONFIG.repository；没填且部署在 GitHub Pages 上时从地址推导
-  （<owner>.github.io/<repo>/ → owner/repo）。
+  GitHub Release 附件不带 CORS 头，本页在 GitHub Pages 上用 fetch() 跨域读不到
+  （manifest 能下但 esp-web-tools 紧接着要 fetch 的每个 .bin 分块同样会被拦），
+  所以 manifest 和固件都由 .github/workflows/release.yml 每次发布时**同时**
+  镜像一份到仓库自己的 firmware-dist/latest/ 目录、随页面一起同源托管。
+  这两行默认值就指向那份同源镜像，发新版会被 CI 自动覆盖，正常情况一个字都
+  不用改。仓库名取 MRB_CONFIG.repository；没填且部署在 GitHub Pages 上时从
+  地址推导（<owner>.github.io/<repo>/ → owner/repo），只在 latestAsset() 那个
+  兜底路径（指向 GitHub Release，跨域会失败，仅作参考/手动下载用）里用得到。
   只有当 manifest 托管在别处时才需要手填 fullManifest / appManifest，
-  填了就优先于推导出来的地址。
+  填了就优先于下面的默认值。
 -->
 <script id="mrb-config">
 window.MRB_CONFIG = Object.assign({
   repository: "",
-  fullManifest: "",
-  appManifest: "",
+  fullManifest: "firmware-dist/latest/manifest.json",
+  appManifest: "firmware-dist/latest/manifest-app.json",
   releaseManifest: "", /* legacy alias for fullManifest */
   installModule: "https://cdn.jsdelivr.net/npm/esp-web-tools@10.4.0/dist/web/install-button.js",
   installFallback: "https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"
@@ -1013,11 +1019,10 @@ window.MRB_CONFIG = Object.assign({
     choose("local");
   }
 
-  // 版本不用在网页里维护：manifest 由 .github/workflows/release.yml 在每次发布
-  // 时生成并传到 Release，这里永远指向 latest，发新版就自动跟上。
-  // 仓库名优先读 MRB_CONFIG.repository；没填的话，部署在 GitHub Pages 上时可以
-  // 从地址自己推出来（<owner>.github.io/<repo>/ → owner/repo），所以正常情况
-  // 一行都不用配。
+  // 兜底路径，只在 config.fullManifest/appManifest 都没填时才会被用到——正常
+  // 情况下同源镜像（见上面 MRB_CONFIG 的默认值）已经够用。这里指向的是
+  // GitHub Release 本身，附件不带 CORS 头，浏览器 fetch() 会失败，留着仅供
+  // 参考或手动复制链接下载，**不能**指望它撑起一键安装。
   function latestAsset(file) {
     const repo = String(config.repository || "").trim().replace(/^\/+|\/+$/g, "");
     if (repo) return "https://github.com/" + repo + "/releases/latest/download/" + file;

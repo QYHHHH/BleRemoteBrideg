@@ -35,3 +35,10 @@ __pycache__/
 # A debug build's suffix is local to whoever made it; only config.h is tracked.
 firmware/MiRemoteBridge/version_local.h
 
+# Exception: release.yml mirrors the latest release's firmware + manifest into
+# the repo itself so the GitHub Pages installer can fetch them same-origin.
+# GitHub Release assets don't send CORS headers, so a cross-origin fetch() from
+# the Pages site fails - these tracked copies are the workaround. Only "latest"
+# is kept; release.yml overwrites this directory every release.
+!firmware-dist/latest/*.bin
+

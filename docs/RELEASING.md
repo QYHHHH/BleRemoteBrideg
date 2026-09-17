@@ -47,10 +47,22 @@ tag 里**带连字符**（`vX.Y.Z-rc.1`、`vX.Y.Z-beta.1`）会被 CI 自动标�
 | --- | --- | --- |
 | `MiRemoteBridge-<ver>.merged.bin` | 第一次装机、网页一键烧录 | 0x0 起始的整片镜像，约 4 MB |
 | `MiRemoteBridge-<ver>-app.bin` | 已刷过、只想升级 | 只写 0x10000，约 1.4 MB，配置全留 |
-| `manifest.json` | 网页「完整固件」入口 | 固定名，网页永远指向 latest |
-| `manifest-app.json` | 网页「仅升级 APP」入口 | 固定名，只写 0x10000，没它那个选项就禁用 |
+| `manifest.json` | 手动下载 / 参考 | 固定名，指向本次 Release 的绝对下载链接；**网页不用它**（见下方 CORS 说明） |
+| `manifest-app.json` | 手动下载 / 参考 | 同上，仅升级 APP 那份 |
 | `manifest-<ver>.json` / `manifest-app-<ver>.json` | 存档 | 这一版的清单，历史版本可单独拿到 |
 | `-bootloader.bin` / `-partitions.bin` / `-boot-app0.bin` | manifest 的零件 | 共约 30 KB，一般不用单独下 |
+
+**网页用的其实是 `firmware-dist/latest/` 那份同源镜像，不是 Release 附件**：
+GitHub Release 附件不带 CORS 头，`index.html` 在 GitHub Pages 上用 `fetch()`
+跨域读取会被浏览器拦下（manifest 本身能下，但 esp-web-tools 紧接着要 fetch
+的每个 `.bin` 分块同样会被拦，实测复现过——`Failed to download manifest`
+就是这么来的）。所以 `release.yml` 在发布到 Release 的同时，**把同一份
+manifest + 固件又提交回仓库自己的 `firmware-dist/latest/` 目录**，跟
+`index.html` 同源托管，只保留 latest、每次发布覆盖。`index.html` 的
+`MRB_CONFIG.fullManifest`/`appManifest` 默认就指向这份同源镜像。
+上表里 Release 附件里的两份 manifest（带绝对 GitHub 链接）仍然保留，
+给想手动复制链接、或者用别的工具消费的场景用，但**跨域场景下这两份链接
+本身就下不动**，别指望拿它们喂给另一个网页的一键安装。
 
 **整片镜像会清空配置**：`merged.bin` 在 `0x9000` 的 nvs 区间是 0xFF 填充（esptool
 merge-bin 的空隙填充），刷下去等于恢复出厂。manifest 用四个 part 分块写
@@ -69,16 +81,19 @@ true**，所以网页安装弹窗里「擦除」默认是勾上的。分块只�
 | 固件里的版本号 | ✅ 自动 | CI 把 tag 写进 `version_local.h`；串口横幅、设备网页顶栏、`/api/status` 的 version 都读它 |
 | manifest 里的 `version` | ✅ 自动 | 同上，网页「项目发布版」徽标显示的就是它 |
 | Release 说明文字 | ✅ 自动 | CI 用生成的 notes 覆盖 body（含刷法与文件清单） |
-| 网页两个安装入口的版本 | ✅ 全自动 | 网页取 latest 的 `manifest.json` / `manifest-app.json`（仓库名从 Pages 地址推导，或填 `MRB_CONFIG.repository`），发新版不用碰网页 |
+| 网页两个安装入口的版本 | ✅ 全自动 | 网页读 `firmware-dist/latest/manifest.json` / `manifest-app.json`（CI 每次发布自动覆盖这个同源镜像），发新版不用碰网页 |
 | `config.h` 的 `BRIDGE_FW_VERSION` | ❌ 得手改 | CI 只在不一致时发警告；AGENTS.md 要求它与 tag 字符级相同，否则本地普通构建会一直报旧版本 |
 
-版本信息只存在 Release 里，仓库里没有 manifest 副本 —— 也就没有第二处要维护。
+版本信息在 Release 和仓库的 `firmware-dist/latest/` 里各存一份——这是唯二的
+例外（详见上面 CORS 那段），别的产物没有第二处要维护。
 
 ## 改名要同步的地方
 
 网页（index.html 的 `MRB_CONFIG.releaseManifest`）只认 manifest 里的
 name / version / builds / parts，自己不猜文件名。所以真正的约束是：
-workflow 里拼 manifest 的那四个文件名要一起改，否则链接 404。
+workflow 里拼 manifest 的那四个文件名要一起改，否则链接 404——**这次要改两处**：
+"生成 ESP Web Tools manifest" 那步（Release 用，绝对链接）和"同步同源固件镜像"
+那步（网页实际用的那份，同源相对路径），两边的文件名字符串必须一致。
 
 全片镜像继续叫 `.merged.bin` 只是给人用 esptool 手工刷时一眼认出来，
 网页不看后缀。
@@ -90,12 +105,12 @@ workflow 里拼 manifest 的那四个文件名要一起改，否则链接 404。
 
 ## 首次启用前还要做三件事
 
-1. **网页不用配**。`index.html` 自己算出两份 manifest 的地址：优先读
-   `MRB_CONFIG.repository`，没填且部署在 GitHub Pages 上时从地址推导
-   （`<owner>.github.io/<repo>/` → `owner/repo`，用户站点则 repo =
-   `<owner>.github.io`）。都拿不到才会显示「manifest 未配置」。
-2. 仓库推到 GitHub（本地 `git remote -v` 目前是空的），workflow 文件要在默认
-   分支上才会生效。
+1. **网页不用配**。`index.html` 默认就读同源的 `firmware-dist/latest/manifest.json`
+   / `manifest-app.json`（`release.yml` 第一次发布就会生成这个目录）。
+   `MRB_CONFIG.repository` / `latestAsset()` 那套只是没填 `fullManifest`/
+   `appManifest` 时的兜底，指向 GitHub Release，跨域会被拦，正常情况用不到。
+2. 仓库要推到 GitHub、GitHub Pages 要指向这个仓库的默认分支（`Settings → Pages`），
+   workflow 文件也要在默认分支上才会生效。
 3. `config.h` 的版本号与第一个 tag 对齐。
 
 ## 网络差的用户怎么装
