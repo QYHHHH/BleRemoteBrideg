@@ -26,7 +26,17 @@
 ## 2. 当前状态
 
 下表的能力条目为 **2026-09-12 真机实测**；此后（2026-09-13 起）又合入了三项，
-列在表后。**全部核心功能真机可用**，工作树干净：
+列在表后。**全部核心功能真机可用**。
+
+> **版本现状**：`config.h` 与 tag 都是 `v0.0.6`（2026-09-17 发布点）。板子上
+> **实际跑的是调试版 `v0.0.5-nosession`** —— 它与 v0.0.6 是**同一份源码**，只差版本
+> 字符串；按 `AGENTS.md` 的约定调试版不带 tag。所以"串口横幅报
+> `v0.0.5-nosession`、仓库报 `v0.0.6`"是**预期**的，不是版本漂移。要让板上也报
+> v0.0.6，跑一次 `flash.ps1 -Port COM3`（**不带** `-Version`）即可。
+>
+> **BOOT 键两个分支都已真机验收**（2026-09-17，用户实测）：短按打开/续期 30 分钟
+> 窗口、长按 5 秒恢复出厂、恢复出厂后重新加键、连电脑按键有效 —— 全部通过。
+> 自动化回归见 §7 的 `tests/tools/press_probe.py`。
 
 | 功能 | 验证 |
 | --- | --- |
@@ -36,7 +46,7 @@
 | Windows 键盘/媒体、蓝牙关开重连 | ✅ 用户实测 |
 | iPhone 连接（音量/方向键） | ✅ 用户实测 |
 | 多主机轮换（Windows↔iPhone <0.1s 接管） | ✅ 实测 |
-| BOOT 键：短按无操作 / 长按 5s 恢复出厂 | ⚠️ 代码完成已烧录，物理按压待用户验证 |
+| ~~BOOT 键：短按无操作~~ **已变更** / 长按 5s 恢复出厂 | 短按现在打开 30 分钟配置窗口（2026-09-16 起，见下表 Web 配置 UI 改动），长按 5s 恢复出厂不变 |
 | **Web 配置 UI（页面注册/改键/实时按键）** | ✅ **真 Chrome 端到端 8/8 通过**（`tests/tools/browser_check.py`，读 live DOM，含按键实时推送） |
 | `bind` 串口命令（设置/列表/解除） | ✅ 实测 |
 
@@ -44,9 +54,9 @@
 
 | 改动 | 验证 |
 | --- | --- |
-| Improv 串口配网（`3860ead`，兼容 esp-web-tools / web.esphome.io） | 与串口控制台共用 USB 口；DTR 会拉 GPIO9，已有防护 |
+| Improv 串口配网（`3860ead`，兼容 esp-web-tools / web.esphome.io） | 与串口控制台共用 USB 口；控制线真值表见 `docs/WEB-UI.md` |
 | 版本号构建期覆盖 `v0.0.4` + 调试后缀（`fa26dbd`） | 见 `AGENTS.md` 的版本约定 |
-| DTR 防护的代码依据（`f3b4a3a`） | 收到过 Improv 帧就不再触发 5 秒恢复出厂 |
+| ~~DTR 防护（`f3b4a3a`）~~ **已撤销** | 前提"浏览器置位 DTR = 按住 BOOT"2026-09-17 实测证伪，`sessionActive()` 整套删除 |
 
 **待办**：`docs/TESTING.md` §5.3 的边界清单（长按、连按、休眠唤醒、两侧同时重启、
 卡键）尚未逐项验收。（旧版这里还写着"README 提到的英文版/CI 未做"——
@@ -96,23 +106,17 @@ README 早已不含英文版与 CI 的计划，那条已删除。）
 - **抓串口**：Bash 调 `.exe` 可用；PowerShell 工具**无法启动子进程**（沙箱限制），
   但 .NET `SerialPort`（PowerShell 内）可用且要设 `Encoding=UTF8`（否则中文广播名
   变 `?????`）。抓启动横幅先 `RtsEnable=true → 150ms → false`。
-  **⚠️ 绝对不要设 `DtrEnable=true`**：本板 DTR 接的是 BOOT（GPIO9），置位等于
-  按住 BOOT，固件 5 秒后就会执行**恢复出厂**——实测踩过，代价是清空全部配对、
-  Wi-Fi 凭据、网页密码与按键映射。只用 RTS。
-  另外**释放顺序是承重的**：pyserial 打开端口时 DTR 与 RTS **默认都置位**，
-  随后必须**先放 DTR、再放 RTS**。反过来的话，EN 拉高（复位释放）那一刻 GPIO9
-  还是低的，芯片会**进下载模式、固件根本不跑**，症状只是"串口没输出"。
-  `tests/tools/board_auth.py` 的 `_SER.dtr = False` / `_SER.rts = False` 两行
-  别调换顺序（已加注释）。
-  **"只收不发"的串口软件不等于危险**：危险的是"DTR 被置位"，与它发不发数据无关。
-  已实测 MobaXterm 普通串口不置位 DTR。判断方法：打开软件后看日志有没有
-  `[BUTTON ] key pressed`。详见 README 的 ⚠️ 块与 TESTING §5.3.2。
+  **控制线 DTR / RTS 是成对的**（经典双三极管自动下载电路），别单独看 DTR——
+  完整真值表、复位发生的确切时刻、`SER_NORESET=1` 用法、取证脚本清单，
+  见 [`docs/PITFALLS.md`](docs/PITFALLS.md#串口监控陷阱与-serial-consolemd-联动)
+  与 `docs/TESTING.md` §5.3.2。判据：日志里有没有 `[BUTTON ] key pressed`——
+  有说明 RTS 是低的（等于按住 BOOT），不是"DTR 被置位"。
 - **测试**：`python tests/model/check_vectors.py`（宿主端 11098 断言）；设备端
   `selftest` 串口命令。改解析/键表/HID 描述符后两者都要跑。
   页面断言 `python tests/tools/check_web_ui.py`（**161 项**，见
   `EXPECTED_CHECKS`；README/TESTING 里出现过 125/150 都是旧值）。
 - **Git**：关键节点自动提交，**中文提交信息**（见 `AGENTS.md`）并注明验证程度
-  （编译验证 vs 真机验证）。已有 103 次提交，历史在 Git 里可追溯，不要重建仓库。
+  （编译验证 vs 真机验证）。历史在 Git 里可追溯（`git log`），不要重建仓库。
 - **文档**：用户要求项目开源，README 面向对外发布；一切"实测/未实测"严格区分。
 - **Web 配置是按需 30 分钟窗口，**不是**常开**：`wifi on` 打开窗口（计时从拿到
   IP 起），`wifi off` 现在**真的能关**。**短按 BOOT 键**也是打开入口，且会重置
@@ -150,10 +154,10 @@ README 早已不含英文版与 CI 的计划，那条已删除。）
 - **烧录前必须用 `--output-dir build/MiRemoteBridge` 重新编译**。平时为验证写的
   `arduino-cli compile` 不带这个参数，`build/MiRemoteBridge` 里的 bin 就一直是旧版，
   直接 `upload --input-dir build/MiRemoteBridge` 会把**旧固件烧进去**，而且一切看起来正常。
-- **`arduino-cli upload` 不擦 NVS**（反复确认）：密码、自定义绑定、绑定的遥控器、
-  主机配对都在，烧完自动重连。烧后验证顺序：串口读 `firmware :` 与 `NVS loaded` →
-  登录（有密码的板子读 `/api/*`、`/app.css` **必须带 cookie**，否则一律 302）后确认
-  页面资产真的换了 → 读 `/api/status` 确认 `fwVersion` / `buildTime`。
+- **`arduino-cli upload` 不擦 NVS**（反复确认）：自定义绑定、绑定的遥控器、
+  主机配对、Wi-Fi 凭据都在，烧完自动重连。烧后验证顺序：串口读 `firmware :` 与
+  `NVS loaded` → 短按 BOOT 开窗口后读 `/api/*`、`/app.css` 确认页面资产真的换了 →
+  读 `/api/status` 确认 `fwVersion` / `buildTime`。
 - **顶栏版本与编译时刻来自 `/api/status`**（`fwVersion` + `__DATE__ __TIME__`），
   页面里**不再存任何构建时间戳**：`gen_web_page.py` 以前把"生成 gzip 资源的时刻"
   压进载荷，页面显示的不是编译时刻（出现过 12:56 烧录、页面显示 10:21）。
@@ -162,12 +166,20 @@ README 早已不含英文版与 CI 的计划，那条已删除。）
 ## 7. 立即可做的验证
 
 ```powershell
-# 物理按键（需要人手）：短按 BOOT 应打开 30 分钟窗口；长按 5s 清全部配对（危险）
+# BOOT 键（不需要人手）：python tests/tools/press_probe.py
+#   把控制线驱动到 (1,0) 就是 GPIO9 拉低 = 按住 BOOT（实测结论），保持 1.2 s 即短按。
+#   它先喂一个合法 Improv 帧再按，专门复现"客户端连着时按键被吞"那个故障；
+#   最后一档按住 2.0 s 看恢复出厂倒计时，离 5 s 留 3 s 余量。
+#   约束：任何一次 GPIO9 拉低都要远小于 5 s，且 finally 必须把两根线放回 (0,0)
+#   ——残留 (1,0) 在芯片看来是卡住的按键，5 秒后自己清板子。
+# 真按满 5 s 恢复出厂仍然只能人手（会清掉全部配对，脚本故意不自动化）：
+#   短按 BOOT 应打开 30 分钟窗口；长按 5s 清全部配对（危险）
 # 两项硬件检查一次跑完（前提：板子 Wi-Fi 在 30 分钟窗口内 —— 短按 BOOT 或 wifi_on.py）：
 #   python tests/tools/check_all.py
 #     preconnect_probe   socket 层：槽位是否及时释放（只发 HTTP，不重启板子、不改键）
 #     browser_check      页面层：真 Chrome 读 live DOM（渲染/绑定/WS/倒计时/按键推送）
 #   跑完板子保持在原状态；与旧的"会清密码"不同，不再需要收尾步骤。
+# 注意：配网页开着（Chrome 的 Web Serial）会独占 COM3，烧录前必须先关标签页。
 # 不接板子先跑宿主侧全套（含页面断言，约 1 秒，只需要 Chrome + Python）：
 #   .\scripts\test.ps1
 #   python tests/tools/check_web_ui.py            # 闪存预算 + 161 项页面断言
