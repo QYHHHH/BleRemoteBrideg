@@ -75,6 +75,16 @@ jobs:
           esac
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "本次发布版本: $V"
+          # SemVer 预发布约定：v1.2.0-rc.1 / -beta.1 / -alpha 这类带连字符的
+          # 版本号自动标记为 GitHub pre-release，不参与 latest 竞争；不带连字符
+          # 的干净版本号（v1.2.0）视为正式版。测试通过后重新打一个干净版本号
+          # 触发正式发布，不是回来编辑这次的 pre-release 标记。
+          case "$V" in
+            v*-*) IS_PRE=true ;;
+            *)    IS_PRE=false ;;
+          esac
+          echo "prerelease=$IS_PRE" >> "$GITHUB_OUTPUT"
+          echo "是否预发布: $IS_PRE"
 
       - name: 核对 config.h 里受版本控制的版本号
         run: |
@@ -259,6 +269,7 @@ jobs:
           tag_name: ${{ steps.ver.outputs.version }}
           name: MiRemoteBridge ${{ steps.ver.outputs.version }}
           body_path: out/notes.md
+          prerelease: ${{ steps.ver.outputs.prerelease }}
           fail_on_unmatched_files: true
           files: |
             out/*.bin

@@ -25,3 +25,23 @@
   `build/last-version-override.txt`）。这一步不能省：arduino-cli 按上次记录的
   依赖判断是否重编，而新出现的 `version_local.h` 不在任何旧依赖表里，
   不强制重编就会拿着旧目标文件报出旧版本号。
+
+## GitHub Release 的预发布（pre-release）
+
+跟上面"调试版"的后缀**是两回事，别混**：调试版后缀（`-improv` 这种功能名）
+**从不打 tag、不推远端**，纯本地烧录验证；这里说的预发布后缀**要真的打 tag
+并推送**，会触发 `.github/workflows/release.yml` 真正编译发布。
+
+- **判定规则**：tag 里带连字符（`v0.0.8-rc.1`、`v0.0.8-beta.1`）→ CI 自动标记
+  GitHub 的 `prerelease: true`，不参与 "latest" 竞争，官网首页的一键安装不会
+  推给用户；不带连字符的干净版本号（`v0.0.8`）→ 正式版，自动成为 latest。
+  这条规则是 `release.yml`"解析版本号"那一步用 `case "$V" in v*-*)` 自动推导的，
+  **不需要手动去 Release 页面勾选**。
+- **流程**：先打带后缀的预发布 tag 测试（真机验证、装机验证），确认没问题后
+  **重新打一个干净版本号的 tag**（比如把 `v0.0.8-rc.1` 转正为 `v0.0.8`），
+  让 CI 重新走一遍编译发布——**不是**回去编辑已发布的那个 Release 的
+  pre-release 复选框。这样 tag 历史本身就说明了"发布前经过了预发布阶段"，
+  出问题也可以直接扔掉那个 `-rc.1`，不留痕迹。
+- **手动覆盖 latest**（例外情况才用）：`gh release edit <tag> --latest`
+  或网页 Release 编辑页的 "Set as the latest release" 复选框，可以无视
+  发布时间强行指定哪个 Release 是 latest。
