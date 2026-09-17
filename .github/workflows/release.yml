@@ -78,7 +78,7 @@ jobs:
 
       - name: 核对 config.h 里受版本控制的版本号
         run: |
-          TRACKED=$(grep -m1 -oP '(?<=#define BRIDGE_FW_VERSION ")[^"]+' firmware/MiRemoteBridge/config.h)
+          TRACKED=$(grep -m1 -oP '#define\s+BRIDGE_FW_VERSION\s+"\K[^"]+' firmware/MiRemoteBridge/config.h)
           echo "config.h  : ${TRACKED:-<读不到>}"
           echo "本次发布  : ${{ steps.ver.outputs.version }}"
           if [ "$TRACKED" != "${{ steps.ver.outputs.version }}" ]; then
