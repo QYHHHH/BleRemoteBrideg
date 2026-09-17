@@ -46,7 +46,7 @@ function Get-BridgePaths {
 function Assert-BridgeToolchain {
     param([hashtable] $Paths)
     if (-not (Test-Path -LiteralPath $Paths.Cli)) {
-        throw "Arduino CLI not found at $($Paths.Cli). This repository already pins the toolchain (commit 16b3766) - do not reinstall it."
+        throw "Arduino CLI not found at $($Paths.Cli). This repository already pins the toolchain (commit 15654b6) - do not reinstall it."
     }
     if (-not (Test-Path -LiteralPath $Paths.Sketch)) {
         throw "Sketch folder not found: $($Paths.Sketch)"

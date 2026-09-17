@@ -75,7 +75,7 @@ Global variables use 62108 bytes (18%) of dynamic memory, leaving 265572 bytes f
 | `.\scripts\build.ps1` 跑完"什么都没有发生"、没有输出、也没有生成 bin | PowerShell 5.1 在启动子进程时会用环境变量构造一个**大小写不敏感**的字典；若环境里同时存在 `http_proxy` 和 `HTTP_PROXY`，构造会抛异常，表现就是子进程静默不执行。`scripts/_common.ps1` 启动时会自动删除重复项并打印一行提示。若仍无效，用系统级命令 `set HTTP_PROXY=` 后重开终端 |
 | `arduino-cli compile` **卡住不动**（十几分钟零输出、`tasklist` 里只有 `arduino-cli.exe` 而没有 `cc1plus`、构建目录无改动） | 代理变量把它的网络请求挂死了。**清空代理再跑**：`unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy; export NO_PROXY='*' no_proxy='*'`。判断依据：清掉后 `arduino-cli core list` 会秒回 |
 | 中文路径编译报错 | 工具链必须留在 `C:\code\arduino-c3-data`。见 `arduino-cli.yaml` 的注释 |
-| 提示找不到 arduino-cli | 不要重装。工具链由提交 `16b3766` 固定，检查 `.tools\arduino-cli-1.5.1\arduino-cli.exe` 是否存在 |
+| 提示找不到 arduino-cli | 不要重装。工具链由提交 `15654b6` 固定，检查 `.tools\arduino-cli-1.5.1\arduino-cli.exe` 是否存在 |
 
 编译产物（`build/MiRemoteBridge/`，已被 `.gitignore` 排除）：
 

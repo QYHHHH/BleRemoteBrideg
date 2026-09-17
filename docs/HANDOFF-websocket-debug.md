@@ -105,8 +105,8 @@ python tests/tools/check_all.py        # 一次跑完下面三项，给一个总
 
 ## 7. 相关提交
 
-- `0f9e99c` WS 独立 fd（HTTP 不再被页面阻塞）—— 真机验证
-- `d05a8db` 前四个根因的完整修复 + 页面改为"绑定走 HTTP / socket 只推小帧" + 本文件改写为结案记录
+- `865eaa0` WS 独立 fd（HTTP 不再被页面阻塞）—— 真机验证
+- `e98b983` 前四个根因的完整修复 + 页面改为"绑定走 HTTP / socket 只推小帧" + 本文件改写为结案记录
 - 随后一次提交：根因 5（静默连接的 250 ms 宽限）+ 清理死代码（Basic 认证相关）+ 认证现状记录
   `docs/AUTH.md` + `tests/tools/` 下的 `cdp.py` / `preconnect_probe.py` / `browser_check.py` /
   `check_all.py` —— **两项硬件检查全部真机通过**

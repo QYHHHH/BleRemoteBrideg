@@ -54,9 +54,9 @@
 
 | 改动 | 验证 |
 | --- | --- |
-| Improv 串口配网（`3860ead`，兼容 esp-web-tools / web.esphome.io） | 与串口控制台共用 USB 口；控制线真值表见 `docs/WEB-UI.md` |
-| 版本号构建期覆盖 `v0.0.4` + 调试后缀（`fa26dbd`） | 见 `AGENTS.md` 的版本约定 |
-| ~~DTR 防护（`f3b4a3a`）~~ **已撤销** | 前提"浏览器置位 DTR = 按住 BOOT"2026-09-17 实测证伪，`sessionActive()` 整套删除 |
+| Improv 串口配网（`fd7d14a`，兼容 esp-web-tools / web.esphome.io） | 与串口控制台共用 USB 口；控制线真值表见 `docs/WEB-UI.md` |
+| 版本号构建期覆盖 `v0.0.4` + 调试后缀（`a5dd8ad`） | 见 `AGENTS.md` 的版本约定 |
+| ~~DTR 防护（`71a72f6`）~~ **已撤销** | 前提"浏览器置位 DTR = 按住 BOOT"2026-09-17 实测证伪，`sessionActive()` 整套删除 |
 
 **待办**：`docs/TESTING.md` §5.3 的边界清单（长按、连按、休眠唤醒、两侧同时重启、
 卡键）尚未逐项验收。（旧版这里还写着"README 提到的英文版/CI 未做"——
