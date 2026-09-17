@@ -723,6 +723,7 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
     <div class="mode-grid">
      <label class="mode-card selected" id="fullModeCard"><span class="mode-title"><input type="radio" name="installMode" id="fullMode" value="full" checked><b>完整固件</b><em>裸板 / 修复</em></span><p>使用项目的完整安装清单。新安装时让官方窗口询问是否擦除；适合第一次烧录、分区变化或设备修复。</p></label>
      <label class="mode-card" id="appModeCard"><span class="mode-title"><input type="radio" name="installMode" id="appMode" value="app"><b>仅升级 APP</b><em>保留 NVS / 键位</em></span><p>只写应用分区，不碰 NVS。仅用于已经运行 MiRemoteBridge、且分区布局没有变化的设备。</p></label>
+     <label class="mode-card" id="localModeCard"><span class="mode-title"><input type="radio" name="installMode" id="localMode" value="local"><b>本地固件文件</b><em>网慢 / 离线</em></span><p>自己先把 <code>.bin</code> 下到电脑上，再从本地选。页面不去网上取固件，适合下载 Release 很慢的网络。</p><button class="drop" id="localPick" type="button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chip"/></svg><strong>选择 .bin 文件</strong><small id="localFileName">未选择文件</small></button><input type="file" id="localFile" accept=".bin,application/octet-stream" hidden></label>
     </div>
     <div class="erase-explain">
      <div class="erase-item"><b>完整安装</b><p>使用完整固件清单写入需要的启动、分区和应用内容。是否覆盖其它区域取决于清单本身。</p></div>
@@ -744,10 +745,13 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
 <div class="toast" id="pageToast" role="status" hidden></div>
 <noscript><p style="padding:20px">本页的设备连接、固件安装和交互演示需要 JavaScript。</p></noscript>
 <!--
-  Deployment settings.
-  Keep the user flow inside the official ESP Web Tools component.
-  fullManifest: full/factory firmware manifest used for bare boards and repair.
-  appManifest: optional app-only manifest, enabled only when its real app offset is known.
+  Deployment settings. 正常情况下一个字都不用改：
+  两份 manifest 都由 .github/workflows/release.yml 在每次发布时生成并传到 Release，
+  本页永远取 latest 那份，所以发了新版这里自动跟上。
+  仓库名取 MRB_CONFIG.repository；没填且部署在 GitHub Pages 上时从地址推导
+  （<owner>.github.io/<repo>/ → owner/repo）。
+  只有当 manifest 托管在别处时才需要手填 fullManifest / appManifest，
+  填了就优先于推导出来的地址。
 -->
 <script id="mrb-config">
 window.MRB_CONFIG = Object.assign({
@@ -963,6 +967,13 @@ window.MRB_CONFIG = Object.assign({
   const fullRadio = $("fullMode");
   const appRadio = $("appMode");
   const manifestNote = $("manifestNote");
+  const localCard = $("localModeCard");
+  const localRadio = $("localMode");
+  const localPick = $("localPick");
+  const localInput = $("localFile");
+  const localName = $("localFileName");
+  let localBlobUrl = null;      // 选中文件的 blob: 地址
+  let localManifestUrl = null;  // 用它拼出来的清单，只在选择文件时生成一次
   let ready = false;
   let loading = null;
   let mode = "full";
@@ -975,8 +986,47 @@ window.MRB_CONFIG = Object.assign({
     return { ok:true, text:"Web Serial 可用。连接、识别、安装、Wi-Fi 与日志都交给 ESP Web Tools。" };
   };
 
-  const fullManifest = () => config.fullManifest || config.releaseManifest || "";
-  const activeManifest = () => mode === "app" ? (config.appManifest || "") : fullManifest();
+  const fullManifest = () => config.fullManifest || config.releaseManifest || latestAsset("manifest.json");
+  const appManifest = () => config.appManifest || latestAsset("manifest-app.json");
+  const localManifest = () => localManifestUrl || "";
+  const activeManifest = () =>
+    mode === "app" ? appManifest() : mode === "local" ? localManifest() : fullManifest();
+
+  // 本地文件入口：给网络差、下不动 Release 的人用。把选中的文件包成一份最小
+  // 清单直接交给官方组件，页面不联网取固件。
+  // 偏移只能按文件名和体积判断（整片镜像约 4 MB / 应用固件约 1.4 MB），判断
+  // 结果写在按钮下面，用户能看见到底往哪个偏移写。
+  function pickLocalFile(file) {
+    if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
+    if (localManifestUrl) URL.revokeObjectURL(localManifestUrl);
+    localBlobUrl = URL.createObjectURL(file);
+    const isFull = /merged|full|factory/i.test(file.name) || file.size > 2.5 * 1024 * 1024;
+    localManifestUrl = URL.createObjectURL(new Blob([JSON.stringify({
+      name: "MiRemoteBridge",
+      version: file.name.replace(/\.bin$/i, ""),
+      new_install_prompt_erase: false,
+      builds: [{ chipFamily: "ESP32-C3", parts: [{ path: localBlobUrl, offset: isFull ? 0 : 0x10000 }] }]
+    })], { type: "application/json" }));
+    localName.textContent = file.name + " · " + (isFull
+      ? "识别为完整镜像，写入 0x0"
+      : "识别为应用固件，写入 0x10000");
+    choose("local");
+  }
+
+  // 版本不用在网页里维护：manifest 由 .github/workflows/release.yml 在每次发布
+  // 时生成并传到 Release，这里永远指向 latest，发新版就自动跟上。
+  // 仓库名优先读 MRB_CONFIG.repository；没填的话，部署在 GitHub Pages 上时可以
+  // 从地址自己推出来（<owner>.github.io/<repo>/ → owner/repo），所以正常情况
+  // 一行都不用配。
+  function latestAsset(file) {
+    const repo = String(config.repository || "").trim().replace(/^\/+|\/+$/g, "");
+    if (repo) return "https://github.com/" + repo + "/releases/latest/download/" + file;
+    const m = /^([^.]+)\.github\.io$/.exec(location.hostname || "");
+    if (!m) return "";
+    const seg = (location.pathname || "").split("/").filter(Boolean)[0] || "";
+    const name = seg || (m[1] + ".github.io");
+    return "https://github.com/" + m[1] + "/" + name + "/releases/latest/download/" + file;
+  }
 
   const setStatus = (message, kind="") => {
     status.textContent = message;
@@ -998,7 +1048,7 @@ window.MRB_CONFIG = Object.assign({
   const update = () => {
     const env = environment();
     const full = !!fullManifest();
-    const app = !!config.appManifest;
+    const app = !!appManifest();
     appRadio.disabled = !app;
     appCard.classList.toggle("disabled", !app);
     if (!app && mode === "app") {
@@ -1006,17 +1056,26 @@ window.MRB_CONFIG = Object.assign({
       fullRadio.checked = true;
       appRadio.checked = false;
     }
+    if (!localManifestUrl && mode === "local") {
+      mode = "full";
+      fullRadio.checked = true;
+    }
     fullCard.classList.toggle("selected", mode === "full");
     appCard.classList.toggle("selected", mode === "app");
+    localCard.classList.toggle("selected", mode === "local");
+    localRadio.checked = mode === "local";
     const manifest = activeManifest();
     button.disabled = !env.ok || !ready || !manifest;
     envStatus.textContent = !env.ok ? env.text : ready ? env.text : "正在加载 ESP Web Tools 10.4.0…";
 
     if (!env.ok) setStatus(env.text, "warning");
     else if (!ready) setStatus("正在加载 ESP Web Tools 10.4.0…");
-    else if (!manifest) setStatus(mode === "full"
-      ? "还没有配置完整固件 manifest。部署时设置 MRB_CONFIG.fullManifest 后即可使用官方完整流程。"
-      : "APP-only manifest 尚未配置。请先用构建产物和真实 app 偏移生成清单。", "warning");
+    else if (!manifest) setStatus(mode === "local"
+      ? "先选择一个本地 .bin 文件，再点“连接设备”。"
+      : mode === "app"
+        ? "APP-only manifest 尚未配置。请先用构建产物和真实 app 偏移生成清单。"
+        : "还没有配置完整固件 manifest。部署时设置 MRB_CONFIG.fullManifest 后即可使用官方完整流程。", "warning");
+    else if (mode === "local") setStatus("本地文件模式：连接后仍使用官方识别 / 日志 / Wi-Fi；安装时写入你选的那个文件，页面不会联网取固件。", "good");
     else if (mode === "app") setStatus("APP-only 模式：连接后仍使用官方识别 / 日志 / Wi-Fi；安装时只写 app manifest 中声明的分区。", "good");
     else setStatus("完整固件模式：点击连接后，官方组件会自动识别设备并决定显示 Install、Update、Wi-Fi 或设备入口。", "good");
 
@@ -1024,7 +1083,8 @@ window.MRB_CONFIG = Object.assign({
     manifestNote.innerHTML = '<strong>当前配置：</strong>' +
       (full ? '完整固件 manifest 已配置' : '完整固件 manifest 未配置') + ' · ' +
       (app ? 'APP-only manifest 已配置' : 'APP-only manifest 未配置，因此该选项暂时禁用') +
-      '。APP-only 的 app 偏移必须来自项目真实分区表，页面不会猜偏移。';
+      '。APP-only 的 app 偏移必须来自项目真实分区表，页面不会猜偏移。' +
+      '本地文件入口按文件名和体积判断偏移（整片镜像写 0x0、应用固件写 0x10000），选完会在按钮下显示判断结果。';
   };
 
   async function importWithTimeout(url, timeout=12000) {
@@ -1064,20 +1124,39 @@ window.MRB_CONFIG = Object.assign({
   }
 
   function choose(next) {
-    if (next === "app" && !config.appManifest) {
+    if (next === "app" && !appManifest()) {
       appRadio.checked = false;
       fullRadio.checked = true;
       mode = "full";
       update();
       return;
     }
+    if (next === "local" && !localManifestUrl) {
+      localRadio.checked = false;
+      fullRadio.checked = mode === "full";
+      appRadio.checked = mode === "app";
+      setStatus("请先选择本地 .bin 文件。", "warning");
+      return;
+    }
     mode = next;
     fullRadio.checked = mode === "full";
     appRadio.checked = mode === "app";
+    localRadio.checked = mode === "local";
     applyManifest();
   }
   fullRadio.addEventListener("change", () => fullRadio.checked && choose("full"));
   appRadio.addEventListener("change", () => appRadio.checked && choose("app"));
+  localRadio.addEventListener("change", () => localRadio.checked && choose("local"));
+
+  // 卡片是 <label>，里面的按钮点下去会顺带触发 radio，先拦掉再自己开文件框
+  localPick.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    localInput.click();
+  });
+  localInput.addEventListener("change", () => {
+    if (localInput.files && localInput.files[0]) pickLocalFile(localInput.files[0]);
+  });
 
   // The slotted button is the real activation target documented by ESP Web Tools.
   // We do not call navigator.serial ourselves and we do not inspect the component's shadow DOM.

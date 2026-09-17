@@ -11,6 +11,12 @@
 # 另外三个几十 KB 的小文件（bootloader / partitions / boot_app0）是第 3 项
 # 分块 manifest 的零件，不是给用户单独下载的固件。
 #
+# 第 3 项有两份：manifest.json（完整安装）和 manifest-app.json（仅升级 APP）。
+# 网页按固定名从 latest 取，所以**不需要把 manifest 提交回仓库** —— 版本信息
+# 只存在 Release 里，发新版不用改网页。网络差、下不动 Release 的用户走网页的
+# 「本地固件文件」入口：自己下 bin，再用浏览器选中它，页面用 blob 清单交给官方
+# 组件，全程不联网取固件。
+#
 # 改文件名要同步两处：manifest 是用下面的名字拼出来的，而网页
 # （index.html 的 MRB_CONFIG.releaseManifest）只认这份 manifest 里的
 # name / version / builds，它自己不猜文件名。
@@ -150,36 +156,47 @@ jobs:
           repo = os.environ['GITHUB_REPOSITORY']
           base = f"https://github.com/{repo}/releases/download/{v}"
 
-          # 分块写（0x0 / 0x8000 / 0xe000 / 0x10000）而不是整片镜像：
-          # 整片镜像在 0x9000 的 nvs 区间是 0xFF 填充，刷下去等于清配置。
+          def build(parts):
+              return {
+                  "name": "MiRemoteBridge",
+                  "version": v,
+                  "home_assistant_domain": "remote",
+                  "funding_url": f"https://github.com/{repo}",
+                  "new_install_prompt_erase": False,
+                  "builds": [{"chipFamily": "ESP32-C3", "parts": parts}],
+              }
+
+          # 完整安装：分块写（0x0 / 0x8000 / 0xe000 / 0x10000）而不是整片镜像，
+          # 因为整片镜像在 0x9000 的 nvs 区间是 0xFF 填充，刷下去等于清配置。
           # 注意：index.html 收到 manifest 后会强制把 new_install_prompt_erase
           # 改回 true，所以弹窗里「擦除」默认勾着 —— 分块只让「不擦」成为可能，
           # 保不保得住还得用户在弹窗里取消那个勾。
-          manifest = {
-              "name": "MiRemoteBridge",
-              "version": v,
-              "home_assistant_domain": "remote",
-              "funding_url": f"https://github.com/{repo}",
-              "new_install_prompt_erase": False,
-              "builds": [{
-                  "chipFamily": "ESP32-C3",
-                  "parts": [
-                      {"path": f"{base}/MiRemoteBridge-{v}-bootloader.bin", "offset": 0},
-                      {"path": f"{base}/MiRemoteBridge-{v}-partitions.bin", "offset": 0x8000},
-                      {"path": f"{base}/MiRemoteBridge-{v}-boot-app0.bin", "offset": 0xe000},
-                      {"path": f"{base}/MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
-                  ],
-              }],
-          }
+          full = build([
+              {"path": f"{base}/MiRemoteBridge-{v}-bootloader.bin", "offset": 0},
+              {"path": f"{base}/MiRemoteBridge-{v}-partitions.bin", "offset": 0x8000},
+              {"path": f"{base}/MiRemoteBridge-{v}-boot-app0.bin", "offset": 0xe000},
+              {"path": f"{base}/MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
+          ])
 
-          with open('out/manifest.json', 'w', encoding='utf-8') as f:
-              json.dump(manifest, f, indent=2, ensure_ascii=False)
-              f.write('\n')
-          # 同名存档一份，latest 那份只指最新，历史版本还要能单独拿到
-          with open(f'out/manifest-{v}.json', 'w', encoding='utf-8') as f:
-              json.dump(manifest, f, indent=2, ensure_ascii=False)
-              f.write('\n')
-          print(json.dumps(manifest, indent=2, ensure_ascii=False))
+          # 仅升级 APP：一个 part，只写应用分区。offset 必须等于分区表里 app0 的
+          # 偏移，huge_app 方案下就是 0x10000（见 build 目录里的 partitions.csv）。
+          # 网页的「仅升级 APP」入口读这份，没这份那个选项就自动禁用。
+          app_only = build([
+              {"path": f"{base}/MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
+          ])
+
+          def write(path, obj):
+              with open(path, 'w', encoding='utf-8') as f:
+                  json.dump(obj, f, indent=2, ensure_ascii=False)
+                  f.write('\n')
+              print('wrote', path)
+
+          # manifest.json / manifest-app.json 是固定名，网页永远取 latest 那份，
+          # 换版本不用改网页；带版本号的那两份是存档。
+          write('out/manifest.json', full)
+          write('out/manifest-app.json', app_only)
+          write(f'out/manifest-{v}.json', full)
+          write(f'out/manifest-app-{v}.json', app_only)
           PY
 
       - name: 写发布说明
@@ -220,7 +237,11 @@ jobs:
             echo '```'
             echo
             echo "\`-bootloader.bin\` / \`-partitions.bin\` / \`-boot-app0.bin\` 是 \`manifest.json\`"
-            echo "的零件（共约 30 KB），一般不用单独下；\`manifest-$V.json\` 是这一版的清单存档。"
+            echo "的零件（共约 30 KB），一般不用单独下。"
+            echo
+            echo "\`manifest.json\` 给完整安装用，\`manifest-app.json\` 给网页的「仅升级 APP」"
+            echo "入口用（只写 0x10000）。两份都是固定名，网页永远取 latest 那份，"
+            echo "所以发新版不用改网页；带版本号的 \`manifest-$V.json\` 是存档。"
           } > out/notes.md
           cat out/notes.md
 
@@ -248,9 +269,11 @@ jobs:
         run: |
           python3 -c "
           import json
-          m = json.load(open('out/manifest.json'))
-          print('\n'.join(p['path'] for p in m['builds'][0]['parts']))
-          " > /tmp/urls.txt
+          for name in ('out/manifest.json', 'out/manifest-app.json'):
+              m = json.load(open(name))
+              for p in m['builds'][0]['parts']:
+                  print(p['path'])
+          " | sort -u > /tmp/urls.txt
           cat /tmp/urls.txt
           fail=0
           while read -r u; do
