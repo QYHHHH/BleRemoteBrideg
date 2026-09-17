@@ -212,6 +212,14 @@ function Invoke-BridgeBuild {
         Write-Host 'Build option: USB CDC on boot (native USB serial)' -ForegroundColor Yellow
     }
 
+    # The sketch path has to be passed explicitly. Without it arduino-cli treats
+    # the *current directory* as the sketch and looks for MiRemoteBridge.ino
+    # there, so `.\scripts\build.ps1` from the repository root dies with
+    # "Can't open sketch: main file missing from sketch" - it only ever worked
+    # by accident, when the caller happened to be inside the sketch folder.
+    # Keep it last: it is the positional argument.
+    $arguments += $Paths.Sketch
+
     Write-Host "Building $($Paths.Sketch)" -ForegroundColor Cyan
     Write-Host "  fqbn   : $($Paths.Fqbn)"
     Write-Host "  output : $OutputDir"
