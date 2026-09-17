@@ -52,7 +52,7 @@
 | 遥控器（上游） | 中国移动语音遥控器（`CMCC_Voice_Remote`） | ✅ 实测**端到端可用**：按键后电脑确实响应。22 个键码、2 个认不出名字；**部分物理键无响应**（见 [`docs/CMCC-BLE-REMOTE.md`](docs/CMCC-BLE-REMOTE.md)） |
 | 主机（下游） | Windows 10 / 11 | ✅ 实测（键盘 + 媒体键 + 蓝牙关开 + 多多主机切换） |
 | 主机（下游） | Linux / macOS | 未验证；标准蓝牙 HID，理论可用，欢迎反馈 |
-| 主机（下游） | iPhone / iPad / iOS | ❌ **不支持** |
+| 主机（下游） | iPhone / iPad / iOS | ✅ 实测（键盘 + 媒体键 + 多主机切换，见 [`docs/PAIRING.md` §2.5](docs/PAIRING.md)） |
 | 遥控器（上游） | 其它标准 BLE 遥控器 | 走**学习型槽位**，标准 HID 键名自动识别，**无需改代码**。仅 CMCC 一款逐键实测过 |
 
 ## 快速开始

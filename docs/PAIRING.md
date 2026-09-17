@@ -34,7 +34,7 @@
 启动后应看到：
 
 ```
-[   1234][BRIDGE ] MiRemoteBridge v0.0.4
+[   1234][BRIDGE ] MiRemoteBridge v0.0.6
 [   1240][BRIDGE ] console ready at 115200 baud
 [   1250][BRIDGE ] keymap: back=consumer_back power=kb_alt_f4 voice=kb_ralt_comma
 [   1300][BLE    ] host stack: nimble, own address: xx:xx:xx:xx:xx:xx
@@ -236,6 +236,6 @@ connect c0:5d:39:xx:xx:xx random
 - 搜索列表显示 BLE 广播中的设备名、MAC 和信号强度；连接后若设备提供标准 Device Information Service 的 Serial Number String（0x180A/0x2A25），槽位会显示该标识。遥控器外壳上的 CEMI/CMIIT 贴纸号通常不会通过 BLE 暴露，读不到时不会伪造。
 - 删除设备只清除设备身份、配对及缓存电量，保留该槽快捷键。更换设备时删除后重新添加。
 - 恢复默认设置只重置当前槽快捷键，不删除设备及已发现按键。BOOT 长按恢复出厂才清除全部槽位。
-- 当前活动槽的遥控器**配对信息失效**时（`status` 里 `rc003 repair : required`、D4 双闪），固件会停止自动重连并提示"请让遥控器进入配对模式，然后从附近设备中选择"。此时**必须**在网页"附近设备"里明确选中一台设备，固件才会删除该槽的旧 Bond 并重配——之前学到的按键与快捷键都保留。详见 `RECOVERY.md` §2.1 ②。
+- 当前活动槽的遥控器配对信息失效（D4 双闪）时的处理流程见上面「排查」表的 D4 一行。
 
 验证记录：网页 161 项检查、键码模型 11098 项检查及 ESP32-C3 编译通过。三个实体遥控器的配对、断电恢复与轮流切换仍需硬件验收；编译器的静态内存余量不是运行时可用堆内存。

@@ -70,7 +70,8 @@ SM 实现正常。但**手机能连不等于 ESP32 能连**——Android 的 BLE
 
 ### 2.2 一行日志判定走哪条路
 
-`rc003_client.cpp:571` 在每次连接后会打一行：
+`rc003_client.cpp` 的 `discoverAndSubscribe()` 在每次连接后会打一行
+（日志 tag `kTagSec`）：
 
 ```
 security begin encrypted=0 bonded=? stored=?
@@ -81,7 +82,7 @@ security begin encrypted=0 bonded=? stored=?
 | `stored=1` 或 `bonded=1` | ESP32 手里**已经有这条 bond**。连上后会直接用存的 LTK 发起加密（甚至自动加密），**不会走新配对**——所以遥控器进不进配对模式都没用 | 走第 3.1 节：把 ESP32 的 NVS 彻底清掉 |
 | `stored=0 bonded=0` | 确实在走新配对，密钥却对不上 → 问题在协商本身 | 走第 3.2 节：试 `sc=false` |
 
-`stored` 来自 `storedPeerKey()`（`rc003_client.cpp:533-537`），它读的是
+`stored` 来自 `rc003_client.cpp` 的 `storedPeerKey()`，它读的是
 NimBLE store 里 `peer_sec` 的 `ltk_present`。**这一行是当前最省事的判据。**
 
 ---
@@ -109,13 +110,14 @@ ESP32 的 NimBLE bond store 是**持久化在 NVS** 的。如果它已经存了�
 如果 2.2 判定 `stored=0 bonded=0`，说明确实走了新配对、密钥却仍不同，
 那问题就在协商本身：
 
-- **SC 不兼容**：`ble_core.cpp:67` 是 `sc=true`。若遥控器**自称**支持
-  LE Secure Connections 但实现有问题，两边会各自用不同的方式推导密钥，
-  配对"成功"、MIC 失败。这是最典型的一种；
-- **IO 能力 / 固定配对码**：`ble_core.cpp:68` 是 `ESP_IO_CAP_NONE`（Just Works）。
-  若遥控器实际期望 Passkey Entry（常见 `000000` / `123456`），两边算出的
-  STK 不同，同样表现为配对成功 + MIC 失败；
-- **密钥掩码要了 IRK**：`ble_core.cpp:69-70` 要的是 `ENC | ID`，ID 即 IRK。
+- **SC 不兼容**：`ble_core.cpp` 的 `setAuthenticationMode()` 传的是 `sc=true`。
+  若遥控器**自称**支持 LE Secure Connections 但实现有问题，两边会各自用不同的
+  方式推导密钥，配对"成功"、MIC 失败。这是最典型的一种；
+- **IO 能力 / 固定配对码**：`ble_core.cpp` 的 `setCapability()` 传的是
+  `ESP_IO_CAP_NONE`（Just Works）。若遥控器实际期望 Passkey Entry（常见
+  `000000` / `123456`），两边算出的 STK 不同，同样表现为配对成功 + MIC 失败；
+- **密钥掩码要了 IRK**：`ble_core.cpp` 的 `setInitEncryptionKey()` /
+  `setRespEncryptionKey()` 要的是 `ENC | ID`，ID 即 IRK。
 
 **注意**：手机能连上**不能**排除这一条。Android 的 BLE 栈对 SC 回退和异常外设的
 容错比 NimBLE 宽松，同一个遥控器在手机上能跑、在 NimBLE 上翻车是常见的。
@@ -161,8 +163,8 @@ ESP32 的 NimBLE bond store 是**持久化在 NVS** 的。如果它已经存了�
 - 走 `factory` 命令（会连设置一起清）；
 - 或者 `esptool erase_flash` 把整个 flash 擦了再烧。
 
-**不要依赖 `forget rc`。** 它走的是 `ble_bonds::removePeer()`
-（`rc003_client.cpp:877`）→ `ble_gap_unpair()`。NimBLE 头文件里
+**不要依赖 `forget rc`。** 它走的是 `ble_bonds::removePeer()` → `ble_gap_unpair()`。
+NimBLE 头文件里
 `ble_gap_unpair()` 的说明是 "The keys related to that peer device are removed
 from storage"，理论上会同时清 peer_sec 和 our_sec；但本 SDK 只提供预编译的
 `libbt.a`，没有源码，无法逐行核实它究竟清了几条记录，所以不把它当作可靠手段。
@@ -192,7 +194,8 @@ from storage"，理论上会同时清 peer_sec 和 our_sec；但本 SDK 只提�
 
 项目已有日志埋点，不用加代码：
 
-- `ble_core.cpp:29-32` 会打 `disconnect handle=... reason=...` 和 `security ... status=...`
+- `ble_core.cpp` 的 GAP 事件回调会打 `disconnect handle=... reason=...` 和
+  `security handle=... status=...`
 
 对照 HCI 错误码：
 
@@ -241,12 +244,12 @@ nRF52840 dongle + Wireshark + nRF Sniffer，看 Pairing Request / Response 里�
 
 **好消息：既然是标准 HOGP，不需要新写 client。**
 
-`discoverAndSubscribe()`（`rc003_client.cpp:560`）那套 HID 订阅逻辑可以直接复用，
+`rc003_client.cpp` 的 `discoverAndSubscribe()` 那套 HID 订阅逻辑可以直接复用，
 只需要摘掉其中对 RC003 的假设：
 
-- `rc003_client.cpp:612-618` 的"HID 服务 `0x1812` 优先、电池 `0x180F` 次之"
-  两趟订阅顺序，是按 RC003 的服务布局调优的，新遥控器未必适用；
-- `rc003_client.cpp:566` 的"必须先加密才能用 HID"前提，对新遥控器需重新确认。
+- 其中"HID 服务 `0x1812` 优先、电池 `0x180F` 次之"的两趟订阅顺序，是按 RC003
+  的服务布局调优的，新遥控器未必适用；
+- 其中"必须先加密才能用 HID"的前提，对新遥控器需重新确认。
 
 另外可考虑：
 

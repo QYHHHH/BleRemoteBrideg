@@ -172,48 +172,28 @@ map voice disabled
 
 ### 5.2 服务层为什么绕过了 `BLEHIDDevice`
 
-Arduino-ESP32 3.3.11 的 `BLEService` 用 `std::map<std::string, BLECharacteristic*>` 存特征，
-**假设一个 UUID 对应一个特征**。`addCharacteristic()` 遇到重复 UUID 时**不把第二个写进 map**，
-于是它既进不了 GATT 表，也永远不会被调 `executeCreate()`——而 `BLECharacteristic` 构造函数
-**不初始化 `m_pService`**，只有 `executeCreate()` 会赋值，结果是 `notify()` 读野指针 →
-`Load access fault` 崩溃（真机复现过）。
+Arduino 封装层的 `BLEService` 按 UUID 去重存特征，注册不了两条同 UUID
+（`0x2A4D`）的 Report 特征——第二条被静默丢弃，其 `m_pService` 永不赋值，
+`notify()` 读野指针崩溃。这条路走不通，且没有绕过办法（细节、真机复现过的
+两条死路、以及"合并成一个集合"的诊断实验，见 `firmware/MiRemoteBridge/hid_report_map.h`
+的头注释与 [`PITFALLS.md`](PITFALLS.md) 第 2/3 条）。
 
-这条路堵死了：
-- `BLEUUID::toString()` 对 `0x2A4D` 的 16 位 / 32 位 / 128 位三种写法**输出同一个字符串**，
-  所以"换个写法骗过判重"不可行；
-- `executeCreate()` 是 private，无法手动调用；
-- `BLEServer` 判重那段代码在 `#if CONFIG_NIMBLE_ENABLED` **之前**，换 Bluedroid 一样无效。
+而 **NimBLE 本身没有这条限制**：`ble_gatt_svc_def` 就是一个数组，同 UUID 重复
+完全合法。所以 HID / 设备信息 / 电池三个服务改由 `hid_gatt.cpp` 直接用 NimBLE
+构建，其余部分（`BLEDevice` / `BLEServer` / 广播 / RC003 那一侧 / 配对与 Bond）
+仍走封装层。完整取证见 `docs/TESTING.md` §4.5 / §4.6。
 
-而 **NimBLE 本身没有这条限制**：`ble_gatt_svc_def` 就是一个数组，同 UUID 重复完全合法。
-所以 HID / 设备信息 / 电池三个服务改由 `hid_gatt.cpp` 直接用 NimBLE 构建，
-其余部分（`BLEDevice` / `BLEServer` / 广播 / RC003 那一侧 / 配对与 Bond）仍走封装层。
-
-### 5.3 走过的两条弯路（都已在真机复现）
-
-| 尝试 | 描述符 | 结果 |
-| --- | --- | --- |
-| ① 两集合共用报告 ID 1 + 一条特征 | 90 字节，含 LED 输出 | Windows `Code 10`，问题状态 `0xC0110002` |
-| ② 同上但删掉 LED 输出 | 72 字节，无输出 | **错误码一字不差**——LED 不是原因 |
-| ③ 诊断：合并成**一个**顶层集合 | 65 字节 | **通过**（`Status=OK`，绑 `kbdhid`）|
-| ④ 两集合、**各自报告 ID**、两条特征 | 72 字节 | 正确结构（本版）|
-
-`0xC0110002` = `HIDP_STATUS_INVALID_REPORT_TYPE`。**合法 HID 不等于 Windows 接受**——
-Windows 的 BLE HID 栈不接受两个顶层集合共用一条 Report 特征。
-完整取证见 `docs/TESTING.md` §4.5 / §4.6。
-
-> 教训：一个"更简洁"的设计如果偏离了所有可用实现的做法，先查有没有人这么干成过，
-> 而不是先假定"合法就够了"。
-
-### 5.4 为什么没有输出（LED）报告
+### 5.3 为什么没有输出（LED）报告
 
 标准 USB 键盘描述符里有一个 1 字节的 LED 输出报告。**HOGP 下不能照抄**：描述符里声明的
 每一种报告都必须有对应类型的 Report 特征，而本固件不驱动 LED。
 而且 `BLEHIDDevice::outputReport()` 建的是第二个 `0x2A4D`，正是需要避开的那条路。
 
-> 注意：删掉 LED 输出**没有**修好 Code 10（见 5.3 的第 ② 行）。它本身是对的清理，
-> 但不是那次故障的原因，**别把它当成故障原因记**。
+> 注意：真机试过删掉 LED 输出，**没有**修好 Windows `Code 10`（完整的尝试记录见
+> `docs/TESTING.md` §4.5/§4.6）。它本身是对的清理，但不是那次故障的原因，
+> **别把它当成故障原因记**。
 
-### 5.5 回归防护
+### 5.4 回归防护
 
 `tests/model/check_vectors.py` 会实际解析这份描述符并断言：
 

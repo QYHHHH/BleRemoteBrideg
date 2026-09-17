@@ -26,8 +26,20 @@ firmware/MiRemoteBridge/
 ├── log.{h,cpp}          分级日志 + 令牌桶限速 + 不限流通道
 ├── cli.{h,cpp}          串口控制台
 ├── improv_serial.{h,cpp} Improv Wi-Fi 串口配网（与控制台共用同一个 USB 口）
+├── reset_button.{h,cpp} BOOT 键（GPIO9）：短按开 30 分钟配置窗口，长按 5 秒恢复出厂
+├── settings.{h,cpp}     NVS 持久化：Wi-Fi 凭据、槽位、按键绑定、运行时开关
+├── status_led.{h,cpp}   板载 LED 状态指示
+├── native_subscription.{h,cpp} 无堆分配的 NimBLE CCCD 订阅（供 rc003_client 用）
+├── wifi_ui.{h,cpp}      Web 配置页的 HTTP + WebSocket 服务端、30 分钟窗口计时
+├── web_page.h           构建期从 `index.html` 生成的页面源（gzip 前）
+├── web_page_gz.h        构建期生成的页面 gzip 字节数组，实际烧进 flash 的就是它
 └── selftest.{h,cpp}     设备端向量测试 + 分发仿真
 ```
+
+Web 配置页这条链路（`wifi_ui`/`web_page*`/`settings`/`reset_button`）默认不跑：
+只有短按 BOOT 或串口 `wifi on` 才启动 STA 连接并打开 HTTP/WS 监听，30 分钟后
+自己关掉；BLE 桥接主链路（上面列的其余模块）不受影响，运行细节见
+[`WEB-UI.md`](WEB-UI.md) 与 [`AUTH.md`](AUTH.md)。
 
 ## 关键设计决定
 
