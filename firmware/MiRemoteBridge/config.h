@@ -36,7 +36,7 @@
 #endif
 
 #ifndef BRIDGE_FW_VERSION
-#define BRIDGE_FW_VERSION     "v0.0.6"
+#define BRIDGE_FW_VERSION     "v0.0.7b"
 #endif
 
 // ---------------------------------------------------------------------------
