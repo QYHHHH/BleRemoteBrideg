@@ -23,6 +23,15 @@
  * protocol would need its own GATT service, and the board's BLE roles are
  * already both in use (HID peripheral + RC003 central).
  *
+ * This module deliberately does NOT track a "session" for the BOOT key. An
+ * earlier version exposed sessionActive() so reset_button could stand down
+ * while a client was connected, on the theory that a browser holding the port
+ * open pulls GPIO9 low. It does not - Chromium applies DTR and RTS in a single
+ * SetCommState, landing on (1,1), which leaves GPIO9 alone (measured
+ * 2026-09-17; truth table in docs/WEB-UI.md). The guard could only ever fire
+ * for a real press, so it was removed. Don't reintroduce it without a
+ * measurement showing a client that actually drives the line.
+ *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -48,15 +57,5 @@ bool feedByte(uint8_t byte, ConsoleSink sink);
 // Advance the provisioning state machine and the asynchronous Wi-Fi scan.
 // Call from loop(); it never blocks.
 void loop();
-
-// True while an Improv client has been talking to us recently.
-//
-// This exists because of a board quirk: the USB-serial DTR line is wired to
-// GPIO9, which is the BOOT key. A browser holding the port open asserts DTR,
-// which reads exactly like someone holding BOOT - so the five-second factory
-// reset in reset_button has to stand down while a client is provisioning, or
-// the board would wipe itself mid-conversation. The console `factory` command
-// is unaffected and remains the escape hatch.
-bool sessionActive();
 
 }  // namespace improv_serial

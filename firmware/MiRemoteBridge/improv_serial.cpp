@@ -85,11 +85,6 @@ constexpr size_t kMaxResultBytes = 512;
 constexpr unsigned long kConnectTimeoutMs = 20000;
 constexpr unsigned long kScanTimeoutMs = 12000;
 
-// How long one received frame keeps the BOOT-hold factory reset standing down.
-// Generous on purpose: the point is to cover a whole browser session, including
-// the quiet stretch while the board associates.
-constexpr unsigned long kSessionHoldMs = 300000;
-
 // ------------------------------------------------------------------- parsing
 
 // The parser is a byte-at-a-time state machine rather than a buffer scan, so it
@@ -116,9 +111,6 @@ unsigned long s_provisionStartedAt = 0;
 
 bool s_scanPending = false;
 unsigned long s_scanStartedAt = 0;
-
-bool s_seenFrame = false;
-unsigned long s_lastFrameAt = 0;
 
 // Improv's hostname and device-name commands are session scoped: the identity
 // that matters is the compile-time one in config.h, and both values are only
@@ -526,8 +518,6 @@ bool feedByte(uint8_t byte, ConsoleSink sink) {
           const uint8_t commandLen = s_data[1];
           const size_t available = s_dataLen - 2;
           const size_t usable = (commandLen < available) ? commandLen : available;
-          s_seenFrame = true;
-          s_lastFrameAt = millis();
           handleCommand(command, s_data + 2, usable);
         }
         return true;
@@ -567,10 +557,6 @@ void loop() {
   // live link, so a client that connects later still learns the URL. setState()
   // only emits on an actual change.
   setState(online ? kStateProvisioned : kStateAuthorized);
-}
-
-bool sessionActive() {
-  return s_seenFrame && (millis() - s_lastFrameAt) < kSessionHoldMs;
 }
 
 }  // namespace improv_serial

@@ -26,10 +26,37 @@
 
 ## 串口监控陷阱（与 `SERIAL-CONSOLE.md` 联动）
 
-- **本板 DTR 接的是 BOOT（GPIO9）**——`DtrEnable=true` 等于按住 BOOT，5 秒后会
-  触发固件的恢复出厂。监控时必须 `DtrEnable=$false`。详见
-  [`SERIAL-CONSOLE.md`](SERIAL-CONSOLE.md) 的"与上位工具的边界"。
-- **pyserial 打开端口瞬间 DTR/RTS 都会被置位**——`board_auth.py` 用
-  `_SER.dtr = False` + `_SER.rts = False` 的**顺序**是承重的，必须**先放 DTR
-  再放 RTS**，反了会被 strap 锁存成下载模式（EN 拉高那一刻 GPIO9 还是低）。
-  看 [`TESTING.md`](TESTING.md) §DTR 处理里有完整取证。
+- **DTR / RTS 是成对起作用的**，不是各管一根。本板是经典双三极管自动下载电路，
+  2026-09-17 上机实测（判据 = HTTP `uptimeMs` 是否归零 + 串口有没有
+  `[BUTTON ] key pressed`）：
+
+  | (DTR, RTS) | 后果 |
+  | --- | --- |
+  | `(0,0)` / `(1,1)` | EN 高、GPIO9 高 —— **正常运行** |
+  | `(0,1)` | EN 低 —— **板子被按在复位里** |
+  | `(1,0)` | GPIO9 低 —— **等于按住 BOOT**（满 5 秒恢复出厂） |
+
+- 所以 **`DtrEnable=true` 单独并不危险**，只有 RTS 同时为低（`(1,0)`）才是"按住
+  BOOT"。监控时把**两根都设 `$false`**（`(0,0)`）就既不复位也不按住 BOOT。
+- **复位发生在控制线"经过 `(0,1)`"的那一刻**，本项目脚本有**两处**：
+  1. **`open()` 本身** —— pyserial 先置 RTS 再置 DTR，路径是
+     `(0,0)→(0,1)→(1,1)`，所以**用 pyserial 开一次口就复位一次**。
+     实测（`tests/tools/open_probe.py`）：不预置控制线开 → 出现启动横幅；把两根线
+     预置成 `(0,0)` 再开 → 没有横幅、板子照常应答。
+  2. **脚本自己那两行** —— `s.dtr = False` 先放 DTR（`(1,1)→(0,1)` → EN 拉低），
+     再 `s.rts = False`（`(0,1)→(0,0)` → EN 拉高、板子启动），**再复位一次**。
+
+  ⇒ `build/ser.py` / `serlog.py` 默认就是**两次**复位（刻意如此，保证拿到干净的
+  启动横幅）。加 **`SER_NORESET=1` 实测降到 0 次**：它在 open 前先把两根线预置成
+  `(0,0)`，上一次工具也留在 `(0,0)` 时就没有任何跳变。
+- **Chromium 与 .NET 不复位**：Chrome 在一次 `SetCommState` 里同时置两根，不经过
+  `(0,1)`；.NET `SerialPort` 默认 `(0,0)`。所以"开配网页会重启板子"不成立。
+- **`close()` 不释放控制线。** 实测把 RTS 置位后关端口，板子仍被按在复位里，
+  直到下一次 open 显式 `rts=False` 才起来。脚本收尾要显式放开两根，别只靠
+  `close()`。
+- 取证脚本：`tests/tools/line_probe.py`（逐根线隔离，结论以此为准）/
+  `tests/tools/open_probe.py`（open 是否复位）/ `tests/tools/press_probe.py`
+  （把 `(1,0)` 当"不用手按的 BOOT 键"，用来回归 BOOT 键行为）。
+  另有一个早期的 `build/rts_probe.py` 留在 `build/`（该目录被 gitignore，
+  只在开发机上存在，不要当依据引用）。
+  详见 [`TESTING.md`](TESTING.md) §5.3.2。

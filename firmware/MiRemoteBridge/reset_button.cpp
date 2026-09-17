@@ -11,6 +11,18 @@
  * Progress is logged once per second while held, so the outcome of a press is
  * always visible on the console.
  *
+ * GPIO9 is shared with the USB-serial auto-reset circuit, where EN and GPIO9
+ * are driven by the DTR/RTS *pair* - a tool that leaves the lines in the (1,0)
+ * combination pulls GPIO9 low and looks exactly like a finger on the key.
+ *
+ * An earlier version stood down while an Improv client was connected, on the
+ * theory that a browser holding the port open did that. It does not: Chromium
+ * applies DTR and RTS in a single SetCommState, landing on (1,1), which leaves
+ * GPIO9 alone (measured 2026-09-17; truth table in docs/WEB-UI.md). That guard
+ * could only ever fire for a real press - swallowing the short press and, worse,
+ * blocking the factory reset that RECOVERY.md points users at. It is gone. A
+ * held key now always means a finger, and both outcomes always fire.
+ *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -20,7 +32,6 @@
 
 #include "ble_bonds.h"
 #include "config.h"
-#include "improv_serial.h"
 #include "log.h"
 #include "settings.h"
 #include "wifi_ui.h"
@@ -46,10 +57,6 @@ enum class St { Idle, Confirming, Pressed };
 St s_state = St::Idle;
 uint32_t s_edgeMs = 0;
 uint32_t s_lastProgressMs = 0;
-// Latched for the duration of one hold: an Improv provisioning client owns this
-// pin, so the hold must not fire. Cleared when the key is released, which is
-// also when it is safe to warn about it again.
-bool s_sessionOwnsPin = false;
 
 void doFactoryResetAndReboot() {
   BR_LOGW(kTag, "FACTORY RESET: wiping all bonds and settings");
@@ -57,18 +64,6 @@ void doFactoryResetAndReboot() {
   settings::clearAll();
   delay(200);
   ESP.restart();
-}
-
-bool dtrClaimedThisHold() {
-  // Same DTR-sharing rule the factory-reset hold already uses: a browser or
-  // serial tool that is mid-IMPROV handshake keeps DTR low for the whole
-  // provisioning window, so any BOOT press during that window belongs to the
-  // client, not to a finger. Returning true here lets the caller swallow the
-  // press; the improv module's own five-minute session window takes care of
-  // the timing.
-  if (!improv_serial::sessionActive()) return false;
-  s_sessionOwnsPin = true;
-  return true;
 }
 
 }  // namespace
@@ -86,14 +81,12 @@ void poll() {
       if (down) {
         s_state = St::Confirming;
         s_edgeMs = now;
-        s_sessionOwnsPin = false;
       }
       break;
 
     case St::Confirming:
       if (!down) {
         s_state = St::Idle;  // bounce, ignore
-        s_sessionOwnsPin = false;
       } else if (now - s_edgeMs >= kDebounceMs) {
         s_state = St::Pressed;
         s_edgeMs = now;  // restart the clock from the confirmed press
@@ -106,17 +99,12 @@ void poll() {
       if (!down) {
         const uint32_t held = now - s_edgeMs;
         s_state = St::Idle;
-        s_sessionOwnsPin = false;
         // Short press: open / refresh the 30-minute Wi-Fi window. Anything
         // under kShortPressMaxMs counts as a deliberate "I want the page"
         // tap, anything longer is the start of a factory-reset hold and the
         // user can still back out by releasing early.
         if (held < kShortPressMaxMs) {
-          if (dtrClaimedThisHold()) {
-            BR_LOGW(kTag, "short press ignored: an Improv provisioning client is using this port (DTR is wired to GPIO9)");
-          } else {
-            wifi_ui::triggerRejoin();
-          }
+          wifi_ui::triggerRejoin();
         } else {
           BR_LOGI(kTag, "press held %lu ms - released before factory reset (threshold is 5 s)",
                   (unsigned long)held);
@@ -124,22 +112,6 @@ void poll() {
         break;
       }
       if (now - s_edgeMs >= kFactoryHoldMs) {
-        // This board wires the USB-serial DTR line to GPIO9, so a browser that
-        // holds the port open - which is exactly what Improv provisioning does
-        // - pulls this pin low and looks identical to a finger on the key.
-        //
-        // A provisioning client sends its first frame within a second or so of
-        // opening the port, so by the time the five-second mark arrives we can
-        // tell the two apart. Once we can, the verdict is latched for the rest
-        // of the hold: the DTR line stays asserted for as long as the browser
-        // keeps the port, which can be minutes, and re-deciding every poll
-        // would wipe the board the moment the client went quiet.
-        if (!s_sessionOwnsPin && improv_serial::sessionActive()) {
-          s_sessionOwnsPin = true;
-          BR_LOGW(kTag, "hold ignored: an Improv provisioning client is using this port (DTR is wired to GPIO9)");
-        }
-        if (s_sessionOwnsPin) break;
-
         doFactoryResetAndReboot();  // never returns
         break;
       }
