@@ -698,6 +698,7 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
       <span class="official-status warning" slot="not-allowed">设备连接需要 HTTPS 或 localhost。</span>
      </esp-web-install-button>
      <p class="official-status" id="officialStatus" role="status">正在加载 ESP Web Tools…</p>
+     <p class="official-status" id="manifestVersionNote" role="status"></p>
     </div>
     <div class="native-help"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg><span><strong>串口选择时点“取消”也不用自己处理。</strong> 官方组件会显示“No port selected”，继续提供数据线检查、常见 USB 转串口驱动链接和 Try Again。</span></div>
     <div class="boot-help"><strong>MiRemoteBridge 特有提示：</strong>如果官方窗口提示设备 Wi-Fi 已关闭，短按开发板 <b>BOOT</b> 打开 30 分钟配置窗口后重试；不要长按 5 秒，长按会清除设置和蓝牙配对。</div>
@@ -966,6 +967,8 @@ window.MRB_CONFIG = Object.assign({
   const tool = $("deviceTool");
   const button = $("officialConnectBtn");
   const status = $("officialStatus");
+  const versionNote = $("manifestVersionNote");
+  const versionCache = new Map();
   const envStatus = $("environmentStatus");
   const retry = $("retryTools");
   const fullCard = $("fullModeCard");
@@ -1038,6 +1041,25 @@ window.MRB_CONFIG = Object.assign({
     status.className = "official-status" + (kind ? " " + kind : "");
   };
 
+  // 点"连接设备"之前先告诉用户这次会装哪个版本：跟官方组件各读各的，官方
+  // 组件自己弹的对话框不受影响，这里只是我们自己多读一遍 manifest.json 的
+  // version 字段提前显示。清单地址不变就用缓存，不用每次 update() 都重新下载。
+  function showManifestVersion(manifestUrl) {
+    if (!manifestUrl) { versionNote.textContent = ""; return; }
+    if (versionCache.has(manifestUrl)) {
+      versionNote.textContent = versionCache.get(manifestUrl);
+      return;
+    }
+    versionNote.textContent = "";
+    fetch(manifestUrl).then(r => r.json()).then(json => {
+      const text = json && json.version ? ("本次将安装 / 更新到：" + (json.name || "MiRemoteBridge") + " " + json.version) : "";
+      versionCache.set(manifestUrl, text);
+      if (activeManifest() === manifestUrl) versionNote.textContent = text;
+    }).catch(() => {
+      // 读不到就不显示，官方组件自己那份弹窗里的版本号不受影响。
+    });
+  }
+
   const applyManifest = () => {
     const manifest = activeManifest();
     if (manifest) {
@@ -1072,6 +1094,7 @@ window.MRB_CONFIG = Object.assign({
     const manifest = activeManifest();
     button.disabled = !env.ok || !ready || !manifest;
     envStatus.textContent = !env.ok ? env.text : ready ? env.text : "正在加载 ESP Web Tools 10.4.0…";
+    showManifestVersion(manifest);
 
     if (!env.ok) setStatus(env.text, "warning");
     else if (!ready) setStatus("正在加载 ESP Web Tools 10.4.0…");

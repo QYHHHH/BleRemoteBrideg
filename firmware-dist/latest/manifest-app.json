@@ -1,7 +1,6 @@
 {
   "name": "MiRemoteBridge",
   "version": "v0.0.7b",
-  "home_assistant_domain": "remote",
   "new_install_prompt_erase": false,
   "builds": [
     {

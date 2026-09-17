@@ -176,7 +176,8 @@ jobs:
               return {
                   "name": "MiRemoteBridge",
                   "version": v,
-                  "home_assistant_domain": "remote",
+                  # 没有 home_assistant_domain：这不是 ESPHome 设备，加了字段
+                  # esp-web-tools 会在装完后弹"Add to Home Assistant"，没意义。
                   "funding_url": f"https://github.com/{repo}",
                   "new_install_prompt_erase": False,
                   "builds": [{"chipFamily": "ESP32-C3", "parts": parts}],
@@ -256,7 +257,6 @@ jobs:
               return {
                   "name": "MiRemoteBridge",
                   "version": v,
-                  "home_assistant_domain": "remote",
                   "new_install_prompt_erase": False,
                   "builds": [{"chipFamily": "ESP32-C3", "parts": parts}],
               }
