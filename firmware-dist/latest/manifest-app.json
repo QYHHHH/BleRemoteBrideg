@@ -1,0 +1,17 @@
+{
+  "name": "MiRemoteBridge",
+  "version": "v0.0.7b",
+  "home_assistant_domain": "remote",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32-C3",
+      "parts": [
+        {
+          "path": "MiRemoteBridge-v0.0.7b-app.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}

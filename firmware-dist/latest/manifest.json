@@ -1,0 +1,29 @@
+{
+  "name": "MiRemoteBridge",
+  "version": "v0.0.7b",
+  "home_assistant_domain": "remote",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32-C3",
+      "parts": [
+        {
+          "path": "MiRemoteBridge-v0.0.7b-bootloader.bin",
+          "offset": 0
+        },
+        {
+          "path": "MiRemoteBridge-v0.0.7b-partitions.bin",
+          "offset": 32768
+        },
+        {
+          "path": "MiRemoteBridge-v0.0.7b-boot-app0.bin",
+          "offset": 57344
+        },
+        {
+          "path": "MiRemoteBridge-v0.0.7b-app.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}
