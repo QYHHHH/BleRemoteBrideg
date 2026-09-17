@@ -1,6 +1,6 @@
 # MiRemoteBridge - 打 tag 自动编译并发布固件
 #
-#   git tag v0.0.5 && git push origin v0.0.5     # 正常路径
+#   git tag v0.0.6 && git push origin v0.0.6     # 正常路径
 #   或 Actions 里手动跑，填版本号（会顺带创建这个 tag）
 #
 # 出三个东西：
@@ -11,11 +11,12 @@
 # 另外三个几十 KB 的小文件（bootloader / partitions / boot_app0）是第 3 项
 # 分块 manifest 的零件，不是给用户单独下载的固件。
 #
-# 产出的文件名是契约，改之前先看 index.html:476 —— 它用 /\.merged\.bin$/
-# 从 latest release 里挑固件，挑不到就把「官方最新固件」按钮置灰。所以全片
-# 镜像必须以 .merged.bin 结尾，而且 release 里只能有一个文件匹配这个后缀。
-# （以后要加 USB CDC 变体，别再叫 *.merged.bin，叫 -cdc.full.bin，
-#   并在「编译」这步复制一份带 -DARDUINO_USB_CDC_ON_BOOT=1 的构建。）
+# 改文件名要同步两处：manifest 是用下面的名字拼出来的，而网页
+# （index.html 的 MRB_CONFIG.releaseManifest）只认这份 manifest 里的
+# name / version / builds，它自己不猜文件名。
+# 全片镜像继续叫 .merged.bin 只是给人用 esptool 手工刷时一眼认出来。
+# （以后要加 USB CDC 变体：叫 -cdc.full.bin，并在「编译」这步复制一份
+#   带 -DARDUINO_USB_CDC_ON_BOOT=1 的构建。）
 #
 # 版本号：写 firmware/MiRemoteBridge/version_local.h（config.h 会优先包含它），
 # 与本地 scripts\build.ps1 -Version 是同一个机制。AGENTS.md 要求发布版的
@@ -30,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号，例如 v0.0.5（会创建这个 tag）'
+        description: '版本号，例如 v0.0.6（会创建这个 tag）'
         required: true
         type: string
 
@@ -151,6 +152,9 @@ jobs:
 
           # 分块写（0x0 / 0x8000 / 0xe000 / 0x10000）而不是整片镜像：
           # 整片镜像在 0x9000 的 nvs 区间是 0xFF 填充，刷下去等于清配置。
+          # 注意：index.html 收到 manifest 后会强制把 new_install_prompt_erase
+          # 改回 true，所以弹窗里「擦除」默认勾着 —— 分块只让「不擦」成为可能，
+          # 保不保得住还得用户在弹窗里取消那个勾。
           manifest = {
               "name": "MiRemoteBridge",
               "version": v,
