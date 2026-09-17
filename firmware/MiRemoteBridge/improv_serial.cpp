@@ -397,12 +397,26 @@ void handleCommand(uint8_t command, const uint8_t *data, size_t len) {
       // Serial dialect: "report your current state". (The BLE dialect uses the
       // same number for "flash an LED so the user can tell which device this
       // is"; this board's two LEDs carry link meaning, so nothing flashes.)
+      //
+      // The result that follows MUST carry this command's own number, not
+      // 0x01. The spec calls byte 1 of an RPC result "the command being
+      // responded to", and improv-wifi-serial-sdk enforces it: the client
+      // keeps one pending-RPC slot and drops any result whose command byte
+      // does not match, logging "Received result for command X but expected
+      // Y". That matters here more than anywhere else, because this result is
+      // the ONLY way a client learns nextUrl from an already-provisioned
+      // device - requestCurrentState() awaits it and otherwise hangs until its
+      // timeout, taking the whole handshake down with it. Sending 0x01 is what
+      // made esp-web-tools lose its Wi-Fi entry the moment the board joined a
+      // network: with the radio off the client returns early and never waits
+      // for this packet, so the bug stayed invisible until the device was
+      // actually provisioned.
       sendState(s_state);
       {
         char url[40];
         if (deviceUrl(url, sizeof(url))) {
           const char *out[1] = {url};
-          sendResult(kCmdWifiSettings, out, 1);
+          sendResult(kCmdIdentify, out, 1);
         }
       }
       break;

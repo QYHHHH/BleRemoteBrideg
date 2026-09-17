@@ -60,3 +60,30 @@
   另有一个早期的 `build/rts_probe.py` 留在 `build/`（该目录被 gitignore，
   只在开发机上存在，不要当依据引用）。
   详见 [`TESTING.md`](TESTING.md) §5.3.2。
+
+## Improv 串口配网陷阱
+
+- **RPC 结果的第 1 个字节必须是"被回应的那条命令"，不是 `0x01`。** 规范原文是
+  *the command being responded to*；`improv-wifi-serial-sdk`（esp-web-tools 的依赖）
+  只维护**一个** pending RPC 槽，命令号对不上就把结果丢掉，并打
+  `Received result for command X but expected Y`。
+  本项目 `0x02`（`REQUEST_CURRENT_STATE`）曾经回的是 `0x01`，于是出现一个
+  **只在配网成功后才会现形**的故障：
+
+  | 设备状态 | SDK 的 `requestCurrentState()` | 结果 |
+  | --- | --- | --- |
+  | `0x02` AUTHORIZED（未配网） | 直接 `resolve([])` 返回，**根本不等这个包** | 一切正常，配网页有"连接 Wi-Fi" |
+  | `0x04` PROVISIONED（已配网） | 改成 `await` 这个结果（要从它第一个字符串取 `nextUrl`） | 结果被丢 → 等到 1500 ms 超时 → `initialize()` 抛异常 |
+
+  `initialize()` 一抛，esp-web-tools 就把 `_client` 置成 `null`，走
+  `_renderDashboardNoImprov()`，页面上**只剩"Install"和"Logs & Console"，
+  "连接 Wi-Fi"整个入口消失**。
+
+  ⇒ 症状是"**配网能用，配完就再也进不去**"，非常容易误判成"连上 Wi-Fi 就把串口
+  协议关了"。协议一直在跑，是回复的编号错了；同一份固件在配网前测什么都正常。
+  取证脚本：`tests/tools/improv_probe.py` —— 按 `0x02 → 0x03 → 0x07` 走一遍客户端
+  初始化序列，逐条打印状态包与 RPC 结果的命令号；先关着射频探一次，再 `wifi on`
+  探一次，**两次的编号都必须等于请求的命令号**。
+- **`new_install_improv_wait_time: 0` 是另一条歧路**：manifest 里写 0，esp-web-tools
+  会直接跳过 Improv、连握手都不发，症状和上面一模一样但和固件无关。本项目 manifest
+  没写这个字段，默认 1500 ms。
