@@ -226,7 +226,12 @@ function Invoke-BridgeBuild {
     Write-Host ''
 
     $logPath = Join-Path $Paths.BuildDir 'last-build.log'
-    & $Paths.Cli @arguments 2>&1 | Tee-Object -FilePath $logPath
+    # Out-Host, not a bare Tee-Object: Tee-Object passes every line it logs on
+    # down the pipeline, and in a function that pipeline *is* the return value.
+    # `return 0` then arrived as the last element of an Object[] of build
+    # output, so test.ps1's `if ($code -ne 0)` compared an array to 0, got the
+    # non-zero lines back, and reported HOST CHECKS FAILED after a clean build.
+    & $Paths.Cli @arguments 2>&1 | Tee-Object -FilePath $logPath | Out-Host
     $code = $LASTEXITCODE
 
     if ($code -ne 0) {
