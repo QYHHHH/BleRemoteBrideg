@@ -293,6 +293,34 @@ jobs:
         run: |
           V="$VERSION"
           {
+            echo "**MiRemoteBridge** makes your PC see a Bluetooth remote as an ordinary Bluetooth keyboard, on an ESP32-C3 board that costs about \$5."
+            echo
+            echo "Project site — flashing, Wi-Fi setup and key remapping all happen in the browser: <https://qyhhhh.github.io/BleRemoteBrideg/>"
+            echo
+            echo "## What it does"
+            echo
+            echo "- **Standard Bluetooth HID.** The PC pairs with a plain keyboard + media-control device. No driver, no companion app, no admin rights, nothing written to the registry, nothing for anti-cheat or antivirus to trip over."
+            echo "- **Xiaomi Bluetooth Remote 2 Pro (RC003): all 13 keys**, including the ones Windows cannot read on its own — the board converts them to standard HID before sending them on. Remote battery level is reported too."
+            echo "- **Learning mode for other BLE remotes.** Press a key, the board records its raw code, then bind whatever shortcut you want (verified with China Mobile CMCC_Voice_Remote)."
+            echo "- **Three remote slots**, each keeping its own key mapping, stored on the board."
+            echo "- **Remapping in the browser.** Single keys, modifier combos, media and system actions; the key you press lights up live over WebSocket; Bluetooth link, Wi-Fi window and free heap on the same page. The page is fully offline and self-contained, in English or 中文."
+            echo "- **Browser install and Wi-Fi provisioning** through ESP Web Tools and Improv Wi-Fi on the project site; the app-only update keeps your Wi-Fi, mappings and pairings."
+            echo "- **Local and quiet.** Keys are translated on the board and forwarded over Bluetooth; the config page Wi-Fi only opens inside a 30-minute window you start with the BOOT button; no telemetry."
+            echo
+            echo "Verified on Windows 10 / 11 with the RC003 and CMCC_Voice_Remote. Linux and macOS are not verified; iOS is not supported."
+            echo
+            echo "## 功能"
+            echo
+            echo "- **标准蓝牙 HID**：电脑连上的就是一个普通蓝牙键盘 + 媒体控制设备。不装驱动、不装软件、不要管理员权限、不改注册表，也不碰游戏反作弊和杀毒软件。"
+            echo "- **小米蓝牙遥控器 2 Pro（RC003）13 键全支持**，包括 Windows 自己识别不了的特殊键——由开发板转成标准 HID 再发给电脑，同时上报遥控器电量。"
+            echo "- **第三方 BLE 遥控器学习模式**：按一个键就记下原始码，再绑定你要的快捷键（已实测中国移动 CMCC_Voice_Remote）。"
+            echo "- **3 个遥控器槽位**，各自保存按键映射，存在开发板上。"
+            echo "- **在浏览器里改键**：单键、组合键、媒体与系统动作；按下的键通过 WebSocket 实时高亮；蓝牙连接、Wi-Fi 窗口、堆内存同页可见。页面完全离线自包含，中英文可切。"
+            echo "- **网页烧录与配网**：官网走 ESP Web Tools + Improv Wi-Fi；「仅升级 APP」会保留 Wi-Fi、按键映射和蓝牙配对。"
+            echo "- **本地、安静**：按键在板上转换后走蓝牙转发；配置页的 Wi-Fi 只在你按 BOOT 打开的 30 分钟窗口里开放；没有任何遥测。"
+            echo
+            echo "已实测 Windows 10 / 11 + RC003 + CMCC_Voice_Remote；Linux / macOS 未验证，iOS 不支持。"
+            echo
             echo "## 刷哪个"
             echo
             echo "| 你的情况 | 下这个文件 | 说明 |"
