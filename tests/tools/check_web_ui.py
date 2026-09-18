@@ -32,14 +32,17 @@ from cdp import CHROME, Cdp, find_page, fresh_profile, launch_chrome  # noqa: E4
 from web_ui_preview import ROOT, demo_html  # noqa: E402
 
 # The check watches the packed gzip assets that are stored in flash, rather than
-# the larger source page. The 24 KiB ceiling is a tripwire for accidental asset
-# growth; low runtime heap and partial TCP writes are handled by the firmware's
+# the larger source page. The ceiling is a tripwire for accidental asset growth;
+# low runtime heap and partial TCP writes are handled by the firmware's
 # streaming path and are not fixed by an artificially tight page-size number.
-FLASH_BUDGET = 24000
+# Raised from 24000 when the page became bilingual: the Chinese override
+# dictionary is a deliberate ~5 KB, so the old number would have failed every
+# run rather than catching anything.
+FLASH_BUDGET = 28000
 
 # How many assertions TESTS is expected to report. A drop means assertions were
 # deleted or silently stopped running - both worth failing over.
-EXPECTED_CHECKS = 161
+EXPECTED_CHECKS = 170
 
 TESTS = r"""(async () => {
   const results=[];
@@ -48,12 +51,12 @@ TESTS = r"""(async () => {
   assert(S.on && S.ok,'initial API load');
   assert($('hostRepair').hidden&&$('remoteRepair').hidden,'both repair notices hidden normally');
   __demo.status.hostRepairRequired=true;await load();
-  assert(!$('hostRepair').hidden&&$('hostRepair').textContent.includes('请在 Windows 删除 Mi Remote Bridge 后重新添加'),'stale computer key tells the user to re-add it in Windows');
+  assert(!$('hostRepair').hidden&&$('hostRepair').textContent.includes('Remove Mi Remote Bridge in Windows and add it again'),'stale computer key tells the user to re-add it in Windows');
   assert(!document.querySelector('#hostRepair button'),'the computer notice has no button to press');
   assert(__demo.calls.every(c=>c.path!=='/api/host-pairing'),'nothing ever posts to the removed host-pairing endpoint');
   __demo.status.hostRepairRequired=false;__demo.status.remoteRepairRequired=true;await load();
   assert($('hostRepair').hidden&&!$('remoteRepair').hidden,'the remote notice shows independently of the computer one');
-  assert($('remoteRepair').textContent.includes('遥控器配对信息已失效，已停止自动连接。如果要继续使用，请让遥控器进入配对模式，然后从附近设备中选择。'),'remote notice carries the exact instruction');
+  assert($('remoteRepair').textContent.includes("The remote's pairing data is no longer valid, so automatic reconnection has stopped. To keep using it, put the remote into pairing mode and pick it from the nearby devices."),'remote notice carries the exact instruction');
   wsMessage({type:'status',...__demo.status});
   assert(!$('remoteRepair').hidden,'the notice stays latched across a status heartbeat');
   $('repairRemote').onclick();
@@ -85,10 +88,10 @@ TESTS = r"""(async () => {
   assert($('memPct').textContent==='50.0%','heartbeat updates used heap percentage');
   assert($('ver').textContent.includes('v0.0.1'),'compact heartbeat preserves version and build stamp');
   online(false);
-  assert($('pW').textContent.includes('已断开')&&$('pW').classList.contains('off'),'board shows web control disconnected');
+  assert($('pW').textContent.includes('disconnected')&&$('pW').classList.contains('off'),'board shows web control disconnected');
   assert($('uiReset').disabled&&document.querySelector('#k40 button').disabled,'disconnect locks all mutation controls');
   wsClosed({code:1006});assert(S.wsTimer!==null,'unexpected socket loss schedules automatic reconnect');clearTimeout(S.wsTimer);S.wsTimer=null;
-  S.claimed=true;wsClosed({code:1006});assert(S.wsTimer===null&&$('offWhy').textContent.includes('被另一网页接管'),'claimed socket does not reconnect');
+  S.claimed=true;wsClosed({code:1006});assert(S.wsTimer===null&&$('offWhy').textContent.includes('Another page took control'),'claimed socket does not reconnect');
   let reconnects=0,claimed=false,oldConnect=connectWS;connectWS=m=>{reconnects++;claimed=m};$('pW').click();connectWS=oldConnect;
   assert(reconnects===1&&claimed,'board connection pill manually reclaims control');
   assert(!$('memState').textContent.includes('5'),'disconnect removes live update claim');online(true);
@@ -97,7 +100,7 @@ TESTS = r"""(async () => {
   delete __demo.status.fwVersion;delete __demo.status.buildTime;await load();
   assert($('ver').textContent==='','no stale stamp when firmware omits it');
   __demo.status.fwVersion='v0.0.1';__demo.status.buildTime='Sep 12 2026 12:56:33';await load();
-  __demo.status.battery=-1;await load();assert($('slots').textContent.includes('电量未读取'),'missing live battery is not displayed as cached percentage');__demo.status.battery=97;await load();
+  __demo.status.battery=-1;await load();assert($('slots').textContent.includes('Battery not read'),'missing live battery is not displayed as cached percentage');__demo.status.battery=97;await load();
   await slotAction('select',1);
   assert(selectedSlot===1&&$('grid').hidden,'select slot activates generic remote page');
   await slotAction('add',1);
@@ -122,7 +125,7 @@ TESTS = r"""(async () => {
   assert(document.querySelectorAll('#rmArt [data-r]').length===13,'13 remote hotspots');
   assert(fmt(cur(0x3E))==='Ctrl + Win','runtime voice mode wins over static table');
   const voice=S.e[0x3E];S.e[0x3E]={raw:0x3E,kind:0,mod:0,key:0,cons:0};
-  assert(fmt(cur(0x3E)).indexOf('\u4e0d\u8f6c\u53d1')>=0,'disabled mode does not fall back');
+  assert(fmt(cur(0x3E)).indexOf('Not forwarded')>=0,'disabled mode does not fall back');
   S.e[0x3E]=voice;
   S.load=true;btns();openEd(0x28);
   assert(!$('ed').open && document.querySelector('#k40 button').disabled,'refresh blocks editing');
@@ -164,7 +167,7 @@ TESTS = r"""(async () => {
   openEd(0x28);$('key').value='5';__demo.fault='write';await save();
   assert($('ed').open && !$('edE').hidden && S.b[0x28].key===4,'HTTP error keeps editor open');
   __demo.fault='mismatch';await save();
-  assert($('ed').open && $('edE').textContent.indexOf('\u4e0d\u4e00\u81f4')>=0,'readback mismatch rejected');
+  assert($('ed').open && $('edE').textContent.indexOf('does not match')>=0,'readback mismatch rejected');
   __demo.fault=null;$('ed').close();
   __demo.fault='offline';await load();
   assert(!S.on && !$('off').hidden,'offline shows stale-data notice');
@@ -174,10 +177,10 @@ TESTS = r"""(async () => {
   __demo.fault=null;await load();
   __demo.status.remoteName='<img src=x onerror=alert(1)> "test"';
   __demo.status.battery=-1;__demo.status.hostConnected=false;await load();
-  assert(!$('h2').querySelector('img') && $('h1').textContent.indexOf('\u7b49\u5f85\u4e3b\u673a')>=0,'remote name is text, not HTML');
-  assert($('pB').lastChild.textContent==='\u7535\u91cf\u672a\u77e5','unknown battery not fabricated');
+  assert(!$('h2').querySelector('img') && $('h1').textContent.indexOf('waiting for host')>=0,'remote name is text, not HTML');
+  assert($('pB').lastChild.textContent==='Battery unknown','unknown battery not fabricated');
   __demo.status.remoteConnected=false;await load();
-  assert($('h1').textContent.indexOf('\u7b49\u5f85\u9065\u63a7\u5668')>=0,'remote disconnection state');
+  assert($('h1').textContent.indexOf('Waiting for the remote')>=0,'remote disconnection state');
   __demo.status.remoteName='\u5c0f\u7c73\u84dd\u7259\u8bed\u97f3\u9065\u63a7\u5668';__demo.status.battery=97;
   __demo.status.hostConnected=true;__demo.status.remoteConnected=true;await load();
   $('resetAll').click();$('rdC').click();
@@ -216,6 +219,22 @@ TESTS = r"""(async () => {
   assert(KEYS.every(k=>{const s=states($('k'+k[0]));return s.live!==s.base;}),'every card lights up while held');
   assert(KEYS.every(k=>{const s=states($('k'+k[0]));return s.sel!==s.base;}),'every card marks the key being edited');
   assert(!document.querySelector('img[src^=http]'),'no remote assets');
+  // Bilingual UI. English is the authored source and the default; ZH is an
+  // override layer, so a missing entry must fall back rather than render a key.
+  // Switching repaints in place - the round trip back to English proves the
+  // cached originals survive, which is what the dictionary deliberately omits.
+  assert(LI===0&&document.documentElement.lang==='en','page defaults to English');
+  assert($('repoLink').getAttribute('href')==='https://github.com/QYHHHH/BleRemoteBrideg'&&$('siteLink').getAttribute('href')==='https://qyhhhh.github.io/BleRemoteBrideg/','top bar links to the real repository and project site');
+  assert(document.querySelectorAll('.slot .slot-line .slot-link').length===3&&document.querySelectorAll('.slot .slot-line .slot-battery').length===3,'slot link state and battery share one row');
+  const enCard=$('k40').querySelector('b').textContent;
+  setLang(1);
+  assert(LI===1&&document.documentElement.lang==='zh','switching sets the Chinese document language');
+  assert($('k40').querySelector('b').textContent==='确定键','JS-rendered key cards follow the language');
+  assert($('rdY').textContent==='确认恢复','authored markup follows the language');
+  assert(fmt({kind:0}).indexOf('不转发')>=0,'runtime status strings follow the language');
+  assert(pick(CSL(),233,'')==='音量 +','select option labels follow the language');
+  setLang(0);
+  assert($('k40').querySelector('b').textContent===enCard&&$('rdY').textContent==='Confirm restore','switching back restores the authored English');
   return {passed:results.length,checks:results};
 })()"""
 

@@ -14,10 +14,10 @@
 #include <pgmspace.h>
 
 static const char kIndexHtml[] PROGMEM = R"rawliteral(<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><title>MiRemoteBridge 按键映射</title>
+<meta name="color-scheme" content="light"><title>MiRemoteBridge Key Mapping</title>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--line:#e6e8ec;--ink:#252931;--mut:#78818e;--blue:#1674ed;--soft:#edf5ff;--ok:#328564;--warn:#aa6d22}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
@@ -125,33 +125,33 @@ select{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;borde
 @media(max-width:900px){.workspace{grid-template-columns:1fr}.board{display:grid;grid-template-columns:150px 1fr;gap:0 16px}.board svg{grid-row:1/7;height:250px}.board h2{grid-column:2}.memory{grid-column:1/-1}.hero{flex-direction:row}.grid{grid-template-columns:minmax(0,1fr) 170px minmax(0,1fr)}}
 @media(max-width:620px){.grid{grid-template-columns:1fr 1fr}.rm{grid-row:1}.rm .body{margin:-110px -40px}.hero{flex-wrap:wrap}.hero .t{flex-basis:100%}.board{display:block}.board svg{height:210px}}
 main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:stretch}.mapping-panel{padding:16px;display:flex;flex-direction:column;min-height:min(790px,calc(100vh - 118px))}.mapping-panel .head{margin-bottom:14px}.grid{grid-template-columns:minmax(0,1fr) 230px minmax(0,1fr);gap:12px;align-items:center;flex:1}.col{align-self:stretch;justify-content:space-around;gap:12px;padding:12px 0}.k button{min-height:60px;padding:8px 10px;line-height:1.4}.k .r1,.k .act{font-size:13px}.k .ed{display:inline}.rm{padding:0;margin:0;border:0;flex-direction:column;gap:12px;align-self:center}.rm .body{width:132px;height:540px;transform:scale(.86);margin:-37.8px -9.24px}.cap{font-size:11px;text-align:center}.side{display:flex;flex-direction:column;gap:14px;height:100%}
-.rack{padding:14px}.rack-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.rack-heading span{font-size:12px}.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.slot{display:flex;flex-direction:column;align-items:start;gap:8px;text-align:left;padding:13px 11px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;min-width:0}.slot.selected{background:#edf5ff;border-color:#82b7f6;box-shadow:inset 0 3px #1674ed}.slot strong{font-size:18px}.slot-index,.slot-battery,.slot-link{font-size:12px;color:var(--mut)}.slot-link.linked{color:var(--ok)}.slot-wake{font-size:11px;color:#906b34}.slot-id{font-size:11px;color:var(--mut);word-break:break-all}.rack-actions{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px}.rack-actions>div{flex:1;font-size:12px}.rack-actions small{display:block;color:var(--mut);margin-top:3px}.rack-actions .btn{padding:7px 10px}
+.rack{padding:14px}.rack-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.rack-heading span{font-size:12px}.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.slot{display:flex;flex-direction:column;align-items:start;gap:8px;text-align:left;padding:13px 11px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;min-width:0}.slot.selected{background:#edf5ff;border-color:#82b7f6;box-shadow:inset 0 3px #1674ed}.slot strong{font-size:18px}.slot-index,.slot-battery,.slot-link{font-size:12px;color:var(--mut)}.slot-link.linked{color:var(--ok)}.slot-line{display:flex;align-items:baseline;gap:4px 8px;flex-wrap:wrap;width:100%;min-width:0}.slot-line .slot-battery{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.slot-battery .ico{width:13px;height:13px;margin-right:3px;vertical-align:-2px}.slot-wake{font-size:11px;color:#906b34}.slot-id{font-size:11px;color:var(--mut);word-break:break-all}.rack-actions{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:14px}.rack-actions>div{flex:1;font-size:12px}.rack-actions small{display:block;color:var(--mut);margin-top:3px}.rack-actions .btn{padding:7px 10px}
 .side .board{display:block;flex:1 0 auto;position:relative;align-content:start;padding:16px}.board>h2{margin-bottom:14px}.board>#pH,.board>#pW,.board>#pF{float:right;margin:0 0 0 6px}.board-body{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(140px,.8fr);gap:16px;align-items:stretch}.hardware{display:flex;gap:14px;align-items:center}.board .hardware svg{width:220px;height:300px;flex:none;margin:0}.legend{flex:1;min-width:0}.board .legend p{display:block;margin:0;padding:11px 0;border-bottom:1px solid #edf0f3;font-size:13px;line-height:1.7}.board .legend p:last-child{border-bottom:0}.board .memory{border-top:0;border-left:1px solid var(--line);padding:10px 0 10px 16px;margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;grid-column:auto}.memory h3{align-self:stretch;text-align:left;margin-bottom:8px}.memory strong{font-size:18px}.board .memory p{font-size:10px;margin:7px 0;line-height:1.7}.memory small{font-size:11px;line-height:1.6}.board .memory #memDetail{white-space:pre-line}
 .empty-remote{min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;color:var(--mut)}.empty-remote h2{color:var(--ink)}.empty-remote p{font-size:12px}.empty-remote small{font-size:10px}.empty-icon{font-size:32px;color:#86a8cf;border:1px dashed #c2d5e9;border-radius:14px;padding:6px 24px}.learn-banner{border-bottom:1px solid var(--line);padding:8px 0 16px}.learn-banner b,.learn-banner span{display:block}.learn-banner span{font-size:13px;color:var(--mut);margin-top:4px}.simulator{display:flex;align-items:center;gap:8px;margin:15px 0;flex-wrap:wrap}.simulator>span{font-size:12px;color:var(--mut)}.learned-keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.learned-key button{min-height:60px;padding:8px 10px}.learned-key.heard{background:#edf5ff;border-color:#1674ed}#slotName{display:block;width:100%;margin-top:6px;padding:9px;min-height:40px;border:1px solid #dce1e8;border-radius:7px;background:#fff;color:var(--ink);font:inherit}
-#wires path{stroke:#a6afbc;stroke-opacity:.85;stroke-width:1}#memRing{--used:0%;width:94px;height:94px;flex:none;border-radius:50%;background:conic-gradient(#327ede var(--used),#e9eef2 0);padding:8px;margin:2px 0 10px;display:grid;place-items:center;transform:rotate(-90deg)}#memRing>div{width:100%;height:100%;border-radius:50%;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(90deg)}#memRing b{font:600 19px Consolas,monospace;color:var(--ink)}#memRing span{font-size:10px;color:var(--mut);margin-top:1px}#memTotal{margin-top:3px}.repo-placeholder{font-size:12px;color:var(--blue);padding:4px 9px;border:1px dashed #b9d1ee;border-radius:6px;text-decoration:none;cursor:default}.mapping-panel .head span,.memory #memDetail,.memory #memState{font-size:11px!important}
+#wires path{stroke:#a6afbc;stroke-opacity:.85;stroke-width:1}#memRing{--used:0%;width:94px;height:94px;flex:none;border-radius:50%;background:conic-gradient(#327ede var(--used),#e9eef2 0);padding:8px;margin:2px 0 10px;display:grid;place-items:center;transform:rotate(-90deg)}#memRing>div{width:100%;height:100%;border-radius:50%;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(90deg)}#memRing b{font:600 19px Consolas,monospace;color:var(--ink)}#memRing span{font-size:10px;color:var(--mut);margin-top:1px}#memTotal{margin-top:3px}.top-link{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line);border-radius:7px;color:#526172;text-decoration:none}.top-link:hover{background:var(--soft);color:var(--blue);border-color:#bcd8f8}.mapping-panel .head span,.memory #memDetail,.memory #memState{font-size:11px!important}
 @media(max-width:1250px) and (min-width:901px){main{padding:12px}.workspace{gap:12px}.mapping-panel{padding:12px}.grid{grid-template-columns:minmax(0,1fr) 184px minmax(0,1fr);gap:8px}.k .r1,.k .act{font-size:12px}.board-body{grid-template-columns:minmax(0,1fr) 145px;gap:10px}.board .hardware svg{width:170px;height:260px}.rack-actions{flex-wrap:wrap}.rack-actions>div{flex-basis:100%}}
 @media(max-width:900px){.workspace{grid-template-columns:1fr}.mapping-panel{min-height:560px}.side{height:auto}.board-body{grid-template-columns:minmax(0,1.65fr) minmax(155px,1fr)}.board .hardware svg{width:180px}.grid{grid-template-columns:minmax(0,1fr) 140px minmax(0,1fr)}}
 @media(max-width:560px){main{padding:10px}.grid{grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr);gap:5px}.rm .body{transform:scale(.64);margin:-97.2px -23.76px}.slots{gap:5px}.slot-link{font-size:10px}.slot strong{font-size:14px}.slot-index,.slot-battery{font-size:9px}.board-body{grid-template-columns:1fr}.board .memory{border-left:0;border-top:1px solid var(--line);padding:12px 0}.k .r1,.k .act{font-size:11px}.k .ed,.k .tg{display:none}}
 .mobile-map-fix{display:none}@media(max-width:560px){.mapping-panel{padding:12px}.grid{grid-template-columns:minmax(0,1fr) 94px minmax(0,1fr);gap:5px;align-items:center}.grid #colL{grid-column:1;grid-row:1}.grid .rm{grid-column:2;grid-row:1;flex-direction:column;justify-content:center;gap:6px;padding:0;border:0;margin:0}.grid #colR{grid-column:3;grid-row:1}.grid .col{grid-row:1;gap:8px;padding:0;align-self:stretch;justify-content:space-around}.grid .rm .body{transform:scale(.64);margin:-97.2px -23.76px}.grid .cap{text-align:center;font-size:8px}.grid .k button{min-height:58px;padding:6px}.grid .k .r1,.grid .k .act{font-size:10px}.grid .k .ico{width:13px;height:13px}}
 </style></head><body>
-<div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span><a class="repo-placeholder" aria-disabled="true">代码仓库 · 地址待填写</a>
-<span class="pill" id="pR"><i></i><span>遥控器…</span></span><span class="pill" id="pH"><i></i><span>被控蓝牙…</span></span><button class="pill off" id="pW" type="button" title="点击重新连接并夺回控制权"><i></i><span>网页控制连接中…</span></button><span class="pill" id="pF" title="Wi-Fi 开启后 30 分钟自动关闭，按开发板 BOOT 键可重新打开"><i></i><span>Wi-Fi…</span></span><span class="pill" id="pB"><i></i><span>电量…</span></span></div>
+<div class="bar"><b>MiRemoteBridge</b><span class="mono mut">RC003 CONTROL</span> <span class="mono mut" id="ver"></span><span class="grow"></span><a class="top-link" id="siteLink" href="https://qyhhhh.github.io/BleRemoteBrideg/" target="_blank" rel="noopener" data-tt="siteT" data-tl="siteT" title="Project site" aria-label="Project site"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18"/></svg></a><a class="top-link" id="repoLink" href="https://github.com/QYHHHH/BleRemoteBrideg" target="_blank" rel="noopener" data-tt="repoT" data-tl="repoT" title="Source code on GitHub" aria-label="Source code on GitHub"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19c-4.3 1.3-4.3-2-6-2m12 5v-3.3a2.9 2.9 0 0 0-.8-2.2c2.8-.3 5.8-1.4 5.8-6.3A4.9 4.9 0 0 0 18.7 6a4.6 4.6 0 0 0-.1-4s-1.1-.3-3.5 1.3a12 12 0 0 0-6.4 0C6.3 1.7 5.2 2 5.2 2a4.6 4.6 0 0 0-.1 4A4.9 4.9 0 0 0 3.8 10.2c0 4.9 3 6 5.8 6.3a2.9 2.9 0 0 0-.8 2.2V22"/></svg></a><button class="pill" id="lang" type="button"></button>
+<span class="pill" id="pR"><i></i><span data-t="pR0">Remote…</span></span><span class="pill" id="pH"><i></i><span data-t="pH0">Host BT…</span></span><button class="pill off" id="pW" type="button" data-tt="pWt" title="Click to reconnect and take back control"><i></i><span data-t="pW0">Connecting…</span></button><span class="pill" id="pF" data-tt="pFt" title="Wi-Fi closes automatically 30 minutes after it opens; press BOOT on the board to reopen it"><i></i><span data-t="pF0">Wi-Fi…</span></span><span class="pill" id="pB"><i></i><span data-t="pB0">Battery…</span></span></div>
 <main>
-<div class="warn" id="off" hidden><span>无法连接桥接器<span id="offWhy">（连接断开，自动重连中）</span></span><button id="retry">重新连接</button></div>
-<div class="card hero"><div class="t"><h1 id="h1">正在读取设备状态</h1><p id="h2">与桥接器连接同一路由器，即可配置。</p><p id="diag" aria-live="polite"></p></div>
-<button class="btn p" id="goMap">编辑按键映射</button><button class="btn" id="refresh">刷新</button></div>
-<div class="workspace"><section><div class="head"><h2>按键映射</h2><span class="mut" style="font-size:11px"><span id="cnt">—</span> 项自定义 · 点卡片或遥控器按键编辑</span></div>
+<div class="warn" id="off" hidden><span><span data-t="offT">Cannot reach the bridge</span><span id="offWhy" data-t="offWhy"> (disconnected, reconnecting)</span></span><button id="retry" data-t="retry">Reconnect</button></div>
+<div class="card hero"><div class="t"><h1 id="h1" data-t="h1a">Reading device status</h1><p id="h2" data-t="h2a">Join the same router as the bridge to configure it.</p><p id="diag" aria-live="polite"></p></div>
+<button class="btn p" id="goMap" data-t="goMap">Edit key mapping</button><button class="btn" id="refresh" data-t="refresh">Refresh</button></div>
+<div class="workspace"><section><div class="head"><h2 data-t="mapT">Key mapping</h2><span class="mut" style="font-size:11px"><span id="cnt">—</span><span data-t="cntSuf"> custom · click a card or a remote key to edit</span></span></div>
 <div class="card" style="padding:14px 16px"><div class="grid" id="grid">
 <svg id="wires" aria-hidden="true"></svg>
 <div class="col" id="colL"></div>
-<div class="rm"><div class="body" id="rmArt"></div><div class="cap"><b>RC003</b>13 键 · 标准蓝牙 HID<br>蓝色为正在编辑的按键</div></div>
+<div class="rm"><div class="body" id="rmArt"></div><div class="cap"><b>RC003</b><span data-t="cap1">13 keys · standard Bluetooth HID</span><br><span data-t="cap2">Blue marks the key being edited</span></div></div>
 <div class="col" id="colR"></div>
 </div></div>
-<div class="card foot"><div><h3>按下即转发，松开即释放</h3><p>保存后立即生效并写入 NVS，重启后保留。不改变遥控器原有转发时序。</p></div>
-<div class="bs"><button class="btn" id="refresh2">刷新映射</button><button class="btn d" id="resetAll" disabled>恢复默认映射</button></div></div>
-<p class="note">本固件不区分单击、双击与长按，不提供音频或宏。恢复默认仅清除自定义绑定，保留串口 <b>map</b> 基础模式与蓝牙配对。</p>
-</section><aside class="card board"><h2>开发板 · CORE-ESP32</h2>
-<svg viewBox="0 0 270 240" role="img" aria-label="开发板正面示意：左侧 RST 和 D5，右侧 BOOT 和 D4，底部 USB">
+<div class="card foot"><div><h3 data-t="footT">Press forwards, release releases</h3><p data-t="footP">Takes effect immediately and is written to NVS, so it survives a reboot. The remote's own forwarding timing is unchanged.</p></div>
+<div class="bs"><button class="btn" id="refresh2" data-t="refresh2">Refresh mapping</button><button class="btn d" id="resetAll" disabled data-t="resetAll">Restore default mapping</button></div></div>
+<p class="note" data-t="note">This firmware does not distinguish single, double or long press, and offers no audio or macros. Restoring defaults only clears custom bindings; the serial <b>map</b> base modes and Bluetooth pairings are kept.</p>
+</section><aside class="card board"><h2 data-t="boardT">Board · CORE-ESP32</h2>
+<svg viewBox="0 0 270 240" role="img" data-tl="boardArt" aria-label="Board front view: RST and D5 on the left, BOOT and D4 on the right, USB at the bottom">
 <rect x="83" y="5" width="104" height="230" rx="5" fill="#087aab"/>
 <path d="M93 39V16h13v22h15V16h14v22h15V16h24v29" fill="none" stroke="#45b0d5" stroke-width="5"/>
 <path d="M85 57v160m100-160v160" stroke="#e1c994" stroke-width="7" stroke-dasharray="5 7"/>
@@ -161,65 +161,166 @@ main{max-width:none;padding:14px 20px}.workspace{display:grid;grid-template-colu
 <g fill="none" stroke="#78818e"><path d="M92 163H50m128 0h42M94 201H50m126 0h44"/></g>
 <g fill="#252931" font-size="12" font-family="sans-serif"><text x="17" y="167">RST</text><text x="222" y="167">BOOT</text><text x="20" y="205">D5</text><text x="222" y="205">D4</text></g><text x="135" y="226" text-anchor="middle" font-size="9" fill="#404b50">USB</text>
 </svg>
-<p><b>D5 · 主机 / GPIO13</b><br>呼吸：未连接；快闪：HID 未就绪；常亮：键盘 HID 已就绪。</p>
-<p><b>D4 · 遥控器 / GPIO12</b><br>呼吸：等待或搜索；快闪：连接中；常亮：就绪。按住遥控器按键时熄灭。</p>
-<p><b>RST</b>：硬件复位重启。</p>
-<p><b>BOOT / GPIO9</b>：<b>短按打开配置页（30 分钟窗口）</b>，窗口期内再次短按会重置倒计时；<b>长按 5 秒清除全部设置与蓝牙配对并重启</b>。窗口结束后 Wi-Fi 自动关闭。</p>
-<div class="memory"><h3>实时堆内存</h3><strong id="memFree">—</strong><p id="memDetail">等待设备数据</p><small id="memState">随设备状态更新</small></div>
+<p data-t="d5"><b>D5 · Host / GPIO13</b><br>Breathing: not connected. Fast blink: HID not ready. Solid: HID ready.</p>
+<p data-t="d4"><b>D4 · Remote / GPIO12</b><br>Breathing: waiting or scanning. Fast blink: connecting. Solid: ready. Dark while a key is held.</p>
+<p data-t="rst"><b>RST</b>: hardware reset.</p>
+<p data-t="boot"><b>BOOT / GPIO9</b>: <b>short press opens the config page (30-min window)</b>; pressing again restarts the countdown. <b>Hold 5 s to erase all settings and pairings, then reboot.</b> Wi-Fi shuts off when the window ends.</p>
+<div class="memory"><h3 data-t="memT">Live heap</h3><strong id="memFree">—</strong><p id="memDetail" data-t="memWait">Waiting for device data</p><small id="memState" data-t="memState0">Updates with device status</small></div>
 </aside></div></main>
-<div class="closed-overlay" id="closedOverlay" hidden><div class="closed-card" role="alertdialog" aria-labelledby="closedTitle"><h2 id="closedTitle">Wi-Fi 已关闭</h2><p>30 分钟配置窗口已结束，开发板已断开 Wi-Fi，网页无法再连接。</p><div class="big">BOOT</div><p>按一下开发板上的 <b>BOOT</b> 按键，Wi-Fi 会重新打开 30 分钟。<br>按完等几秒，再刷新本页即可继续。</p></div></div>
+<div class="closed-overlay" id="closedOverlay" hidden><div class="closed-card" role="alertdialog" aria-labelledby="closedTitle"><h2 id="closedTitle" data-t="closedT">Wi-Fi is off</h2><p data-t="closedP1">The 30-minute configuration window has ended. The board has shut down Wi-Fi, so this page can no longer reach it.</p><div class="big">BOOT</div><p data-t="closedP2">Press the <b>BOOT</b> key on the board and Wi-Fi reopens for 30 minutes.<br>Wait a few seconds, then reload this page to continue.</p></div></div>
 <dialog id="ed"><form id="edF">
-<div class="dh"><div><h2 id="edT">编辑按键</h2><span class="mono mut" id="edC"></span></div><button type="button" class="btn" id="edX" aria-label="关闭">✕</button></div>
+<div class="dh"><div><h2 id="edT" data-t="edT">Edit key</h2><span class="mono mut" id="edC"></span></div><button type="button" class="btn" id="edX" data-tl="close" aria-label="Close">✕</button></div>
 <div class="db">
-<label class="f">动作类型<select id="kind"><option value="1">键盘快捷键</option><option value="2">媒体 / 系统控制</option><option value="0">恢复基础映射</option></select></label>
-<div id="kb"><p class="mut" style="font-size:12px;margin-bottom:7px">修饰键 · 可多选，支持仅修饰键组合</p><div class="ms" id="mods"></div>
-<label class="f">主键<select id="key"></select></label></div>
-<div id="cs" hidden><label class="f">媒体 / 系统动作<select id="cons"></select></label></div>
-<div class="pv"><small>保存后输出</small><span id="pv">—</span></div>
+<label class="f"><span data-t="kindL">Action type</span><select id="kind"><option value="1" data-t="kind1">Keyboard shortcut</option><option value="2" data-t="kind2">Media / system control</option><option value="0" data-t="kind0">Restore base mapping</option></select></label>
+<div id="kb"><p class="mut" style="font-size:12px;margin-bottom:7px" data-t="modsHint">Modifiers · multi-select, modifier-only combos supported</p><div class="ms" id="mods"></div>
+<label class="f"><span data-t="mainKey">Main key</span><select id="key"></select></label></div>
+<div id="cs" hidden><label class="f"><span data-t="mediaAct">Media / system action</span><select id="cons"></select></label></div>
+<div class="pv"><small data-t="pvT">Output after saving</small><span id="pv">—</span></div>
 <p class="hint" id="edH"></p><p class="hint" id="edLink" aria-live="polite"></p><div class="err" id="edE" hidden></div>
 </div>
-<div class="da"><button type="button" class="rs" id="clr">恢复此键默认</button><button type="button" class="btn" id="edC2">取消</button><button type="submit" class="btn p" id="sv">保存映射</button></div>
+<div class="da"><button type="button" class="rs" id="clr" data-t="clr">Restore this key's default</button><button type="button" class="btn" id="edC2" data-t="cancel">Cancel</button><button type="submit" class="btn p" id="sv" data-t="sv">Save mapping</button></div>
 </form></dialog>
-<dialog id="rd"><div class="dh"><h2>恢复默认映射？</h2></div>
-<div class="db"><h3>将清除全部自定义绑定，包括通过串口设置的绑定。</h3><p class="hint">保留返回、电源、语音键的串口基础模式；不删除蓝牙配对，不重启桥接器。此操作不可撤销。</p><div class="err" id="rdE" hidden></div></div>
-<div class="da"><button class="btn" id="rdC">取消</button><button class="btn d" id="rdY">确认恢复</button></div></dialog>
+<dialog id="rd"><div class="dh"><h2 data-t="rdT">Restore default mapping?</h2></div>
+<div class="db"><h3 data-t="rdH">This clears every custom binding, including ones set over serial.</h3><p class="hint" data-t="rdP">The serial base modes for the back, power and voice keys are kept; Bluetooth pairings are not removed and the bridge does not restart. This cannot be undone.</p><div class="err" id="rdE" hidden></div></div>
+<div class="da"><button class="btn" id="rdC" data-t="cancel">Cancel</button><button class="btn d" id="rdY" data-t="rdY">Confirm restore</button></div></dialog>
 <div id="toast" role="status" hidden></div>
 <script>
 
 'use strict';
 var $=function(i){return document.getElementById(i)};
-var KEYS=[[0x66,'电源键','⏻','L','p1'],[0x52,'上键','↑','L','du'],[0x50,'左键','←','L','dl'],[0xF1,'返回键','↩','L','p3'],[0x4A,'主页键','⌂','L','p4'],[0x65,'菜单键','☰','L','p5'],
-[0x3E,'语音键','MIC','R','p2'],[0x4F,'右键','→','R','dr'],[0x28,'确定键','OK','R','do'],[0x51,'下键','↓','R','dd'],[0x80,'音量 +','＋','R','p6'],[0x81,'音量 −','－','R','p7'],[0x35,'TV 键','TV','R','p8']];
+/* Bilingual UI. English is the source text and lives inline - in the markup as
+   real text carrying a data-t key, and in the code as the second argument to
+   t(). ZH below holds only the Chinese overrides, so no string is written
+   twice and a missing translation silently falls back to English rather than
+   rendering a bare key. English is the default; the choice is per browser. */
+var ZH={
+title:'MiRemoteBridge 按键映射',siteT:'官网',repoT:'在 GitHub 上查看源码',close:'关闭',cancel:'取消',done:'完成',
+pR0:'遥控器…',pH0:'被控蓝牙…',pW0:'网页控制连接中…',pF0:'Wi-Fi…',pB0:'电量…',
+pWt:'点击重新连接并夺回控制权',pFt:'Wi-Fi 开启后 30 分钟自动关闭，按开发板 BOOT 键可重新打开',
+offT:'无法连接桥接器',offWhy:'（连接断开，自动重连中）',retry:'重新连接',
+h1a:'正在读取设备状态',h2a:'与桥接器连接同一路由器，即可配置。',goMap:'编辑按键映射',refresh:'刷新',
+mapT:'按键映射',cntSuf:' 项自定义 · 点卡片或遥控器按键编辑',
+cap1:'13 键 · 标准蓝牙 HID',cap2:'蓝色为正在编辑的按键',
+footT:'按下即转发，松开即释放',footP:'保存后立即生效并写入 NVS，重启后保留。不改变遥控器原有转发时序。',
+refresh2:'刷新映射',resetAll:'恢复默认映射',
+note:'本固件不区分单击、双击与长按，不提供音频或宏。恢复默认仅清除自定义绑定，保留串口 <b>map</b> 基础模式与蓝牙配对。',
+boardT:'开发板 · CORE-ESP32',boardArt:'开发板正面示意：左侧 RST 和 D5，右侧 BOOT 和 D4，底部 USB',
+d5:'<b>D5 · 主机 / GPIO13</b><br>呼吸：未连接；快闪：HID 未就绪；常亮：键盘 HID 已就绪。',
+d4:'<b>D4 · 遥控器 / GPIO12</b><br>呼吸：等待或搜索；快闪：连接中；常亮：就绪。按住遥控器按键时熄灭。',
+rst:'<b>RST</b>：硬件复位重启。',
+boot:'<b>BOOT / GPIO9</b>：<b>短按打开配置页（30 分钟窗口）</b>，窗口期内再次短按会重置倒计时；<b>长按 5 秒清除全部设置与蓝牙配对并重启</b>。窗口结束后 Wi-Fi 自动关闭。',
+memT:'实时堆内存',memWait:'等待设备数据',memState0:'随设备状态更新',
+closedT:'Wi-Fi 已关闭',closedP1:'30 分钟配置窗口已结束，开发板已断开 Wi-Fi，网页无法再连接。',
+closedP2:'按一下开发板上的 <b>BOOT</b> 按键，Wi-Fi 会重新打开 30 分钟。<br>按完等几秒，再刷新本页即可继续。',
+edT:'编辑按键',kindL:'动作类型',kind1:'键盘快捷键',kind2:'媒体 / 系统控制',kind0:'恢复基础映射',
+modsHint:'修饰键 · 可多选，支持仅修饰键组合',mainKey:'主键',mediaAct:'媒体 / 系统动作',pvT:'保存后输出',
+clr:'恢复此键默认',sv:'保存映射',
+rdT:'恢复默认映射？',rdH:'将清除全部自定义绑定，包括通过串口设置的绑定。',
+rdP:'保留返回、电源、语音键的串口基础模式；不删除蓝牙配对，不重启桥接器。此操作不可撤销。',rdY:'确认恢复',
+k102:'电源键',k82:'上键',k80:'左键',k241:'返回键',k74:'主页键',k101:'菜单键',k62:'语音键',
+k79:'右键',k40:'确定键',k81:'下键',k128:'音量 +',k129:'音量 −',k53:'TV 键',
+kbNone:'无主键（仅修饰键）',
+cs233:'音量 +',cs234:'音量 −',cs226:'静音',cs205:'播放 / 暂停',cs181:'下一曲',cs182:'上一曲',
+cs547:'媒体主页',cs548:'浏览器后退',cs48:'电源',cs50:'睡眠',
+md16:'右 Ctrl',md32:'右 Shift',md64:'右 Alt',md128:'右 Win',
+waiting:'等待读取',noFwd:'不转发（基础模式已关闭）',media:'媒体 0x',hid:'HID 0x',noAction:'未指定动作',
+edit:'编辑 ',aKey:'按键',tgBase:'基础',tgCustom:'自定义',editArrow:'编辑 ›',raw:'RAW 0x',
+memDisc:'连接已断开 · 数值为上次采样',wsOn:'网页控制已连接',wsOff:'网页控制已断开',
+wsOnT:'网页已获得开发板控制权',wsOffT:'点击重新连接并夺回控制权',
+takenOver:'控制权已被另一网页接管，点击可夺回',dropped:'连接意外断开，正在自动重连',claiming:'正在请求控制权...',
+badKeys:'按键数据不完整',
+avail:' 可用',memMin:'历史最低 ',memLargest:' · 最大连续块 ',memUpd:'更新于 ',memEvery:' · 约 5 秒更新',
+memTotal:'总堆内存 ',memTotalUnk:'总堆内存未知',memPctUnk:'已使用内存比例未知',memUsedA:'已使用堆内存 ',memUsed:'已使用',
+wkSwitch:'正在切换遥控器，请按一下任意键唤醒。',wkDiscover:'正在发现服务，请按一下任意键唤醒。',
+wkConnect:'正在连接，请按一下任意键唤醒。',wkScan:'正在搜索，请按一下任意键唤醒。',
+unknown:'未知',rOn:'遥控器已连接',rOff:'遥控器未连接',hOn:'被控蓝牙已连接',hRepair:'电脑需重新配对',hOff:'被控蓝牙未连接',
+batUnk:'电量未知',bat:'电量 ',
+st1:'RC003 已就绪',st2:'遥控器已连接，等待主机',st3:'等待遥控器连接',
+sd1:'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。',sd2:'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。',
+sd3:'已有映射仍会保留，也可以现在先配置。',
+wfDots:'Wi-Fi…',wfAlways:'Wi-Fi 常开',wfCloses:'Wi-Fi 关闭 ',wfOff:'Wi-Fi 已关闭',
+refreshed:'已刷新',connFailNet:'连接失败，请确认设备和本机在同一网络',connFail:'连接失败',
+dr0:'移除自定义，使用串口基础模式',
+dh0:'仅移除此键的自定义绑定。返回、电源、语音键会使用现有串口模式，而非恢复出厂。',
+dh1:'按下与松开实时转发。Win 在 Apple 主机上对应 Command；语音键仅作普通按键，不传输麦克风音频。',
+timeout:'请求超时，结果未确认，请刷新核对',aborted:'连接中断，结果未确认，请刷新核对',
+needKey:'请至少选择一个修饰键或主键。',noAck:'设备未确认保存',mismatch:'回读结果与提交不一致，保存未确认',
+restoredKey:'已恢复此键基础映射',saved:'映射已保存并回读确认',
+noAckR:'设备未确认恢复',stillCustom:'仍存在自定义绑定，恢复未确认',cleared:'已清除全部自定义绑定',
+rackT:'遥控器配置',rackSub:'3 个槽位 · 独立保存',rackFoot:'按下即转发，松开即释放',rackFootSub:'快捷键修改后自动保存',
+addDev:'添加设备',delDev:'删除设备',uiReset:'恢复默认设置',
+hrT:'电脑配对密钥已失效',hrP:'请在 Windows 删除 Mi Remote Bridge 后重新添加。开发板会继续广播，添加完成后本提示会自动消失。',
+rrT:'遥控器需要重新配对',rrP:'遥控器配对信息已失效，已停止自动连接。如果要继续使用，请让遥控器进入配对模式，然后从附近设备中选择。',
+pickRemote:'选择遥控器',
+seT:'编辑按键',seSub:'修改后自动保存到当前槽位',keyName:'按键名称',sKind0:'不转发',modsHint2:'修饰键 · 可多选',delKey:'删除此按键',
+remoteN:'遥控器 0',badSlots:'槽位数据不完整',
+slotIdx:'槽位 0',xiaomiPreset:' · 小米预设',linked:'● 遥控器已连接',connecting:'○ 正在连接',
+notEnabled:'○ 未启用',notAdded:'○ 未添加设备',batNR:'电量未读取',
+devId:'设备标识：',wake:'请按一下遥控器唤醒',savedOn:' · 设置保存在开发板',
+mapSuffix:' · 按键映射',clickEdit:'点击按键编辑 · 自动保存',
+learnT:'逐个按下遥控器按键',learnP:'最多记录 128 个按键，点击卡片设置快捷键。',keyHex:'按键 0x',
+stillRunning:'操作仍在进行，请稍候',
+pairT:'选择遥控器',pairP:'进入配对模式后选择设备，按信号强度排序。搜索阶段显示设备名和 MAC；SN/CEMI/CMIIT 若设备通过标准 BLE 设备信息服务提供，会在连接后显示。',
+rescan:'刷新搜索结果',unnamed:'未命名设备',searching:'正在搜索，请稍后刷新',snHint:'SN/CEMI/CMIIT：连接后读取',
+confirmAdd:'请先让新遥控器进入配对模式。开始搜索并添加到当前槽位？',connectingSel:'正在连接所选遥控器',
+confirmDel:'删除当前槽位的设备配对？同时删除该槽位已发现按键和快捷键，之后可重新添加。',
+seSaveHint:'修改后保存到开发板',seSaved:'已保存到开发板',confirmDelKey:'删除这个已发现的按键及其快捷键？',
+rdT2:'重置当前槽位快捷键？',rdH2:'保留设备配对和已发现按键。'};
+var LI=0;try{LI=localStorage.getItem('mrb.lang')==='zh'?1:0}catch(e){}
+function t(k,e){return LI&&ZH[k]||e}
+/* The first pass caches the authored English off each element, so switching
+   back does not need a second copy of it in the dictionary. innerHTML rather
+   than textContent because several strings carry <b> emphasis; every value is
+   a compile-time constant from ZH, never device or user data. */
+function applyT(){
+var w=function(a,rd,wr){Array.prototype.forEach.call(document.querySelectorAll('['+a+']'),function(e){
+var c='_'+a;if(e[c]===undefined)e[c]=rd(e);wr(e,t(e.getAttribute(a),e[c]))})};
+w('data-t',function(e){return e.innerHTML},function(e,v){e.innerHTML=v});
+w('data-tt',function(e){return e.title},function(e,v){e.title=v});
+w('data-tl',function(e){return e.getAttribute('aria-label')},function(e,v){e.setAttribute('aria-label',v)});
+document.documentElement.lang=LI?'zh':'en';document.title=t('title','MiRemoteBridge Key Mapping');
+$('lang').textContent=LI?'EN':'中文'}
+var KEYS=[[0x66,'Power','⏻','L','p1'],[0x52,'Up','↑','L','du'],[0x50,'Left','←','L','dl'],[0xF1,'Back','↩','L','p3'],[0x4A,'Home','⌂','L','p4'],[0x65,'Menu','☰','L','p5'],
+[0x3E,'Voice','MIC','R','p2'],[0x4F,'Right','→','R','dr'],[0x28,'OK','OK','R','do'],[0x51,'Down','↓','R','dd'],[0x80,'Volume +','＋','R','p6'],[0x81,'Volume −','－','R','p7'],[0x35,'TV','TV','R','p8']];
+function kn(k){return t('k'+k[0],k[1])}
 function icon(k){var p={p1:'M12 3v9 M6 5a9 9 0 1 0 12 0',p2:'M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0z M5 10v2a7 7 0 0 0 14 0v-2 M12 19v3',du:'m5 15 7-7 7 7',dd:'m5 9 7 7 7-7',dl:'m15 5-7 7 7 7',dr:'m9 5 7 7-7 7',do:'M20 12a8 8 0 1 0-16 0 8 8 0 0 0 16 0 M14 12a2 2 0 1 0-4 0 2 2 0 0 0 4 0',p3:'m14 5-7 7 7 7',p4:'m4 10 8-7 8 7v11H4z M9 21v-8h6v8',p5:'M4 6h16 M4 12h16 M4 18h16',p6:'M5 12h14 M12 5v14',p7:'M5 12h14',p8:'M5 6h14a2 2 0 0 1 2 2v11H3V8a2 2 0 0 1 2-2 M8 2l4 4 4-4'};return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="'+p[k[4]]+'"/></svg>'}
-var KB=[[0,'无主键（仅修饰键）'],[40,'Enter'],[41,'Esc'],[42,'Backspace'],[43,'Tab'],[44,'Space'],[79,'→'],[80,'←'],[81,'↓'],[82,'↑'],[54,','],[55,'.'],[56,'/'],[45,'-'],[46,'='],[47,'['],[48,']'],[51,';'],[52,"'"],[53,'`'],[57,'Caps Lock'],[73,'Insert'],[74,'Home'],[75,'Page Up'],[76,'Delete'],[77,'End'],[78,'Page Down']];
+var KB=[[0,'No main key (modifiers only)'],[40,'Enter'],[41,'Esc'],[42,'Backspace'],[43,'Tab'],[44,'Space'],[79,'→'],[80,'←'],[81,'↓'],[82,'↑'],[54,','],[55,'.'],[56,'/'],[45,'-'],[46,'='],[47,'['],[48,']'],[51,';'],[52,"'"],[53,'`'],[57,'Caps Lock'],[73,'Insert'],[74,'Home'],[75,'Page Up'],[76,'Delete'],[77,'End'],[78,'Page Down']];
 for(var i=0;i<26;i++)KB.push([4+i,String.fromCharCode(65+i)]);
 for(i=0;i<10;i++)KB.push([30+i,String((i+1)%10)]);
 for(i=0;i<12;i++)KB.push([58+i,'F'+(i+1)]);
-var CS=[[233,'音量 +'],[234,'音量 −'],[226,'静音'],[205,'播放 / 暂停'],[181,'下一曲'],[182,'上一曲'],[547,'媒体主页'],[548,'浏览器后退'],[48,'电源'],[50,'睡眠']];
-var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'右 Ctrl'],[32,'右 Shift'],[64,'右 Alt'],[128,'右 Win']];
+var CS=[[233,'Volume +'],[234,'Volume −'],[226,'Mute'],[205,'Play / Pause'],[181,'Next track'],[182,'Previous track'],[547,'Media home'],[548,'Browser back'],[48,'Power'],[50,'Sleep']];
+var MD=[[1,'Ctrl'],[2,'Shift'],[4,'Alt'],[8,'Win'],[16,'R-Ctrl'],[32,'R-Shift'],[64,'R-Alt'],[128,'R-Win']];
+/* Rebuilt per call so a language switch needs no cached copies: these feed both
+   the <select> option lists and the label lookups fmt() does. */
+function KBL(){return KB.map(function(x){return x[0]?x:[0,t('kbNone',x[1])]})}
+function CSL(){return CS.map(function(x){return [x[0],t('cs'+x[0],x[1])]})}
+function MDL(){return MD.map(function(x){return [x[0],t('md'+x[0],x[1])]})}
 var S={b:{},e:{},d:{},sel:0x28,cur:0,mods:0,on:false,ok:false,busy:false,poll:false,load:false,t:null,lastStatus:null,ws:null,pending:[],keyPress:undefined,wsRetry:0,wsTimer:null,wsOpened:false,claimed:false,switching:false,winState:'',winEnd:0};
 function hx(v){return v.toString(16).toUpperCase().padStart(2,'0')}
 function pick(l,v,d){for(var i=0;i<l.length;i++)if(l[i][0]===v)return l[i][1];return d}
-function fmt(a){if(!a)return '等待读取';if(a.kind===0)return '不转发（基础模式已关闭）';if(a.kind===2)return pick(CS,a.cons,'媒体 0x'+hx(a.cons));
-var p=[],i;for(i=0;i<MD.length;i++)if(a.mod&MD[i][0])p.push(MD[i][1]);
-if(a.key)p.push(pick(KB,a.key,'HID 0x'+hx(a.key)));return p.join(' + ')||'未指定动作'}
+function fmt(a){if(!a)return t('waiting','Waiting to read');if(a.kind===0)return t('noFwd','Not forwarded (base mode off)');if(a.kind===2)return pick(CSL(),a.cons,t('media','Media 0x')+hx(a.cons));
+var p=[],m=MDL(),i;for(i=0;i<m.length;i++)if(a.mod&m[i][0])p.push(m[i][1]);
+if(a.key)p.push(pick(KBL(),a.key,t('hid','HID 0x')+hx(a.key)));return p.join(' + ')||t('noAction','No action set')}
 function cur(r){return S.e[r]||S.b[r]||S.d[r]}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function toast(m){clearTimeout(S.t);$('toast').textContent=m;$('toast').hidden=false;S.t=setTimeout(function(){$('toast').hidden=true},3500)}
-function rmMark(inter){return KEYS.map(function(k){return '<'+(inter?'button type="button"':'span')+' class="rb '+k[4]+'"'+(inter?' data-r="'+k[0]+'" aria-label="编辑'+k[1]+'"':'')+'>'+icon(k)+'</'+(inter?'button':'span')+'>'}).join('')}
-$('rmArt').innerHTML=rmMark(true);
+function rmMark(inter){return KEYS.map(function(k){return '<'+(inter?'button type="button"':'span')+' class="rb '+k[4]+'"'+(inter?' data-r="'+k[0]+'" aria-label="'+esc(t('edit','Edit ')+kn(k))+'"':'')+'>'+icon(k)+'</'+(inter?'button':'span')+'>'}).join('')}
+function buildCards(){$('rmArt').innerHTML=rmMark(true);$('colL').innerHTML='';$('colR').innerHTML='';
 KEYS.forEach(function(k){var d=document.createElement('div');d.className='k';d.id='k'+k[0];
-d.innerHTML='<button type="button" data-r="'+k[0]+'" aria-label="编辑'+k[1]+'" disabled><span class="r1">'+icon(k)+' <b>'+esc(k[1])+'</b><span class="tg">基础</span></span><span class="r2"><span class="act">等待读取</span><span class="ed">编辑 ›</span></span></button>';
-$('col'+k[3]).appendChild(d)});
+d.innerHTML='<button type="button" data-r="'+k[0]+'" aria-label="'+esc(t('edit','Edit ')+kn(k))+'" disabled><span class="r1">'+icon(k)+' <b>'+esc(kn(k))+'</b><span class="tg">'+t('tgBase','Base')+'</span></span><span class="r2"><span class="act">'+t('waiting','Waiting to read')+'</span><span class="ed">'+t('editArrow','Edit ›')+'</span></span></button>';
+$('col'+k[3]).appendChild(d)})}
+buildCards();
 function opt(id,l){l.forEach(function(x){$(id).add(new Option(x[1],String(x[0])))});}
-opt('key',KB);opt('cons',CS);
-MD.forEach(function(m){var b=document.createElement('button');b.type='button';b.className='m';b.dataset.bit=m[0];b.textContent=m[1];b.setAttribute('aria-pressed','false');
+function resel(id,l){var e=$(id);if(!e)return;var v=e.value;e.innerHTML='';opt(id,l);if(v!=='')setSel(id,+v)}
+function remods(id){var c=$(id);if(!c)return;var m=MDL();Array.prototype.forEach.call(c.children,function(b){b.textContent=pick(m,+b.dataset.bit,b.textContent)})}
+opt('key',KBL());opt('cons',CSL());
+MDL().forEach(function(m){var b=document.createElement('button');b.type='button';b.className='m';b.dataset.bit=m[0];b.textContent=m[1];b.setAttribute('aria-pressed','false');
 b.onclick=function(){S.mods^=m[0];draft()};$('mods').appendChild(b)});
 function setSel(id,v){if(!Array.prototype.some.call($(id).options,function(o){return +o.value===v}))$(id).add(new Option('HID 0x'+hx(v),String(v)));$(id).value=String(v)}
 function btns(){var L=S.busy||S.load||S.slotBusy;Array.prototype.forEach.call(document.querySelectorAll('[data-r],[data-learned],#resetAll,#uiReset,#pairRemote,#deleteRemote,#repairRemote,#simulateBind,#simulateKey,#simulateRepeat,#slotEditor input,#slotEditor select,#slotEditor .m,#slotDelete'),function(e){e.disabled=!S.ok||!S.on||L});Array.prototype.forEach.call(document.querySelectorAll('[data-slot]'),function(e){e.disabled=!S.ok||!S.on||S.load});
 Array.prototype.forEach.call(document.querySelectorAll('#refresh,#refresh2'),function(e){e.disabled=L});Array.prototype.forEach.call(document.querySelectorAll('#kind,#key,#cons,.m'),function(e){e.disabled=!S.on||L});
 $('sv').disabled=!S.on||L;$('rdY').disabled=!S.on||L;$('clr').disabled=!S.on||L;$('edC2').disabled=S.busy;$('edX').disabled=S.busy}
-function online(v,why){S.on=v;if(!v)$('memState').textContent='连接已断开 · 数值为上次采样';$('off').hidden=v;var p=$('pW');if(p){p.className='pill '+(v?'ok':'off');p.lastChild.textContent=v?'网页控制已连接':'网页控制已断开';p.title=v?'网页已获得开发板控制权':'点击重新连接并夺回控制权'}btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
+function online(v,why){S.on=v;if(!v)$('memState').textContent=t('memDisc','Disconnected · values are the last sample');$('off').hidden=v;var p=$('pW');if(p){p.className='pill '+(v?'ok':'off');p.lastChild.textContent=v?t('wsOn','Web control connected'):t('wsOff','Web control disconnected');p.title=v?t('wsOnT','This page holds control of the board'):t('wsOffT','Click to reconnect and take back control')}btns();if(!v&&why){var w=$('offWhy');if(w)w.textContent=why;}}
 /* The socket is push-only from here on: a key going down and a slow status
 heartbeat, both a few dozen bytes. Every query and write goes over plain HTTP
 instead, because an HTTP response is framed by Content-Length and can carry the
@@ -243,13 +344,13 @@ if(typeof j.activeKey==='number')highlight(j.activeKey);return}
 if(j.type==='status'){const changed=!S.lastStatus||j.remoteConnected!==S.lastStatus.remoteConnected;stat(j);if(!S.on||S.slotBusy||changed)load();return}
 if(j.type==='claimed'){S.claimed=true;return}}
 function wsOpen(){S.wsRetry=0;S.wsOpened=true;S.claimed=false;load()}
-function wsClosed(e){var taken=S.claimed||(e&&e.code===4001);online(false,taken?'控制权已被另一网页接管，点击可夺回':'连接意外断开，正在自动重连');if(S.wsTimer)clearTimeout(S.wsTimer);S.wsTimer=null;if(!taken){var d=Math.min(8000,600*(S.wsRetry=(S.wsRetry||0)+1));S.wsTimer=setTimeout(function(){connectWS(false)},d)}}
+function wsClosed(e){var taken=S.claimed||(e&&e.code===4001);online(false,taken?t('takenOver','Another page took control — click to take it back'):t('dropped','Connection dropped, reconnecting'));if(S.wsTimer)clearTimeout(S.wsTimer);S.wsTimer=null;if(!taken){var d=Math.min(8000,600*(S.wsRetry=(S.wsRetry||0)+1));S.wsTimer=setTimeout(function(){connectWS(false)},d)}}
 function connectWS(manual){
 if(S.ws&&S.ws.readyState===1)return;
 /* No token to fetch any more - there is no auth. If the board is not currently
 running its 30-minute window, the upgrade fails fast and the closed handler
-shows "Wi-Fi 已关闭". A short press of the BOOT key on the board re-opens it. */
-if(manual){online(false,'正在请求控制权...');}
+shows "Wi-Fi is off". A short press of the BOOT key on the board re-opens it. */
+if(manual){online(false,t('claiming','Requesting control...'));}
 openSocket(manual).catch(function(){wsClosed();})}
 function openSocket(manual){
 return new Promise(function(resolve,reject){
@@ -261,10 +362,10 @@ S.ws=ws;resolve();
 ws.onopen=wsOpen;ws.onclose=wsClosed;ws.onerror=function(){};
 ws.onmessage=function(ev){var j=null;try{j=JSON.parse(ev.data)}catch(e){return}wsMessage(j)}})}
 function idx(l){var o={};(l||[]).forEach(function(a){o[a.raw]=a});return o}
-function apply(d){if(!Array.isArray(d.bindings)||!Array.isArray(d.defaults)||!Array.isArray(d.effective))throw Error('按键数据不完整');
+function apply(d){if(!Array.isArray(d.bindings)||!Array.isArray(d.defaults)||!Array.isArray(d.effective))throw Error(t('badKeys','Incomplete key data'));
 S.b=idx(d.bindings);S.d=idx(d.defaults);S.e=idx(d.effective);S.ok=true;render();if(typeof syncDefault==='function')syncDefault()}
 function render(){var n=0;KEYS.forEach(function(k){var r=k[0],c=$('k'+r),b=S.b[r];if(b)n++;
-c.className='k'+(b?' cus':'')+(r===S.sel?' sel':'');c.querySelector('.tg').textContent=b?'自定义':'基础';
+c.className='k'+(b?' cus':'')+(r===S.sel?' sel':'');c.querySelector('.tg').textContent=b?t('tgCustom','Custom'):t('tgBase','Base');
 c.querySelector('.act').textContent=fmt(cur(r))});
 Array.prototype.forEach.call($('rmArt').children,function(e){e.classList.toggle('sel',+e.dataset.r===S.sel)});
 var count=$('cnt');if(count)count.textContent=n;btns();drawWires()}
@@ -286,15 +387,15 @@ Array.prototype.forEach.call(document.querySelectorAll('.learned-key'),function(
 }
 function memory(j){function kb(n){return typeof n==='number'&&n>=0?(n/1024).toFixed(1)+' KiB':'—'}
 if(typeof j.heapFree!=='number')return;
-$('memFree').textContent=kb(j.heapFree)+' 可用';$('memDetail').textContent='历史最低 '+kb(j.heapMin)+' · 最大连续块 '+kb(j.heapLargest);$('memState').textContent='更新于 '+new Date().toLocaleTimeString()+' · 约 5 秒更新';var valid=typeof j.heapTotal==='number'&&j.heapTotal>0&&j.heapFree>=0&&j.heapFree<=j.heapTotal,used=valid?100*(j.heapTotal-j.heapFree)/j.heapTotal:null;if($('memRing')){$('memRing').style.setProperty('--used',used===null?'0%':used+'%');$('memPct').textContent=used===null?'—':used.toFixed(1)+'%';$('memTotal').textContent=valid?'总堆内存 '+kb(j.heapTotal):'总堆内存未知';$('memRing').setAttribute('aria-label',used===null?'已使用内存比例未知':'已使用堆内存 '+used.toFixed(1)+'%')}}
-function connectionHint(j){var e=$("diag"),s=String(j&&j.remoteState||""),t=S.switching?"正在切换遥控器，请按一下任意键唤醒。":s==="DISCOVERING"?"正在发现服务，请按一下任意键唤醒。":s==="CONNECTING"||s==="DIRECT"?"正在连接，请按一下任意键唤醒。":s==="SCANNING"||s==="BACKOFF"?"正在搜索，请按一下任意键唤醒。":"";e.textContent=t;e.className=t?"wake":""}function stat(j){S.lastStatus=j;memory(j);if(j.remoteId&&slots&&slots[selectedSlot])slots[selectedSlot].identity=j.remoteId;var rc=!!j.remoteConnected,h=!!j.hostConnected,hrep=!!j.hostRepairRequired,rrep=!!j.remoteRepairRequired;if($('hostRepair'))$('hostRepair').hidden=!hrep;if($('remoteRepair'))$('remoteRepair').hidden=!rrep;// Version and build stamp come from /api/status, i.e. from the running
+$('memFree').textContent=kb(j.heapFree)+t('avail',' free');$('memDetail').textContent=t('memMin','Lowest ever ')+kb(j.heapMin)+t('memLargest',' · largest block ')+kb(j.heapLargest);$('memState').textContent=t('memUpd','Updated ')+new Date().toLocaleTimeString()+t('memEvery',' · about every 5 s');var valid=typeof j.heapTotal==='number'&&j.heapTotal>0&&j.heapFree>=0&&j.heapFree<=j.heapTotal,used=valid?100*(j.heapTotal-j.heapFree)/j.heapTotal:null;if($('memRing')){$('memRing').style.setProperty('--used',used===null?'0%':used+'%');$('memPct').textContent=used===null?'—':used.toFixed(1)+'%';$('memTotal').textContent=valid?t('memTotal','Total heap ')+kb(j.heapTotal):t('memTotalUnk','Total heap unknown');$('memRing').setAttribute('aria-label',used===null?t('memPctUnk','Used memory ratio unknown'):t('memUsedA','Heap used ')+used.toFixed(1)+'%')}}
+function connectionHint(j){var e=$("diag"),s=String(j&&j.remoteState||""),m=S.switching?t('wkSwitch','Switching remote — press any key on it to wake it.'):s==="DISCOVERING"?t('wkDiscover','Discovering services — press any key on the remote to wake it.'):s==="CONNECTING"||s==="DIRECT"?t('wkConnect','Connecting — press any key on the remote to wake it.'):s==="SCANNING"||s==="BACKOFF"?t('wkScan','Searching — press any key on the remote to wake it.'):"";e.textContent=m;e.className=m?"wake":""}function stat(j){S.lastStatus=j;memory(j);if(j.remoteId&&slots&&slots[selectedSlot])slots[selectedSlot].identity=j.remoteId;var rc=!!j.remoteConnected,h=!!j.hostConnected,hrep=!!j.hostRepairRequired,rrep=!!j.remoteRepairRequired;if($('hostRepair'))$('hostRepair').hidden=!hrep;if($('remoteRepair'))$('remoteRepair').hidden=!rrep;// Version and build stamp come from /api/status, i.e. from the running
 // firmware, not from the generated page bytes - so it can never go stale.
 if(j.type!=='status'||Object.prototype.hasOwnProperty.call(j,'fwVersion')||Object.prototype.hasOwnProperty.call(j,'buildTime'))$('ver').textContent=(j.fwVersion||'')+(j.buildTime?' · build '+j.buildTime:'');
-var bat=(typeof j.battery==='number'&&j.battery>=0&&j.battery<=100)?j.battery+'%':'未知';
-function pill(id,on,t){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=t}
-pill('pR',rc,rc?'遥控器已连接':'遥控器未连接');pill('pH',h,h?'被控蓝牙已连接':hrep?'电脑需重新配对':'被控蓝牙未连接');pill('pB',bat!=='未知',bat==='未知'?'电量未知':'电量 '+bat);
-$('h1').textContent=(rc&&h)?'RC003 已就绪':(rc?'遥控器已连接，等待主机':'等待遥控器连接');
-$('h2').textContent=(rc&&h)?'蓝牙链路正常。点下方卡片或遥控器按键即可改绑。':(rc?'请在电脑或手机蓝牙设置里连接 Mi Remote Bridge。':'已有映射仍会保留，也可以现在先配置。');
+var known=typeof j.battery==='number'&&j.battery>=0&&j.battery<=100;
+function pill(id,on,s){var e=$(id);e.className='pill '+(on?'ok':'off');e.lastChild.textContent=s}
+pill('pR',rc,rc?t('rOn','Remote connected'):t('rOff','Remote not connected'));pill('pH',h,h?t('hOn','Host BT connected'):hrep?t('hRepair','PC must re-pair'):t('hOff','Host BT not connected'));pill('pB',known,known?t('bat','Battery ')+j.battery+'%':t('batUnk','Battery unknown'));
+$('h1').textContent=(rc&&h)?t('st1','RC003 ready'):(rc?t('st2','Remote connected, waiting for host'):t('st3','Waiting for the remote'));
+$('h2').textContent=(rc&&h)?t('sd1','Bluetooth link is up. Click a card below or a key on the remote to rebind it.'):(rc?t('sd2','Connect to Mi Remote Bridge from your PC or phone Bluetooth settings.'):t('sd3','Existing mappings are kept; you can configure them now if you like.'));
 connectionHint(j);if(typeof drawSlots==='function')drawSlots();
 if(typeof j.activeKey==='number')highlight(j.activeKey);applyWindow(j)}
 function pollWindow(){req('/api/window').then(applyWindow).catch(function(){})}
@@ -323,42 +424,42 @@ paintWindow()}
 function paintWindow(){
 if(S.winState==='on'&&Date.now()>=S.winEnd)S.winState='off';
 var p=$('pF'),txt,cls;
-if(!S.winState){cls='pill';txt='Wi-Fi…'}
-else if(S.winState==='ap'){cls='pill ok';txt='Wi-Fi 常开'}
-else if(S.winState==='on'){var rem=Math.max(0,Math.round((S.winEnd-Date.now())/1000)),m=Math.floor(rem/60),s=rem%60;cls='pill '+(rem<=60?'off':'ok');txt='Wi-Fi 关闭 '+m+':'+(s<10?'0':'')+s}
-else{cls='pill off';txt='Wi-Fi 已关闭'}
+if(!S.winState){cls='pill';txt=t('wfDots','Wi-Fi…')}
+else if(S.winState==='ap'){cls='pill ok';txt=t('wfAlways','Wi-Fi always on')}
+else if(S.winState==='on'){var rem=Math.max(0,Math.round((S.winEnd-Date.now())/1000)),m=Math.floor(rem/60),s=rem%60;cls='pill '+(rem<=60?'off':'ok');txt=t('wfCloses','Wi-Fi closes in ')+m+':'+(s<10?'0':'')+s}
+else{cls='pill off';txt=t('wfOff','Wi-Fi is off')}
 if(p){p.className=cls;p.lastChild.textContent=txt}
 var ov=$('closedOverlay');if(ov)ov.hidden=S.winState!=='off'}
 setInterval(paintWindow,1000);
 function load(manual){if(S.load||S.busy||$('ed').open||$('rd').open)return;S.load=true;const socket=S.ws;btns();
-return req('/api/slots').then(applySlots).then(function(){return req('/api/bindings')}).then(apply).then(function(){return req('/api/status')}).then(function(j){stat(j);online(socket===S.ws&&!!socket&&socket.readyState===1);if(manual)toast('已刷新')})
+return req('/api/slots').then(applySlots).then(function(){return req('/api/bindings')}).then(apply).then(function(){return req('/api/status')}).then(function(j){stat(j);online(socket===S.ws&&!!socket&&socket.readyState===1);if(manual)toast(t('refreshed','Refreshed'))})
 .catch(function(e){
-var m=(e&&e.message==='Failed to fetch')?'连接失败，请确认设备和本机在同一网络':((e&&e.message)||'连接失败');
+var m=(e&&e.message==='Failed to fetch')?t('connFailNet','Connection failed — check that the device and this computer are on the same network'):((e&&e.message)||t('connFail','Connection failed'));
 online(false,m);if(manual)toast(m)}).finally(function(){S.load=false;btns()})}
 function openEd(r){if(!S.ok||!S.on||S.busy||S.load)return;S.sel=r;S.cur=r;var a=cur(r)||{kind:1,mod:0,key:40,cons:233};S.mods=a.mod|0;
 $('kind').value=String(a.kind||0);setSel('key',a.key||0);setSel('cons',a.cons||233);
-$('edT').textContent='编辑 '+pick(KEYS.map(function(k){return [k[0],k[1]]}),r,'按键');$('edC').textContent='RAW 0x'+hx(r);
+$('edT').textContent=t('edit','Edit ')+pick(KEYS.map(function(k){return [k[0],kn(k)]}),r,t('aKey','key'));$('edC').textContent=t('raw','RAW 0x')+hx(r);
 $('edE').hidden=true;draft();render();$('ed').showModal()}
 function draft(){var k=+$('kind').value;$('kb').hidden=k!==1;$('cs').hidden=k!==2;
 Array.prototype.forEach.call(document.querySelectorAll('.m'),function(e){e.setAttribute('aria-pressed',String(!!(S.mods&+e.dataset.bit)))});
 var a={raw:S.cur,kind:k,mod:k===1?S.mods:0,key:k===1?+$('key').value:0,cons:k===2?+$('cons').value:0};
-$('pv').textContent=k===0?'移除自定义，使用串口基础模式':fmt(a);
-$('edH').textContent=k===0?'仅移除此键的自定义绑定。返回、电源、语音键会使用现有串口模式，而非恢复出厂。':'按下与松开实时转发。Win 在 Apple 主机上对应 Command；语音键仅作普通按键，不传输麦克风音频。'}
-function err(e){return e.name==='AbortError'?'请求超时，结果未确认，请刷新核对':e.message==='Failed to fetch'?'连接中断，结果未确认，请刷新核对':e.message}
+$('pv').textContent=k===0?t('dr0','Remove the custom binding and use the serial base mode'):fmt(a);
+$('edH').textContent=k===0?t('dh0',"Removes only this key's custom binding. The back, power and voice keys keep their current serial mode rather than reverting to factory settings."):t('dh1','Press and release are forwarded live. Win maps to Command on Apple hosts; the voice key acts as an ordinary key and carries no microphone audio.')}
+function err(e){return e.name==='AbortError'?t('timeout','Request timed out — the result is unconfirmed, refresh to check'):e.message==='Failed to fetch'?t('aborted','Connection dropped — the result is unconfirmed, refresh to check'):e.message}
 function same(a,b){return !!a&&a.kind===b.kind&&a.mod===b.mod&&a.key===b.key&&a.cons===b.cons}
 function save(){if(S.busy||!S.on)return Promise.resolve();var k=+$('kind').value;
 var a={raw:hx(S.cur),kind:k,mod:k===1?S.mods:0,key:k===1?+$('key').value:0,cons:k===2?+$('cons').value:0};
-if(k===1&&!a.mod&&!a.key){$('edE').textContent='请至少选择一个修饰键或主键。';$('edE').hidden=false;return Promise.resolve()}
+if(k===1&&!a.mod&&!a.key){$('edE').textContent=t('needKey','Select at least one modifier or a main key.');$('edE').hidden=false;return Promise.resolve()}
 S.busy=true;btns();$('edE').hidden=true;
 var q=Object.keys(a).map(function(x){return x+'='+a[x]}).join('&');
-return req('/api/set?'+q,'POST').then(function(j){if(j.ok!==true)throw Error('设备未确认保存');return req('/api/bindings')})
+return req('/api/set?'+q,'POST').then(function(j){if(j.ok!==true)throw Error(t('noAck','The device did not confirm the save'));return req('/api/bindings')})
 .then(function(d){apply(d);var got=S.b[k===0?parseInt(a.raw,16):S.cur];
-if(k===0?!!got:!same(got,{kind:k,mod:a.mod,key:a.key,cons:a.cons}))throw Error('回读结果与提交不一致，保存未确认');
-$('ed').close();toast(k===0?'已恢复此键基础映射':'映射已保存并回读确认')})
+if(k===0?!!got:!same(got,{kind:k,mod:a.mod,key:a.key,cons:a.cons}))throw Error(t('mismatch','Read-back does not match what was sent — the save is unconfirmed'));
+$('ed').close();toast(k===0?t('restoredKey',"This key's base mapping has been restored"):t('saved','Mapping saved and confirmed by read-back'))})
 .catch(function(e){$('edE').textContent=err(e);$('edE').hidden=false}).finally(function(){S.busy=false;btns()})}
 function reset(){if(S.busy||!S.on)return Promise.resolve();S.busy=true;btns();$('rdE').hidden=true;
-return req('/api/reset','POST').then(function(j){if(j.ok!==true)throw Error('设备未确认恢复');return req('/api/bindings')})
-.then(function(d){apply(d);if(d.bindings.length)throw Error('仍存在自定义绑定，恢复未确认');$('rd').close();toast('已清除全部自定义绑定')})
+return req('/api/reset','POST').then(function(j){if(j.ok!==true)throw Error(t('noAckR','The device did not confirm the restore'));return req('/api/bindings')})
+.then(function(d){apply(d);if(d.bindings.length)throw Error(t('stillCustom','Custom bindings remain — the restore is unconfirmed'));$('rd').close();toast(t('cleared','All custom bindings cleared'))})
 .catch(function(e){$('rdE').textContent=err(e);$('rdE').hidden=false}).finally(function(){S.busy=false;btns()})}
 document.addEventListener('click',function(e){var t=e.target.closest?e.target.closest('[data-r]'):null;if(t)openEd(+t.dataset.r)});
 $('edF').onsubmit=function(e){e.preventDefault();save()};
@@ -381,46 +482,58 @@ const legacy=document.createElement('div');legacy.hidden=true;document.body.appe
 legacy.append(document.querySelector('.hero'),document.querySelector('.foot'),document.querySelector('.note'),$('pR'),$('pB'));
 const board=document.querySelector('.board');side.append(board);board.prepend($('pH'),$('pW'),$('pF'));
 const boardTitle=board.querySelector('h2'), art=board.querySelector('svg'), memoryBox=board.querySelector('.memory');
-const ring=document.createElement('div');ring.id='memRing';ring.setAttribute('role','img');ring.innerHTML='<div><b id="memPct">—</b><span>已使用</span></div>';memoryBox.querySelector('h3').after(ring);const total=document.createElement('small');total.id='memTotal';$('memFree').after(total);
+const ring=document.createElement('div');ring.id='memRing';ring.setAttribute('role','img');ring.innerHTML='<div><b id="memPct">—</b><span data-t="memUsed">Used</span></div>';memoryBox.querySelector('h3').after(ring);const total=document.createElement('small');total.id='memTotal';$('memFree').after(total);
 const hardware=document.createElement('div');hardware.className='hardware';const legend=document.createElement('div');legend.className='legend';
 [...board.children].filter(e=>e.tagName==='P').forEach(e=>legend.append(e));hardware.append(art,legend);
 const boardBody=document.createElement('div');boardBody.className='board-body';boardBody.append(hardware,memoryBox);board.append(boardBody);
-const rack=document.createElement('section');rack.className='card rack';rack.innerHTML='<div class="rack-heading"><h2>遥控器配置</h2><span class="mut">3 个槽位 · 独立保存</span></div><div class="slots" id="slots"></div><div class="rack-actions"><div><b>按下即转发，松开即释放</b><small id="slotSummary">快捷键修改后自动保存</small></div><button class="btn" id="pairRemote">添加设备</button><button class="btn d" id="deleteRemote">删除设备</button><button class="btn d" id="uiReset">恢复默认设置</button></div>';
+const rack=document.createElement('section');rack.className='card rack';rack.innerHTML='<div class="rack-heading"><h2 data-t="rackT">Remote setup</h2><span class="mut" data-t="rackSub">3 slots · saved independently</span></div><div class="slots" id="slots"></div><div class="rack-actions"><div><b data-t="rackFoot">Press forwards, release releases</b><small id="slotSummary" data-t="rackFootSub">Shortcut changes save automatically</small></div><button class="btn" id="pairRemote" data-t="addDev">Add device</button><button class="btn d" id="deleteRemote" data-t="delDev">Remove device</button><button class="btn d" id="uiReset" data-t="uiReset">Restore defaults</button></div>';
 side.prepend(rack);
-const hostRepair=document.createElement('div');hostRepair.className='warn';hostRepair.id='hostRepair';hostRepair.hidden=true;hostRepair.innerHTML='<span><b>电脑配对密钥已失效</b><br>请在 Windows 删除 Mi Remote Bridge 后重新添加。开发板会继续广播，添加完成后本提示会自动消失。</span>';rack.after(hostRepair);
+const hostRepair=document.createElement('div');hostRepair.className='warn';hostRepair.id='hostRepair';hostRepair.hidden=true;hostRepair.innerHTML='<span><b data-t="hrT">The PC pairing key is no longer valid</b><br><span data-t="hrP">Remove Mi Remote Bridge in Windows and add it again. The board keeps advertising, and this notice disappears on its own once pairing succeeds.</span></span>';rack.after(hostRepair);
 /* Both notices are latched by the board and only disappear when the pairing is
 genuinely working again, so a refresh - or another page taking over the socket -
 cannot make them vanish. There is deliberately no button for the computer side:
 the recovery happens entirely in Windows, and stopping the advertising to force
 it would leave the user with nothing to re-add. */
-const remoteRepair=document.createElement('div');remoteRepair.className='warn';remoteRepair.id='remoteRepair';remoteRepair.hidden=true;remoteRepair.innerHTML='<span><b>遥控器需要重新配对</b><br>遥控器配对信息已失效，已停止自动连接。如果要继续使用，请让遥控器进入配对模式，然后从附近设备中选择。</span><button id="repairRemote">选择遥控器</button>';rack.after(remoteRepair);
+const remoteRepair=document.createElement('div');remoteRepair.className='warn';remoteRepair.id='remoteRepair';remoteRepair.hidden=true;remoteRepair.innerHTML='<span><b data-t="rrT">The remote needs to be paired again</b><br><span data-t="rrP">The remote\'s pairing data is no longer valid, so automatic reconnection has stopped. To keep using it, put the remote into pairing mode and pick it from the nearby devices.</span></span><button id="repairRemote" data-t="pickRemote">Choose remote</button>';rack.after(remoteRepair);
 /* Choosing a device here is what authorises the board to drop the slot's dead
 bond; until then nothing is deleted and the mappings stay put. */
 $('repairRemote').onclick=()=>{if(!S.on||S.busy)return;pairing.showModal();nearby();setTimeout(()=>{if(pairing.open)nearby()},3000)};
 const discovered=document.createElement('div');discovered.id='discovered';discovered.hidden=true;section.append(discovered);
-const editor=document.createElement('dialog');editor.id='slotEditor';editor.innerHTML='<div class="dh"><div><h2 id="slotEdTitle">编辑按键</h2><small class="mut">修改后自动保存到当前槽位</small></div><button class="btn" id="slotEdClose">完成</button></div><div class="db"><div id="learnedControls"><label class="f">按键名称<input id="slotName" maxlength="24" autocomplete="off"></label></div><label class="f">动作类型<select id="slotKind"><option value="1">键盘快捷键</option><option value="2">媒体 / 系统控制</option><option value="0">不转发</option></select></label><div id="slotKeyboard"><p class="mut">修饰键 · 可多选</p><div class="ms" id="slotMods"></div><label class="f">主键<select id="slotKey"></select></label></div><label class="f" id="slotMedia">媒体 / 系统动作<select id="slotCons"></select></label><div class="pv" id="slotValue"></div><p class="hint" id="slotSaved" role="status"></p></div><div class="da"><button type="button" class="btn d" id="slotDelete">删除此按键</button><button type="button" class="btn" id="slotEdDone">完成</button></div>';
+const editor=document.createElement('dialog');editor.id='slotEditor';editor.innerHTML='<div class="dh"><div><h2 id="slotEdTitle" data-t="seT">Edit key</h2><small class="mut" data-t="seSub">Changes save to the current slot automatically</small></div><button class="btn" id="slotEdClose" data-t="done">Done</button></div><div class="db"><div id="learnedControls"><label class="f"><span data-t="keyName">Key name</span><input id="slotName" maxlength="24" autocomplete="off"></label></div><label class="f"><span data-t="kindL">Action type</span><select id="slotKind"><option value="1" data-t="kind1">Keyboard shortcut</option><option value="2" data-t="kind2">Media / system control</option><option value="0" data-t="sKind0">Do not forward</option></select></label><div id="slotKeyboard"><p class="mut" data-t="modsHint2">Modifiers · multi-select</p><div class="ms" id="slotMods"></div><label class="f"><span data-t="mainKey">Main key</span><select id="slotKey"></select></label></div><label class="f" id="slotMedia"><span data-t="mediaAct">Media / system action</span><select id="slotCons"></select></label><div class="pv" id="slotValue"></div><p class="hint" id="slotSaved" role="status"></p></div><div class="da"><button type="button" class="btn d" id="slotDelete" data-t="delKey">Delete this key</button><button type="button" class="btn" id="slotEdDone" data-t="done">Done</button></div>';
 document.body.append(editor);
-opt('slotKey',KB);opt('slotCons',CS);
+opt('slotKey',KBL());opt('slotCons',CSL());
 let selectedSlot=0,editingKey=null,editingMods=0;
 
-let slots=[{name:'RC003',address:'',identity:''},{name:'遥控器 02',address:'',identity:''},{name:'遥控器 03',address:'',identity:''}],learned=[];
-function applySlots(j){if(!Array.isArray(j.slots)||j.slots.length!==3||j.active<0||j.active>2)throw Error('槽位数据不完整');selectedSlot=j.active;slots=j.slots;learned=j.keys||[];S.slotBusy=!!j.busy;if(j.error)toast(j.error);drawSlots()}
-function slotTitle(i){return i===0?'RC003':slots[i].name||'遥控器 0'+(i+1)}
+let slots=[{name:'RC003',address:'',identity:''},{name:'',address:'',identity:''},{name:'',address:'',identity:''}],learned=[];
+function applySlots(j){if(!Array.isArray(j.slots)||j.slots.length!==3||j.active<0||j.active>2)throw Error(t('badSlots','Incomplete slot data'));selectedSlot=j.active;slots=j.slots;learned=j.keys||[];S.slotBusy=!!j.busy;if(j.error)toast(j.error);drawSlots()}
+function slotTitle(i){return i===0?'RC003':slots[i].name||t('remoteN','Remote 0')+(i+1)}
 function syncDefault(){drawSlots()}
 const ICON_CODES=['du','dd','dl','dr','p6','p7','p3','p4'];
 const COMMON_ICON_CODES={233:'p6',234:'p7'};
 function knownKey(raw){return KEYS.find(k=>k[0]===raw&&ICON_CODES.includes(k[4]))}
 function keyIcon(raw){const k=knownKey(raw);if(k)return icon(k)+' ';const c=COMMON_ICON_CODES[raw];return c?icon([0,'','','',c])+' ':''}
-function keyTitle(k){return k.name||(knownKey(k.raw)||[])[1]||'按键 0x'+hx(k.raw)}
+function keyTitle(k){var n=knownKey(k.raw);return k.name||(n&&kn(n))||t('keyHex','Key 0x')+hx(k.raw)}
+/* A glyph rather than the word: this sits on the same row as the link state,
+   and spelling out "Battery" pushed the pair onto two lines in English, which
+   is the row this layout exists to keep at one line. The word still reaches
+   screen readers, and hovering shows it. */
+var BAT_ICON='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M20 10v4"/></svg>';
+function batteryCell(rc,s){
+ if(!rc)return '<span class="slot-battery">'+esc(s.address)+'</span>';
+ var p=S.lastStatus.battery;
+ if(!(p>=0))return '<span class="slot-battery">'+t('batNR','Battery not read')+'</span>';
+ var label=esc(t('bat','Battery ')+p+'%');
+ return '<span class="slot-battery" title="'+label+'" aria-label="'+label+'">'+BAT_ICON+p+'%</span>';
+}
 function drawSlots(){
  $('slots').innerHTML=slots.map((s,i)=>{const active=i===selectedSlot,rc=active&&S.lastStatus&&S.lastStatus.remoteConnected,rs=S.lastStatus&&S.lastStatus.remoteState,wake=active&&s.address&&!rc&&(S.switching||rs==="CONNECTING"||rs==="DIRECT"||rs==="DISCOVERING"||rs==="SCANNING"||rs==="BACKOFF");
- return '<button class="slot '+(active?'selected':'')+'" data-slot="'+i+'" aria-pressed="'+active+'"><span class="slot-index">槽位 0'+(i+1)+(i===0?' · 小米预设':'')+'</span><strong>'+esc(slotTitle(i))+'</strong><span class="slot-link '+(rc?'linked':'')+'">'+(rc?'● 遥控器已连接':s.address?(active?'○ 正在连接':'○ 未启用'):'○ 未添加设备')+'</span><span class="slot-battery">'+(rc?(S.lastStatus.battery>=0?'电量 '+S.lastStatus.battery+'%':'电量未读取'):esc(s.address)||'点击添加设备')+'</span>'+(s.identity?'<span class="slot-id">设备标识：'+esc(s.identity)+'</span>':'')+(wake?'<span class="slot-wake">请按一下遥控器唤醒</span>':'')+'</button>'}).join('');
- $('slotSummary').textContent=slotTitle(selectedSlot)+' · 设置保存在开发板';
+ return '<button class="slot '+(active?'selected':'')+'" data-slot="'+i+'" aria-pressed="'+active+'"><span class="slot-index">'+t('slotIdx','Slot 0')+(i+1)+(i===0?t('xiaomiPreset',' · Xiaomi preset'):'')+'</span><strong>'+esc(slotTitle(i))+'</strong><span class="slot-line"><span class="slot-link '+(rc?'linked':'')+'">'+(rc?t('linked','● Remote connected'):s.address?(active?t('connecting','○ Connecting'):t('notEnabled','○ Not enabled')):t('notAdded','○ No device added'))+'</span>'+batteryCell(rc,s)+'</span>'+(s.identity?'<span class="slot-id">'+t('devId','Device ID: ')+esc(s.identity)+'</span>':'')+(wake?'<span class="slot-wake">'+t('wake','Press a key on the remote to wake it')+'</span>':'')+'</button>'}).join('');
+ $('slotSummary').textContent=slotTitle(selectedSlot)+t('savedOn',' · settings are stored on the board');
  $('pairRemote').hidden=!!slots[selectedSlot].address;$('deleteRemote').hidden=!slots[selectedSlot].address;
- section.querySelector('.head').innerHTML='<h2>'+esc(slotTitle(selectedSlot))+' · 按键映射</h2><span class="mut">点击按键编辑 · 自动保存</span>';
+ section.querySelector('.head').innerHTML='<h2>'+esc(slotTitle(selectedSlot))+t('mapSuffix',' · key mapping')+'</h2><span class="mut">'+t('clickEdit','Click a key to edit · saves automatically')+'</span>';
  $('grid').hidden=selectedSlot!==0;discovered.hidden=selectedSlot===0;
  if(selectedSlot===0){discovered.innerHTML='';drawWires()}
- else discovered.innerHTML='<div class="learn-banner"><b>逐个按下遥控器按键</b><span>最多记录 128 个按键，点击卡片设置快捷键。</span></div><div class="learned-keys">'+learned.map(k=>'<div class="k learned-key"><button data-learned="'+k.raw+'"><span class="r1">'+keyIcon(k.raw)+'<b>'+esc(keyTitle(k))+'</b></span><span class="r2"><span class="act">'+fmt(cur(k.raw)||{kind:0})+'</span><span class="ed">编辑 ›</span></span></button></div>').join('')+'</div>';
+ else discovered.innerHTML='<div class="learn-banner"><b>'+t('learnT','Press the remote keys one by one')+'</b><span>'+t('learnP','Up to 128 keys are recorded; click a card to assign a shortcut.')+'</span></div><div class="learned-keys">'+learned.map(k=>'<div class="k learned-key"><button data-learned="'+k.raw+'"><span class="r1">'+keyIcon(k.raw)+'<b>'+esc(keyTitle(k))+'</b></span><span class="r2"><span class="act">'+fmt(cur(k.raw)||{kind:0})+'</span><span class="ed">'+t('editArrow','Edit ›')+'</span></span></button></div>').join('')+'</div>';
  btns();
 }
 let slotSeq=0;
@@ -429,41 +542,53 @@ async function slotAction(action,slot){
  const seq=++slotSeq;S.busy=true;S.switching=action==='select';if(S.switching)connectionHint({remoteState:'CONNECTING'});btns();$('ed').close();editor.close();if(typeof pairing!=='undefined')pairing.close();
  try{
   await req('/api/slot?slot='+slot+'&action='+action,'POST');
-  for(let i=0;i<200;i++){const j=await req('/api/slots');if(seq!==slotSeq)return;applySlots(j);if(!j.busy){if(j.error)throw Error(j.error);break}if(i===199)throw Error('操作仍在进行，请稍候');await new Promise(r=>setTimeout(r,150))}
+  for(let i=0;i<200;i++){const j=await req('/api/slots');if(seq!==slotSeq)return;applySlots(j);if(!j.busy){if(j.error)throw Error(j.error);break}if(i===199)throw Error(t('stillRunning','Still working, please wait'));await new Promise(r=>setTimeout(r,150))}
   await req('/api/bindings').then(apply);await req('/api/status').then(stat);
  }catch(e){if(seq===slotSeq)toast(err(e))}finally{if(seq===slotSeq){S.busy=false;S.switching=false;connectionHint(S.lastStatus||{});btns()}}
 }$('slots').onclick=e=>{const b=e.target.closest('[data-slot]');if(b&&+b.dataset.slot!==selectedSlot)slotAction('select',+b.dataset.slot)};
-const pairing=document.createElement('dialog');pairing.innerHTML='<div class="dh"><h2>选择遥控器</h2><button class="btn" id="pairClose">关闭</button></div><div class="db"><p>进入配对模式后选择设备，按信号强度排序。搜索阶段显示设备名和 MAC；SN/CEMI/CMIIT 若设备通过标准 BLE 设备信息服务提供，会在连接后显示。</p><div id="nearby"></div></div><div class="da"><button class="btn" id="scanRefresh">刷新搜索结果</button></div>';document.body.append(pairing);
+const pairing=document.createElement('dialog');pairing.innerHTML='<div class="dh"><h2 data-t="pairT">Choose remote</h2><button class="btn" id="pairClose" data-t="close">Close</button></div><div class="db"><p data-t="pairP">Put the remote into pairing mode, then pick it below; devices are sorted by signal strength. While scanning, only the name and MAC are known. SN/CEMI/CMIIT appear after connecting, if the device exposes them through the standard BLE device information service.</p><div id="nearby"></div></div><div class="da"><button class="btn" id="scanRefresh" data-t="rescan">Rescan</button></div>';document.body.append(pairing);
 $('pairClose').onclick=()=>pairing.close();
-async function nearby(){if(!S.on)return;try{const rows=await req('/api/nearby');$('nearby').innerHTML=rows.map(r=>'<p><button class="btn" data-address="'+esc(r.address)+'" data-type="'+r.type+'">'+esc(r.name||'未命名设备')+'<br>MAC: '+esc(r.address)+' · '+r.rssi+' dBm<br>SN/CEMI/CMIIT：连接后读取</button></p>').join('')||'正在搜索，请稍后刷新'}catch(e){toast(err(e))}}
+async function nearby(){if(!S.on)return;try{const rows=await req('/api/nearby');$('nearby').innerHTML=rows.map(r=>'<p><button class="btn" data-address="'+esc(r.address)+'" data-type="'+r.type+'">'+esc(r.name||t('unnamed','Unnamed device'))+'<br>MAC: '+esc(r.address)+' · '+r.rssi+' dBm<br>'+t('snHint','SN/CEMI/CMIIT: read after connecting')+'</button></p>').join('')||t('searching','Searching — rescan in a moment')}catch(e){toast(err(e))}}
 $('scanRefresh').onclick=nearby;
-$('nearby').onclick=async e=>{const b=e.target.closest('[data-address]');if(!b||!S.on||S.busy)return;S.busy=true;btns();try{await req('/api/connect?address='+b.dataset.address+'&type='+b.dataset.type,'POST');pairing.close();toast('正在连接所选遥控器')}catch(e){toast(err(e))}finally{S.busy=false;btns()}};
-$('pairRemote').onclick=async()=>{if(S.on&&confirm('请先让新遥控器进入配对模式。开始搜索并添加到当前槽位？')){await slotAction('add',selectedSlot);if(!slots[selectedSlot].address){pairing.showModal();nearby();setTimeout(()=>{if(pairing.open)nearby()},3000)}}};
+$('nearby').onclick=async e=>{const b=e.target.closest('[data-address]');if(!b||!S.on||S.busy)return;S.busy=true;btns();try{await req('/api/connect?address='+b.dataset.address+'&type='+b.dataset.type,'POST');pairing.close();toast(t('connectingSel','Connecting to the selected remote'))}catch(e){toast(err(e))}finally{S.busy=false;btns()}};
+$('pairRemote').onclick=async()=>{if(S.on&&confirm(t('confirmAdd','Put the new remote into pairing mode first. Start scanning and add it to this slot?'))){await slotAction('add',selectedSlot);if(!slots[selectedSlot].address){pairing.showModal();nearby();setTimeout(()=>{if(pairing.open)nearby()},3000)}}};
 
-$('deleteRemote').onclick=()=>{if(S.on&&confirm('删除当前槽位的设备配对？同时删除该槽位已发现按键和快捷键，之后可重新添加。'))return slotAction('delete',selectedSlot)};
+$('deleteRemote').onclick=()=>{if(S.on&&confirm(t('confirmDel','Remove this slot\'s device pairing? The keys and shortcuts discovered for it are deleted too; you can add it again later.')))return slotAction('delete',selectedSlot)};
 discovered.onclick=e=>{const b=e.target.closest('[data-learned]');if(b)openSlotEditor(+b.dataset.learned)};
-MD.forEach(m=>{const b=document.createElement('button');b.className='m';b.textContent=m[1];b.dataset.bit=m[0];b.onclick=()=>{if(!S.on||S.busy)return;editingMods^=m[0];autoSave()};$('slotMods').append(b)});
+MDL().forEach(m=>{const b=document.createElement('button');b.className='m';b.textContent=m[1];b.dataset.bit=m[0];b.onclick=()=>{if(!S.on||S.busy)return;editingMods^=m[0];autoSave()};$('slotMods').append(b)});
 function openSlotEditor(raw){
  if(!S.on||S.busy||S.load||S.slotBusy)return;
  const k=learned.find(k=>k.raw===raw);if(!k)return;
  editingKey=raw;const a=cur(raw)||{kind:0};editingMods=a.mod||0;
  $('slotEdTitle').textContent=keyTitle(k);$('slotName').value=keyTitle(k);$('slotKind').value=String(a.kind);
- setSel('slotKey',a.key||0);setSel('slotCons',a.cons||233);$('slotSaved').textContent='修改后保存到开发板';paintEditor();editor.showModal();
+ setSel('slotKey',a.key||0);setSel('slotCons',a.cons||233);$('slotSaved').textContent=t('seSaveHint','Changes are saved to the board');paintEditor();editor.showModal();
 }
 function paintEditor(){const kind=+$('slotKind').value;$('slotKeyboard').hidden=kind!==1;$('slotMedia').hidden=kind!==2;[...$('slotMods').children].forEach(b=>b.setAttribute('aria-pressed',String(!!(editingMods&+b.dataset.bit))));$('slotValue').textContent=fmt({kind,mod:editingMods,key:+$('slotKey').value,cons:+$('slotCons').value})}
 async function keyWrite(url){
  if(!S.on||S.busy||S.slotBusy)return;
  S.busy=true;btns();
- try{await req(url,'POST');await req('/api/slots').then(applySlots);await req('/api/bindings').then(apply);$('slotSaved').textContent='已保存到开发板'}
+ try{await req(url,'POST');await req('/api/slots').then(applySlots);await req('/api/bindings').then(apply);$('slotSaved').textContent=t('seSaved','Saved to the board')}
  catch(e){$('slotSaved').textContent=err(e)}finally{S.busy=false;btns()}
 }
 function autoSave(){if(!S.on||S.busy)return;paintEditor();const k=+$('slotKind').value;if(k===1&&!editingMods&&!+$('slotKey').value)return;return keyWrite('/api/set?raw='+hx(editingKey)+'&kind='+k+'&mod='+(k===1?editingMods:0)+'&key='+(k===1?+$('slotKey').value:0)+'&cons='+(k===2?+$('slotCons').value:0))}
 ['slotKind','slotKey','slotCons'].forEach(id=>$(id).onchange=autoSave);
 $('slotName').onchange=()=>keyWrite('/api/key?action=rename&raw='+hx(editingKey)+'&name='+encodeURIComponent($('slotName').value.trim()));
-$('slotDelete').onclick=async()=>{if(S.on&&confirm('删除这个已发现的按键及其快捷键？')){await keyWrite('/api/key?action=delete&raw='+hx(editingKey));editor.close()}};
+$('slotDelete').onclick=async()=>{if(S.on&&confirm(t('confirmDelKey','Delete this discovered key and its shortcut?'))){await keyWrite('/api/key?action=delete&raw='+hx(editingKey));editor.close()}};
 $('slotEdClose').hidden=true;$('slotEdDone').onclick=()=>editor.close();
-$('uiReset').onclick=()=>{if(!S.on||S.busy)return;$('rdE').hidden=true;$('rd').querySelector('h2').textContent='重置当前槽位快捷键？';$('rd').querySelector('.db h3').textContent='保留设备配对和已发现按键。';$('rd').showModal()};
+$('uiReset').onclick=()=>{if(!S.on||S.busy)return;$('rdE').hidden=true;$('rd').querySelector('h2').textContent=t('rdT2','Reset the shortcuts in this slot?');$('rd').querySelector('.db h3').textContent=t('rdH2','The device pairing and the discovered keys are kept.');$('rd').showModal()};
 $('rdY').onclick=reset;
+/* Everything the switch touches is either markup carrying a data-t key or a
+   render function that re-reads t(), so flipping the language is just a full
+   repaint - no reload, and no state is lost. Runs last so the dialogs built
+   above are already in the DOM for applyT() to find. */
+function setLang(i){LI=i;try{localStorage.setItem('mrb.lang',i?'zh':'en')}catch(e){}
+applyT();resel('key',KBL());resel('slotKey',KBL());resel('cons',CSL());resel('slotCons',CSL());remods('mods');remods('slotMods');
+buildCards();render();drawSlots();paintWindow();online(S.on);
+if(S.lastStatus)stat(S.lastStatus);
+if($('ed').open){$('edT').textContent=t('edit','Edit ')+pick(KEYS.map(function(k){return [k[0],kn(k)]}),S.cur,t('aKey','key'));draft()}
+if(editor.open)paintEditor()}
+$('lang').onclick=function(){setLang(LI?0:1)};
+applyT();
 S.sel=0;drawSlots();
 
 

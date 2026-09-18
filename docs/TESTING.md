@@ -563,7 +563,7 @@ Windows 动作"如需实现，唯一现实路径是给 C3 加 NFC 读卡模块�
 **除了 Chrome 和 Python 之外不需要装任何东西**。
 
 ```bash
-python tests/tools/check_web_ui.py                  # 闪存预算 + 161 项页面断言（约 1 秒）
+python tests/tools/check_web_ui.py                  # 闪存预算 + 170 项页面断言（约 1 秒）
 python tests/tools/check_web_ui.py --check-size     # 只看闪存预算
 python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，便于调试
 ```
@@ -571,9 +571,11 @@ python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，�
 `scripts/test.ps1` 的第 3/4 步跑的就是第一条命令。
 
 **闪存预算口径（2026-09-12 修正）**：盯的是三个 **gzip 资产的实际字节数**（跑
-`check_web_ui.py --check-size` 看当前数字，2026-09-17 是
-`html 6763→3011 / css 18131→5133 / js 33148→12775`，合计约 **20919 B**，上限
-**24000 B**——页面持续在长，这两个数字会随之漂移，别死记），而不是源页面字节。
+`check_web_ui.py --check-size` 看当前数字，2026-09-18 是
+`html 7951→3101 / css 18338→5160 / js 46361→17977`，合计约 **26238 B**，上限
+**28000 B**——页面持续在长，这两个数字会随之漂移，别死记），而不是源页面字节。
+上限在页面双语化时从 24000 抬到 28000：中文覆盖词典是**有意**多出来的约 5 KB，
+留着旧数字只会每次都红，抓不到真正的意外膨胀。
 旧口径盯源页面 → 上线即红，且**这个数字设备根本看不到**（页面是 gzip 传输、
 只有压缩包进 flash），于是一红到底、无人理会。
 
@@ -588,7 +590,7 @@ python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，�
 断言失败时的排查工具：`python tests/tools/spot_audit.py`（`--raw 0x52` 可指定键）—— 逐键打印
 三态各自改了哪些计算样式，并把遥控器截图写到 `outputs/`；有死状态就以非零码退出。
 
-**已验证（161 项断言，全部通过）**：
+**已验证（170 项断言，全部通过）**：
 
 > 修正记录：这层断言一度**跑不到也跑不对**，两个独立缺陷 ——
 > ① 执行入口要求传入外部 `agent-browser` 可执行文件，而它不在本仓库工具链里，
@@ -607,7 +609,8 @@ python tests/tools/check_web_ui.py --emit-js out.js # 只导出断言源码，�
 | 清除语义 | 「恢复此键默认」先改草稿、保存后才生效；恢复后回落串口基础模式 |
 | 失败处理 | HTTP 错误保留编辑器；回读不一致判定失败；离线显示旧数据并禁用写入 |
 | 注入防护 | 广播名含 HTML 时按文本渲染，不进入 DOM |
-| 布局 | 1440 / 1024 / 768 / 390 / 320 五档 × 三页，均无横向溢出；Esc 关闭弹窗 |
+| 中英切换 | 默认英文；切中文后静态标记、JS 渲染的卡片、运行期状态串、下拉选项同步变化；切回英文能还原作者原文（证明缓存生效、词典无需存两份） |
+| 布局 | 1440 / 1024 / 768 / 390 / 320 五档 × 三页，均无横向溢出；Esc 关闭弹窗；槽位卡片连接状态与电量同一行 |
 
 **这一层没有验证**：ESP32 上的真实 HTTP 栈、NVS 持久化、Wi-Fi 与 BLE 共存下的堆水位、
 真实手机浏览器。§0 表格里 Web UI 一行的"浏览器回归"指本节，**仍不等于真机验收**。
@@ -965,7 +968,7 @@ BOOT 长按 5 秒 → `settings::clearAll()` 用 `s_prefs.clear()` 清空整个�
 | --- | --- | --- |
 | 固件编译 | `arduino-cli compile`（FQBN 见 §4.11） | ✅ 1378063 B（43%）flash / 59764 B（18%）RAM，0 warning |
 | 宿主端模型 | `python tests/model/check_vectors.py` | ✅ 11098 断言通过 |
-| 网页断言 | `python tests/tools/check_web_ui.py` | ✅ 161 条通过（新增 8 条覆盖两个锁存提示） |
+| 网页断言 | `python tests/tools/check_web_ui.py` | ✅ 170 条通过（新增 9 条覆盖中英切换与槽位卡片单行状态） |
 | 生成物一致性 | `gen_web_page.py --check` / `gen_vectors.py` | ✅ `web_page_gz.h` 与 `selftest_vectors.h` 均可复现 |
 | 烧录 + 串口冒烟 | `flash.ps1 -Port COM3`（COM3 = 0x1A86:0x55D3，探到 ESP32-C3） | ✅ `UPLOAD OK`、哈希校验通过、启动横幅与控制台正常 |
 
