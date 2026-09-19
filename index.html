@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>MiRemoteBridge — a $5 build that lets a Bluetooth remote run your PC</title>
-<meta name="description" content="Turn a Bluetooth remote into a standard Bluetooth keyboard for your PC with an ESP32-C3. No custom keyboard driver on Windows, no system driver patched or injected, and all 13 keys of the Xiaomi RC003 are supported.">
+<title>MiRemoteBridge — 10 元改造，让蓝牙遥控器控制电脑</title>
+<meta name="description" content="用 ESP32-C3 将蓝牙遥控器变成电脑的标准蓝牙键盘。Windows 端无需自定义键盘驱动，不修改或注入系统驱动；支持小米 RC003 全部 13 个按键。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231674ed'/%3E%3Cpath d='M8 10h6v12H8m16-12h-6v12h6M11 16h10' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -530,7 +530,7 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
  <a class="brand" href="#main"><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bridge"/></svg></span>MiRemoteBridge</a>
  <button class="menu-toggle" id="menuToggle" aria-label="Open navigation" aria-expanded="false" aria-controls="mainNav"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-menu"/></svg></button>
  <nav class="nav-links" id="mainNav" aria-label="Main navigation">
-  <a href="#cases">Use cases</a><a href="#ui">Web UI</a><a href="#why">Why</a><a href="#compat">Compatibility</a><a class="nav-github" href="https://github.com/QYHHHH/BleRemoteBrideg" target="_blank" rel="noopener" aria-label="View the source on GitHub"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-github"/></svg></a><button class="lang-switch" id="langSwitch" type="button" aria-label="Switch language" title="Switch language"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-globe"/></svg><span id="langSwitchLabel" data-i18n-skip>中文</span></button><a class="nav-cta" href="#connect">Connect device ↗</a>
+  <a href="#cases">Use cases</a><a href="#ui">Web UI</a><a href="#why">Why</a><a href="#compat">Compatibility</a><a class="nav-github" href="https://github.com/QYHHHH/BleRemoteBrideg" target="_blank" rel="noopener" aria-label="View the source on GitHub"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-github"/></svg></a><button class="lang-switch" id="langSwitch" type="button" aria-label="Switch language" title="Switch language"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-globe"/></svg><span id="langSwitchLabel" data-i18n-skip>EN</span></button><a class="nav-cta" href="#connect">Connect device ↗</a>
  </nav>
 </div></header>
 <main id="main">
@@ -610,7 +610,7 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
 <div class="sec-head split"><div><p class="eyebrow">02 / DEVICE INTERFACE</p><h2>Remap keys and read status in the browser.</h2></div><p class="sec-sub">See the real device UI first, then try it yourself.<br/>Xiaomi remotes use a preset; other remotes are learned key by key.</p></div>
 <div class="ui-static" id="device-interface">
 <div class="ui-subhead"><div><span class="ui-tag">Real device UI</span><h3>Xiaomi RC003 · preset mapping</h3></div><p>Key mappings, remote settings and runtime status on one page.</p></div>
-<figure class="showcase"><div class="showcase-top"><span><svg aria-hidden="true" class="icon" viewbox="0 0 24 24"><use href="#i-globe"></use></svg>MiRemoteBridge / device config UI</span><span>Real screenshot · click to enlarge</span></div><button aria-label="Enlarge the Xiaomi RC003 device screenshot" class="ui-screenshot-button" id="ui-zoom" type="button"><img alt="Screenshot of the Xiaomi RC003 config page: 13 key mappings, three remote slots (02/03 are placeholders with no real device) and board status" data-src-en="assets/device-ui-en.webp" data-src-zh="assets/device-ui-zh.webp" height="950" id="device-screenshot" loading="lazy" src="assets/device-ui-en.webp" width="2048"/></button><figcaption>Screenshot of the real UI; the connection and memory values are from that moment only.</figcaption></figure>
+<figure class="showcase"><div class="showcase-top"><span><svg aria-hidden="true" class="icon" viewbox="0 0 24 24"><use href="#i-globe"></use></svg>MiRemoteBridge / device config UI</span><span>Real screenshot · click to enlarge</span></div><button aria-label="Enlarge the Xiaomi RC003 device screenshot" class="ui-screenshot-button" id="ui-zoom" type="button"><img alt="Screenshot of the Xiaomi RC003 config page: 13 key mappings, three remote slots (02/03 are placeholders with no real device) and board status" data-src-en="assets/device-ui-en.webp" data-src-zh="assets/device-ui-zh.webp" height="950" id="device-screenshot" loading="lazy" src="assets/device-ui-zh.webp" width="2048"/></button><figcaption>Screenshot of the real UI; the connection and memory values are from that moment only.</figcaption></figure>
 <div class="ui-features"><div class="ui-feature"><span>01</span><div><h3>13 keys, edit any of them</h3><p>Every physical key gets a card: single keys, combos or media keys, as you like.</p></div></div><div class="ui-feature"><span>02</span><div><h3>3 slots, saved separately</h3><p>One Xiaomi preset and two learning slots, each keeping its own mapping and settings.</p></div></div><div class="ui-feature"><span>03</span><div><h3>Connection and runtime status in one place</h3><p>Check the Bluetooth link, the Wi-Fi window, free heap and the board pinout.</p></div></div></div>
 </div>
 <div class="ui-learning-block" id="third-party-learning"><div class="ui-subhead"><div><span class="ui-tag">Try it yourself</span><h3>Third-party remote · key-by-key learning</h3></div><p>It plays automatically; click anything to take over.<br/>Every new key it finds adds an editable card.</p></div><div class="ld-shell" id="learn-demo"><div aria-label="Third-party remote key-learning demo" id="ld-learning">
@@ -798,11 +798,11 @@ window.MRB_CONFIG = Object.assign({
 </script>
 <script id="mrb-i18n">
 /*
-  Bilingual landing page. The markup ships in English (the default); the table
-  below is the only place the Chinese lives. Switching language walks the DOM
-  and swaps the strings it recognises, so the markup needs no i18n attributes;
-  the other scripts call MRB_I18N.t() for text they build at runtime and
-  re-render themselves through MRB_I18N.onChange().
+  Bilingual landing page. The markup ships in English but the page renders in
+  Chinese by default; the table below is the only place the Chinese lives.
+  Switching language walks the DOM and swaps the strings it recognises, so the
+  markup needs no i18n attributes; the other scripts call MRB_I18N.t() for text
+  they build at runtime and re-render themselves through MRB_I18N.onChange().
 */
 window.MRB_I18N = (function () {
   "use strict";
@@ -1145,7 +1145,7 @@ window.MRB_I18N = (function () {
   Object.keys(ZH).forEach(function (key) { if (!(ZH[key] in EN)) EN[ZH[key]] = key; });
   var ATTRS = ["aria-label", "title", "alt", "placeholder"];
   var listeners = [];
-  var lang = "en";
+  var lang = "zh";
 
   function format(text, vars) {
     if (!vars) return text;
@@ -1217,7 +1217,7 @@ window.MRB_I18N = (function () {
   var stored = null;
   try { stored = localStorage.getItem("mrb-lang"); } catch (error) {}
   var asked = (/[?&]lang=(zh|en)/i.exec(location.search) || [])[1];
-  setLang((asked || stored || "en").toLowerCase(), !!asked);
+  setLang((asked || stored || "zh").toLowerCase(), !!asked);
 
   return {
     t: t,

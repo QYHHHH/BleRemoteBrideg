@@ -47,6 +47,10 @@ EXPECTED_CHECKS = 170
 TESTS = r"""(async () => {
   const results=[];
   const assert=(condition,name)=>{if(!condition)throw Error(name);results.push(name);};
+  // The page boots in Chinese; every assertion below reads the authored English
+  // source text, so note what the boot language was and switch once up front.
+  // The bilingual block near the end checks the boot default and the round trip.
+  const bootLang=LI,bootHtmlLang=document.documentElement.lang;setLang(0);
   while(S.load)await new Promise(r=>setTimeout(r,10));await load();
   assert(S.on && S.ok,'initial API load');
   assert($('hostRepair').hidden&&$('remoteRepair').hidden,'both repair notices hidden normally');
@@ -219,11 +223,12 @@ TESTS = r"""(async () => {
   assert(KEYS.every(k=>{const s=states($('k'+k[0]));return s.live!==s.base;}),'every card lights up while held');
   assert(KEYS.every(k=>{const s=states($('k'+k[0]));return s.sel!==s.base;}),'every card marks the key being edited');
   assert(!document.querySelector('img[src^=http]'),'no remote assets');
-  // Bilingual UI. English is the authored source and the default; ZH is an
-  // override layer, so a missing entry must fall back rather than render a key.
-  // Switching repaints in place - the round trip back to English proves the
-  // cached originals survive, which is what the dictionary deliberately omits.
-  assert(LI===0&&document.documentElement.lang==='en','page defaults to English');
+  // Bilingual UI. English is the authored source, Chinese is what the page
+  // shows by default; ZH is an override layer, so a missing entry must fall
+  // back rather than render a key. Switching repaints in place - the round trip
+  // back to English proves the cached originals survive, which is what the
+  // dictionary deliberately omits.
+  assert(bootLang===1&&bootHtmlLang==='zh','page defaults to Chinese');
   assert($('repoLink').getAttribute('href')==='https://github.com/QYHHHH/BleRemoteBrideg'&&$('siteLink').getAttribute('href')==='https://qyhhhh.github.io/BleRemoteBrideg/','top bar links to the real repository and project site');
   assert(document.querySelectorAll('.slot .slot-line .slot-link').length===3&&document.querySelectorAll('.slot .slot-line .slot-battery').length===3,'slot link state and battery share one row');
   const enCard=$('k40').querySelector('b').textContent;

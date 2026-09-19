@@ -14,10 +14,10 @@
 #include <pgmspace.h>
 
 static const char kIndexHtml[] PROGMEM = R"rawliteral(<!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><title>MiRemoteBridge Key Mapping</title>
+<meta name="color-scheme" content="light"><title>MiRemoteBridge 按键映射</title>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--line:#e6e8ec;--ink:#252931;--mut:#78818e;--blue:#1674ed;--soft:#edf5ff;--ok:#328564;--warn:#aa6d22}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
@@ -192,7 +192,8 @@ var $=function(i){return document.getElementById(i)};
    real text carrying a data-t key, and in the code as the second argument to
    t(). ZH below holds only the Chinese overrides, so no string is written
    twice and a missing translation silently falls back to English rather than
-   rendering a bare key. English is the default; the choice is per browser. */
+   rendering a bare key. Chinese is what the page shows unless the browser has
+   been switched to English; the choice is per browser. */
 var ZH={
 title:'MiRemoteBridge 按键映射',siteT:'官网',repoT:'在 GitHub 上查看源码',close:'关闭',cancel:'取消',done:'完成',
 pR0:'遥控器…',pH0:'被控蓝牙…',pW0:'网页控制连接中…',pF0:'Wi-Fi…',pB0:'电量…',
@@ -266,7 +267,7 @@ confirmAdd:'请先让新遥控器进入配对模式。开始搜索并添加到�
 confirmDel:'删除当前槽位的设备配对？同时删除该槽位已发现按键和快捷键，之后可重新添加。',
 seSaveHint:'修改后保存到开发板',seSaved:'已保存到开发板',confirmDelKey:'删除这个已发现的按键及其快捷键？',
 rdT2:'重置当前槽位快捷键？',rdH2:'保留设备配对和已发现按键。'};
-var LI=0;try{LI=localStorage.getItem('mrb.lang')==='zh'?1:0}catch(e){}
+var LI=1;try{var L0=localStorage.getItem('mrb.lang');if(L0)LI=L0==='zh'?1:0}catch(e){}
 function t(k,e){return LI&&ZH[k]||e}
 /* The first pass caches the authored English off each element, so switching
    back does not need a second copy of it in the dictionary. innerHTML rather
