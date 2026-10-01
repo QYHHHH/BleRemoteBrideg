@@ -1,0 +1,165 @@
+# MiRemoteBridge - 正式发布后，把 Release 附件同步到官网的同源镜像
+#
+# 触发：在 Releases 页面把 release.yml 建的草稿点 Publish release。
+# 也可以在 Actions 里手动跑、填一个已发布的 tag，用来重新同步或回滚官网
+# 到某个旧版本（GitHub 的 "latest" 标记要另外用 gh release edit <tag> --latest 改）。
+#
+# 这里**不编译**：直接下载 Release 上已有的附件，原样拷进 firmware-dist/latest/。
+# 所以官网发出去的字节就是草稿阶段测过的那一份。
+#
+# 为什么要镜像：GitHub Release 附件不带 CORS 头，index.html 在 GitHub Pages 上
+# 用 fetch() 跨域读不到（manifest 能下，但 esp-web-tools 紧接着 fetch 的每个
+# .bin 分块会被拦，实测复现过）。所以 manifest 和固件要提交回仓库自己的
+# firmware-dist/latest/，跟 index.html 同源托管，只保留 latest、每次覆盖。
+#
+# 预发布（tag 带连字符，如 v0.0.9-rc.1）跳过，不上官网。
+#
+# 文件名要与 release.yml「整理产物」那步一致。
+
+name: 同步官网固件（正式发布）
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要同步到官网的已发布 tag，例如 v0.0.9（重新同步或回滚用）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# 两次发布挨得很近时，排队推 master，别互相覆盖
+concurrency:
+  group: pages-firmware-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: 同步 firmware-dist/latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: 确认要同步的版本
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          INFO=$(gh release view "$V" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease)
+          echo "$V: $INFO"
+          if [ "$(jq -r .isDraft <<<"$INFO")" = true ]; then
+            echo "::error::$V 还是草稿，先在 Releases 页面点 Publish"
+            exit 1
+          fi
+          if [ "$(jq -r .isPrerelease <<<"$INFO")" = true ]; then
+            echo "::notice::$V 是预发布，不同步到官网"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.ver.outputs.skip == 'false'
+        with:
+          ref: master
+
+      - name: 下载 Release 附件并生成同源 manifest
+        if: steps.ver.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          V="$VERSION"
+
+          rm -rf firmware-dist/latest
+          mkdir -p firmware-dist/latest
+          for part in bootloader partitions boot-app0 app; do
+            gh release download "$V" --repo "$GITHUB_REPOSITORY" \
+              --pattern "MiRemoteBridge-$V-$part.bin" --dir firmware-dist/latest
+          done
+          ls -lh firmware-dist/latest
+
+          # 固件里的版本号必须就是这个 tag，防止附件传错
+          if ! strings "firmware-dist/latest/MiRemoteBridge-$V-app.bin" | grep -qF "$V"; then
+            echo "::error::MiRemoteBridge-$V-app.bin 里找不到版本号 $V"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json, os
+          v = os.environ['VERSION']
+
+          def build(parts):
+              return {
+                  "name": "MiRemoteBridge",
+                  "version": v,
+                  "new_install_prompt_erase": False,
+                  "builds": [{"chipFamily": "ESP32-C3", "parts": parts}],
+              }
+
+          # 路径是裸文件名（没有 firmware-dist/latest/ 前缀）：manifest 和这些
+          # .bin 是兄弟文件，esp-web-tools 按 manifest 自己的地址解析相对路径。
+          full = build([
+              {"path": f"MiRemoteBridge-{v}-bootloader.bin", "offset": 0},
+              {"path": f"MiRemoteBridge-{v}-partitions.bin", "offset": 0x8000},
+              {"path": f"MiRemoteBridge-{v}-boot-app0.bin", "offset": 0xe000},
+              {"path": f"MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
+          ])
+          app_only = build([
+              {"path": f"MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
+          ])
+
+          for name, obj in (("manifest.json", full), ("manifest-app.json", app_only)):
+              with open(f"firmware-dist/latest/{name}", "w", encoding="utf-8") as f:
+                  json.dump(obj, f, indent=2, ensure_ascii=False)
+                  f.write("\n")
+          PY
+
+      - name: 提交到 master
+        if: steps.ver.outputs.skip == 'false'
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f firmware-dist/latest
+          if git diff --cached --quiet; then
+            echo "firmware-dist/latest 内容没变化，跳过提交"
+          else
+            git commit -m "chore(pages): 同步 $V 的同源固件镜像（供网页一键安装，规避 Release 附件跨域限制）"
+            git push origin master
+          fi
+
+      - name: 校验 Release 里 manifest 的链接真的能下
+        if: steps.ver.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          # 草稿阶段这些链接是 404，只有发布后才能验，所以放在这里。
+          gh release download "$V" --repo "$GITHUB_REPOSITORY" \
+            --pattern manifest.json --pattern manifest-app.json --dir /tmp/m
+          python3 -c "
+          import json
+          for name in ('/tmp/m/manifest.json', '/tmp/m/manifest-app.json'):
+              m = json.load(open(name))
+              for p in m['builds'][0]['parts']:
+                  print(p['path'])
+          " | sort -u > /tmp/urls.txt
+          cat /tmp/urls.txt
+          fail=0
+          while read -r u; do
+            ok=0
+            for _ in $(seq 1 12); do
+              if curl -fsIL -o /dev/null "$u"; then ok=1; break; fi
+              sleep 5
+            done
+            if [ "$ok" = 1 ]; then echo "OK   $u"; else echo "::error::manifest 里的链接取不到: $u"; fail=1; fi
+          done < /tmp/urls.txt
+          [ "$fail" = 0 ] || exit 1

@@ -26,22 +26,18 @@
   依赖判断是否重编，而新出现的 `version_local.h` 不在任何旧依赖表里，
   不强制重编就会拿着旧目标文件报出旧版本号。
 
-## GitHub Release 的预发布（pre-release）
+## 发布流程：草稿 → 自测 → Publish（只编一次）
 
-跟上面"调试版"的后缀**是两回事，别混**：调试版后缀（`-improv` 这种功能名）
-**从不打 tag、不推远端**，纯本地烧录验证；这里说的预发布后缀**要真的打 tag
-并推送**，会触发 `.github/workflows/release.yml` 真正编译发布。
+详见 `docs/RELEASING.md`，要点：
 
-- **判定规则**：tag 里带连字符（`v0.0.8-rc.1`、`v0.0.8-beta.1`）→ CI 自动标记
-  GitHub 的 `prerelease: true`，不参与 "latest" 竞争，官网首页的一键安装不会
-  推给用户；不带连字符的干净版本号（`v0.0.8`）→ 正式版，自动成为 latest。
-  这条规则是 `release.yml`"解析版本号"那一步用 `case "$V" in v*-*)` 自动推导的，
-  **不需要手动去 Release 页面勾选**。
-- **流程**：先打带后缀的预发布 tag 测试（真机验证、装机验证），确认没问题后
-  **重新打一个干净版本号的 tag**（比如把 `v0.0.8-rc.1` 转正为 `v0.0.8`），
-  让 CI 重新走一遍编译发布——**不是**回去编辑已发布的那个 Release 的
-  pre-release 复选框。这样 tag 历史本身就说明了"发布前经过了预发布阶段"，
-  出问题也可以直接扔掉那个 `-rc.1`，不留痕迹。
-- **手动覆盖 latest**（例外情况才用）：`gh release edit <tag> --latest`
-  或网页 Release 编辑页的 "Set as the latest release" 复选框，可以无视
-  发布时间强行指定哪个 Release 是 latest。
+- **不再靠推 tag 触发构建**。Actions 里手动跑 `release.yml`（固件构建（草稿 Release）），
+  填最终版本号，产出 **Draft Release**；草稿不创建 tag、不动官网。
+- 自己下载草稿里的固件验证，没问题在网页上点 **Publish release**：GitHub 此时才
+  创建 tag，并触发 `publish.yml` 把这个 Release **已有的附件原样**同步到
+  `firmware-dist/latest/`（官网读这份）。发出去的就是测过的字节，不重新编译。
+- 有问题就删草稿重跑，tag 历史不留痕迹；tag 已存在的版本 CI 会拒绝重建，换新版本号。
+- 别为了"自测"打 `-rc.1`：草稿就是测试阶段。带连字符的版本号（`v0.0.9-rc.1`）
+  只在想公开给别人试用时用，Publish 后是 pre-release，`publish.yml` 跳过不上官网。
+  这跟上面的调试版后缀（`-improv`，从不进 CI）是两回事。
+- 回滚官网：手动跑 `publish.yml` 填旧 tag；GitHub 的 latest 标记另用
+  `gh release edit <tag> --latest` 改。

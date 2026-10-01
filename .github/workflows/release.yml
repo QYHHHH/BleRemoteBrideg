@@ -1,7 +1,18 @@
-# MiRemoteBridge - 打 tag 自动编译并发布固件
+# MiRemoteBridge - 编译固件，产出 GitHub 草稿 Release（Draft）
 #
-#   git tag v0.0.6 && git push origin v0.0.6     # 正常路径
-#   或 Actions 里手动跑，填版本号（会顺带创建这个 tag）
+#   Actions → 固件构建（草稿 Release）→ Run workflow，填版本号，例如 v0.0.9
+#
+# 发布走「只编一次、测过的包直接转正」（见 docs/RELEASING.md）：
+#   1. 这个 workflow 用最终版本号编译，建一个 Draft Release。草稿不创建 tag、
+#      不动官网，外人看不到。
+#   2. 从草稿下载固件自己刷机验证。
+#   3. 没问题就在网页上点 Publish release：GitHub 此时才创建 tag，并触发
+#      publish.yml 把这个 Release 里**已有的附件原样**同步到官网的
+#      firmware-dist/latest/。用户拿到的就是你测过的那几个字节，不会重新编译。
+#      有问题就删掉草稿，修好重跑，tag 历史里不留痕迹。
+#
+# 故意不监听 tag 推送：点 Publish 时 GitHub 会创建 tag，监听的话会再编一遍，
+# 把测过的附件换掉。所以单独 git push 一个 tag 现在什么都不会触发。
 #
 # 出三个东西：
 #   1. MiRemoteBridge-<ver>.merged.bin  全片镜像，网页一键烧录 / 全新装机
@@ -16,14 +27,16 @@
 # GitHub Release 附件不带 CORS 头，网页在 GitHub Pages 上用 fetch() 跨域读不到
 # （manifest 本身能下，但 esp-web-tools 紧接着要 fetch 的每个 .bin 分块一样会
 # 被浏览器拦下，实测复现过）。所以这两份 manifest 连同它们指向的固件，还要
-# **再镜像一份到仓库自己的 firmware-dist/latest/ 目录**，跟 index.html 同源
-# 托管，只保留 latest、每次发布覆盖，不留历史版本。网页默认就读这份同源镜像
+# **再镜像一份到仓库自己的 firmware-dist/latest/ 目录**（由 publish.yml 在
+# 正式发布时做），跟 index.html 同源托管，只保留 latest、每次发布覆盖，不留
+# 历史版本。网页默认就读这份同源镜像
 # （见 index.html 的 MRB_CONFIG.fullManifest/appManifest）。Release 上传的那两份
 # （带绝对 GitHub 链接）仍然保留，给手动 esptool 烧录时复制链接用。网络差、
 # 下不动的用户还有网页的「本地固件文件」入口：自己下 bin，再用浏览器选中它，
 # 页面用 blob 清单交给官方组件，全程不联网取固件。
 #
-# 改文件名要同步两处：manifest 是用下面的名字拼出来的，而网页
+# 改文件名要同步三处：这里拼 manifest 的文件名、publish.yml 下载附件的
+# 文件名，以及网页
 # （index.html 的 MRB_CONFIG.releaseManifest）只认这份 manifest 里的
 # name / version / builds，它自己不猜文件名。
 # 全片镜像继续叫 .merged.bin 只是给人用 esptool 手工刷时一眼认出来。
@@ -34,18 +47,20 @@
 # 与本地 scripts\build.ps1 -Version 是同一个机制。AGENTS.md 要求发布版的
 # BRIDGE_FW_VERSION 与 tag 字符级相同，所以这里直接用 tag 当值。
 
-name: 固件发布
+name: 固件构建（草稿 Release）
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号，例如 v0.0.6（会创建这个 tag）'
+        description: '版本号，例如 v0.0.9。只建草稿，点 Publish 才创建 tag 并上官网'
         required: true
         type: string
+
+# 同一个版本号同时只跑一个，免得两次构建抢着建草稿
+concurrency:
+  group: release-draft-${{ inputs.version }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -62,35 +77,44 @@ env:
 
 jobs:
   release:
-    name: 编译并发布
+    name: 编译并建草稿
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: 解析版本号
         id: ver
+        env:
+          V: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            V="${{ inputs.version }}"
-          else
-            V="${GITHUB_REF_NAME}"
-          fi
           case "$V" in
             v*) ;;
             *) echo "::error::版本号必须以 v 开头，拿到的是 [$V]"; exit 1 ;;
           esac
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "本次发布版本: $V"
-          # SemVer 预发布约定：v1.2.0-rc.1 / -beta.1 / -alpha 这类带连字符的
-          # 版本号自动标记为 GitHub pre-release，不参与 latest 竞争；不带连字符
-          # 的干净版本号（v1.2.0）视为正式版。测试通过后重新打一个干净版本号
-          # 触发正式发布，不是回来编辑这次的 pre-release 标记。
+          # SemVer 预发布约定：v1.2.0-rc.1 / -beta.1 这类带连字符的版本号，草稿
+          # 发布后是 GitHub pre-release，不参与 latest 竞争，publish.yml 也不会
+          # 把它同步到官网——只在想让别人公开试用时才用。自己验证不需要它，
+          # 草稿本身就是测试阶段。
           case "$V" in
             v*-*) IS_PRE=true ;;
             *)    IS_PRE=false ;;
           esac
           echo "prerelease=$IS_PRE" >> "$GITHUB_OUTPUT"
           echo "是否预发布: $IS_PRE"
+
+      - name: 确认这个版本还没正式发布
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          # tag 只在草稿点 Publish 时才创建，tag 已存在就说明这个版本已经发出去了。
+          # 已发布的版本不能换包：换一个新版本号重来。
+          if git ls-remote --exit-code --tags origin "refs/tags/$V" >/dev/null; then
+            echo "::error::tag $V 已存在，这个版本已经发布过。换一个新版本号。"
+            exit 1
+          fi
+          echo "OK   $V 还没有 tag"
 
       - name: 核对 config.h 里受版本控制的版本号
         run: |
@@ -216,77 +240,6 @@ jobs:
           write(f'out/manifest-app-{v}.json', app_only)
           PY
 
-      - name: 确保 tag 存在（手动触发时）
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "${{ steps.ver.outputs.version }}"
-          git push origin "${{ steps.ver.outputs.version }}"
-
-      - name: 同步同源固件镜像（GitHub Pages 用，规避 Release 附件跨域限制）
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          V="$VERSION"
-
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # 这一步会把 worktree 切到 master——必须放在"确保 tag 存在"之后，
-          # 否则 workflow_dispatch 手动触发时会把 tag 打在这次新提交上，
-          # 而不是打在产出这份固件的源码提交上。
-          # checkout@v4 只拉了这次 tag 需要的那点历史，master 分支引用本地还没有。
-          git fetch --depth=1 origin master
-          git checkout -B master origin/master
-
-          # 只留 latest，不留历史版本；产物是上一步在 out/ 里生成的，
-          # 切分支不会动未跟踪目录，仍然在磁盘上。
-          rm -rf firmware-dist/latest
-          mkdir -p firmware-dist/latest
-          cp "out/MiRemoteBridge-$V-bootloader.bin" firmware-dist/latest/
-          cp "out/MiRemoteBridge-$V-partitions.bin" firmware-dist/latest/
-          cp "out/MiRemoteBridge-$V-boot-app0.bin"  firmware-dist/latest/
-          cp "out/MiRemoteBridge-$V-app.bin"        firmware-dist/latest/
-
-          python3 - <<'PY'
-          import json, os
-          v = os.environ['VERSION']
-
-          def build(parts):
-              return {
-                  "name": "MiRemoteBridge",
-                  "version": v,
-                  "new_install_prompt_erase": False,
-                  "builds": [{"chipFamily": "ESP32-C3", "parts": parts}],
-              }
-
-          # 路径是裸文件名（没有 firmware-dist/latest/ 前缀）：manifest 和这些
-          # .bin 是兄弟文件，esp-web-tools 按 manifest 自己的地址解析相对路径。
-          full = build([
-              {"path": f"MiRemoteBridge-{v}-bootloader.bin", "offset": 0},
-              {"path": f"MiRemoteBridge-{v}-partitions.bin", "offset": 0x8000},
-              {"path": f"MiRemoteBridge-{v}-boot-app0.bin", "offset": 0xe000},
-              {"path": f"MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
-          ])
-          app_only = build([
-              {"path": f"MiRemoteBridge-{v}-app.bin", "offset": 0x10000},
-          ])
-
-          for name, obj in (("manifest.json", full), ("manifest-app.json", app_only)):
-              with open(f"firmware-dist/latest/{name}", "w", encoding="utf-8") as f:
-                  json.dump(obj, f, indent=2, ensure_ascii=False)
-                  f.write("\n")
-          PY
-
-          git add -f firmware-dist/latest
-          if git diff --cached --quiet; then
-            echo "firmware-dist/latest 内容没变化，跳过提交"
-          else
-            git commit -m "chore(pages): 同步 $V 的同源固件镜像（供网页一键安装，规避 Release 附件跨域限制）"
-            git push origin master
-          fi
-
       - name: 写发布说明
         env:
           VERSION: ${{ steps.ver.outputs.version }}
@@ -361,36 +314,37 @@ jobs:
           } > out/notes.md
           cat out/notes.md
 
-      - name: 发布到 Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.ver.outputs.version }}
-          name: MiRemoteBridge ${{ steps.ver.outputs.version }}
-          body_path: out/notes.md
-          prerelease: ${{ steps.ver.outputs.prerelease }}
-          fail_on_unmatched_files: true
-          files: |
-            out/*.bin
-            out/manifest.json
-            out/manifest-*.json
-
-      - name: 校验 manifest 里的链接真的能下
+      - name: 建草稿 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.ver.outputs.version }}
+          IS_PRE: ${{ steps.ver.outputs.prerelease }}
         run: |
-          python3 -c "
-          import json
-          for name in ('out/manifest.json', 'out/manifest-app.json'):
-              m = json.load(open(name))
-              for p in m['builds'][0]['parts']:
-                  print(p['path'])
-          " | sort -u > /tmp/urls.txt
-          cat /tmp/urls.txt
-          fail=0
-          while read -r u; do
-            ok=0
-            for _ in $(seq 1 12); do
-              if curl -fsIL -o /dev/null "$u"; then ok=1; break; fi
-              sleep 5
-            done
-            if [ "$ok" = 1 ]; then echo "OK   $u"; else echo "::error::manifest 里的链接取不到: $u"; fail=1; fi
-          done < /tmp/urls.txt
-          [ "$fail" = 0 ] || exit 1
+          set -euo pipefail
+          # 同一个版本号重跑时，先删掉旧草稿，免得 Releases 页面堆一排同名草稿、
+          # 下载时拿错。只删草稿；已发布的版本上一步就拦下了。
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+            --jq ".[] | select(.draft and .tag_name == \"$V\") | .id" |
+          while read -r id; do
+            echo "删除旧草稿 id=$id"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+          done
+
+          # --draft 不会创建 tag：GitHub 在草稿被 Publish 时才在 --target 这个
+          # commit 上建 tag，所以 tag 一定指向产出这份固件的源码。
+          PRE_FLAG=()
+          [ "$IS_PRE" = true ] && PRE_FLAG=(--prerelease)
+          gh release create "$V" \
+            --draft "${PRE_FLAG[@]}" \
+            --target "$GITHUB_SHA" \
+            --title "MiRemoteBridge $V" \
+            --notes-file out/notes.md \
+            out/*.bin out/manifest.json out/manifest-*.json
+
+          {
+            echo "### 草稿已建好：$V"
+            echo
+            echo "1. 打开 [Releases](https://github.com/$GITHUB_REPOSITORY/releases) 找到 **Draft** 那条，下载 \`-app.bin\` 刷机验证。"
+            echo "2. 没问题点 **Edit → Publish release**：创建 tag，并由 publish.yml 同步到官网。"
+            echo "3. 有问题就删掉草稿，修好重跑本 workflow。"
+          } >> "$GITHUB_STEP_SUMMARY"

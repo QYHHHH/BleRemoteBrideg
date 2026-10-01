@@ -1,45 +1,57 @@
 # 固件发布
 
-打一个 `v*` tag，GitHub Actions（`.github/workflows/release.yml`）自动编译、改名、
-生成 manifest、发 Release。这篇说清发布出去什么、哪些名字不能改、以及首次启用前
-还要做什么。
+发布走「**只编一次、测过的包直接转正**」：CI 用最终版本号编译出一个**草稿
+Release**，你下载自己验证，没问题在网页上点 *Publish release*，官网拿到的就是
+你测过的那几个字节，不会重新编译。
+
+涉及两个 workflow：
+
+| workflow | 触发 | 做什么 |
+| --- | --- | --- |
+| `.github/workflows/release.yml`（固件构建（草稿 Release）） | Actions 页面手动跑，填版本号 | 编译、改名、生成 manifest，建 **Draft Release**。不创建 tag，不动官网 |
+| `.github/workflows/publish.yml`（同步官网固件（正式发布）） | 草稿被 Publish；或手动跑、填 tag | 下载这个 Release 的附件，原样提交到 `firmware-dist/latest/`，官网随之更新 |
 
 ## 发布步骤
 
 1. **对齐版本号**：把 `firmware/MiRemoteBridge/config.h` 的 `BRIDGE_FW_VERSION`
-   改成要发的版本，提交。AGENTS.md 要求它与 tag 字符级相同——历史上漂移过一次，
-   网页顶栏和串口横幅因此报错版本。CI 只给警告，不替你拦。
-2. **打 tag 并推送**：
+   改成要发的版本，提交并推到 master。AGENTS.md 要求它与 tag 字符级相同——
+   历史上漂移过一次，网页顶栏和串口横幅因此报错版本。CI 只给警告，不替你拦。
+2. **建草稿**：GitHub → Actions → *固件构建（草稿 Release）* → *Run workflow*，
+   填 `vX.Y.Z`。约 5–10 分钟（装工具链那步有缓存）。
+   - 这一版的 tag 已经存在（说明已发布过）会直接报错：已发布的版本不换包，换新版本号。
+   - 同一版本号重跑会先删掉旧草稿，Releases 页面始终只有一条。
+3. **自己验证**：Releases 页面找到标着 *Draft* 的那条（只有仓库成员看得到），
+   下载 `-app.bin` 刷到一块已配好的板子上，确认 WiFi / 按键映射 / 蓝牙配对还在，
+   串口横幅的版本号是 `vX.Y.Z`。
+   - 有问题：删掉草稿，修代码，回到第 1 步（版本号可以不变）。
+4. **转正**：草稿上点 *Edit → Publish release*。GitHub 这时才在构建用的那个
+   commit 上创建 tag `vX.Y.Z`，并自动成为 latest；同时触发 `publish.yml`，
+   一两分钟后官网的一键安装就是这一版。
 
-   ```bash
-   git tag vX.Y.Z
-   git push origin vX.Y.Z
-   ```
+> 单独 `git push` 一个 `v*` tag **什么都不会触发**——这是故意的：Publish 时
+> GitHub 自己会建 tag，如果监听 tag 推送就会再编一遍，把测过的附件换掉。
+> 在 Releases 页面用 *Draft a new release* 手工建的 Release 也没有固件附件，
+> `publish.yml` 会因下载不到附件而失败，别这么发。
 
-   也可以在 GitHub 网页的 Releases 页面点 *Draft a new release*，在
-   *Choose a tag* 里**输入新 tag 名并选 Create new tag** —— 这同样会推送 tag
-   并触发 CI（CI 随后把固件和说明补到这个 Release 上）。
-   注意：选一个**已存在**的 tag 不会触发任何东西，因为那时没有新的 tag 推送。
+## 回滚 / 重新同步官网
 
-   或 Actions 页面手动触发，填版本号（会顺带创建这个 tag）。
-3. **等 CI 跑完**（约 5–10 分钟，装工具链那步有缓存）。
-4. **抽验**：下一份 `-app.bin` 刷到一块已配好的板子上，确认 WiFi / 按键映射 /
-   蓝牙配对还在，串口横幅的版本号和 tag 一致。
+Actions → *同步官网固件（正式发布）* → *Run workflow*，填一个已发布的 tag，
+官网的 `firmware-dist/latest/` 就换成那一版的附件。GitHub 自己的 "latest"
+标记不会跟着变，需要的话另外执行：
 
-## 想先测试再正式发布：用带连字符的预发布版本号
+```bash
+gh release edit vX.Y.Z --latest
+```
 
-tag 里**带连字符**（`vX.Y.Z-rc.1`、`vX.Y.Z-beta.1`）会被 CI 自动标记成 GitHub
-的 pre-release，不参与"latest"竞争——官网首页的一键安装、`releases/latest/...`
-这类链接都拿不到它，只有知道具体版本号或去 "All releases" 翻的人才会碰到。
-不带连字符的干净版本号（`vX.Y.Z`）才是正式版，会自动顶替成 latest。
+## 预发布（给别人公开试用时才用）
 
-真机测试通过后，**重新打一个干净版本号的 tag**触发一次新的构建发布——不是回
-去编辑那个预发布 Release 的勾选框。这样 tag 历史本身就说明了发布前经过预发
-布验证，出问题也可以直接扔掉那个 `-rc.1`，不留痕迹。约定细节见 `AGENTS.md`。
+自己验证用草稿就够了，不需要预发布。只有想让外人也能下载试用、又不想推给
+官网时，版本号才带连字符（`vX.Y.Z-rc.1`、`vX.Y.Z-beta.1`）：CI 会把草稿标成
+pre-release，Publish 后不参与 latest 竞争，`publish.yml` 也会跳过、不上官网。
+试用通过后，用干净版本号（`vX.Y.Z`）再走一遍上面的发布步骤。
 
 > 注意：这跟 `AGENTS.md` 里"调试版加后缀"的约定是两回事——调试版后缀（如
-> `-improv`）从不打 tag、只用于本地烧录验证；这里的预发布后缀要真的打 tag
-> 并推送，会触发本文档描述的整条 CI 流程。
+> `-improv`）从不进 CI、只用于本地烧录验证。
 
 ## 发布出去什么
 
@@ -56,8 +68,8 @@ tag 里**带连字符**（`vX.Y.Z-rc.1`、`vX.Y.Z-beta.1`）会被 CI 自动标�
 GitHub Release 附件不带 CORS 头，`index.html` 在 GitHub Pages 上用 `fetch()`
 跨域读取会被浏览器拦下（manifest 本身能下，但 esp-web-tools 紧接着要 fetch
 的每个 `.bin` 分块同样会被拦，实测复现过——`Failed to download manifest`
-就是这么来的）。所以 `release.yml` 在发布到 Release 的同时，**把同一份
-manifest + 固件又提交回仓库自己的 `firmware-dist/latest/` 目录**，跟
+就是这么来的）。所以正式发布时 `publish.yml` **把这个 Release 的固件原样拷回仓库自己的
+`firmware-dist/latest/` 目录**（manifest 改成同源相对路径重新生成），跟
 `index.html` 同源托管，只保留 latest、每次发布覆盖。`index.html` 的
 `MRB_CONFIG.fullManifest`/`appManifest` 默认就指向这份同源镜像。
 上表里 Release 附件里的两份 manifest（带绝对 GitHub 链接）仍然保留，
@@ -80,8 +92,8 @@ true**，所以网页安装弹窗里「擦除」默认是勾上的。分块只�
 | --- | --- | --- |
 | 固件里的版本号 | ✅ 自动 | CI 把 tag 写进 `version_local.h`；串口横幅、设备网页顶栏、`/api/status` 的 version 都读它 |
 | manifest 里的 `version` | ✅ 自动 | 同上，网页「项目发布版」徽标显示的就是它 |
-| Release 说明文字 | ✅ 自动 | CI 用生成的 notes 覆盖 body（含刷法与文件清单） |
-| 网页两个安装入口的版本 | ✅ 全自动 | 网页读 `firmware-dist/latest/manifest.json` / `manifest-app.json`（CI 每次发布自动覆盖这个同源镜像），发新版不用碰网页 |
+| Release 说明文字 | ✅ 自动 | CI 建草稿时写入生成的 notes（含刷法与文件清单），Publish 前可以在网页上再改 |
+| 网页两个安装入口的版本 | ✅ 全自动 | 网页读 `firmware-dist/latest/manifest.json` / `manifest-app.json`（每次 Publish 由 `publish.yml` 自动覆盖这个同源镜像），发新版不用碰网页 |
 | `config.h` 的 `BRIDGE_FW_VERSION` | ❌ 得手改 | CI 只在不一致时发警告；AGENTS.md 要求它与 tag 字符级相同，否则本地普通构建会一直报旧版本 |
 
 版本信息在 Release 和仓库的 `firmware-dist/latest/` 里各存一份——这是唯二的
@@ -91,9 +103,10 @@ true**，所以网页安装弹窗里「擦除」默认是勾上的。分块只�
 
 网页（index.html 的 `MRB_CONFIG.releaseManifest`）只认 manifest 里的
 name / version / builds / parts，自己不猜文件名。所以真正的约束是：
-workflow 里拼 manifest 的那四个文件名要一起改，否则链接 404——**这次要改两处**：
-"生成 ESP Web Tools manifest" 那步（Release 用，绝对链接）和"同步同源固件镜像"
-那步（网页实际用的那份，同源相对路径），两边的文件名字符串必须一致。
+workflow 里拼 manifest 的那四个文件名要一起改，否则链接 404——**要改两个文件**：
+`release.yml` 的"整理产物"和"生成 ESP Web Tools manifest"两步（Release 用，绝对链接），
+以及 `publish.yml` 下载附件、生成同源 manifest 那步（网页实际用的那份，同源相对路径），
+文件名字符串必须一致。
 
 全片镜像继续叫 `.merged.bin` 只是给人用 esptool 手工刷时一眼认出来，
 网页不看后缀。
@@ -106,7 +119,7 @@ workflow 里拼 manifest 的那四个文件名要一起改，否则链接 404—
 ## 首次启用前还要做三件事
 
 1. **网页不用配**。`index.html` 默认就读同源的 `firmware-dist/latest/manifest.json`
-   / `manifest-app.json`（`release.yml` 第一次发布就会生成这个目录）。
+   / `manifest-app.json`（第一次 Publish 时 `publish.yml` 就会生成这个目录）。
    `MRB_CONFIG.repository` / `latestAsset()` 那套只是没填 `fullManifest`/
    `appManifest` 时的兜底，指向 GitHub Release，跨域会被拦，正常情况用不到。
 2. 仓库要推到 GitHub、GitHub Pages 要指向这个仓库的默认分支（`Settings → Pages`），
@@ -130,8 +143,11 @@ workflow 里拼 manifest 的那四个文件名要一起改，否则链接 404—
 
 | 报错 | 含义 |
 | --- | --- |
-| `版本号必须以 v 开头` | tag 或手填的版本号格式不对 |
+| `版本号必须以 v 开头` | 手填的版本号格式不对 |
+| `tag vX.Y.Z 已存在` | 这个版本已经发布过，换一个新版本号 |
+| `还是草稿，先在 Releases 页面点 Publish` | 手动跑 `publish.yml` 时填了一个还没发布的版本 |
+| `-app.bin 里找不到版本号` | `publish.yml` 下到的附件不是这个版本编出来的（附件被手工替换过） |
 | `找不到 vX.Y.Z —— 版本号没编进去` | 编译缓存复用了旧目标文件；`version_local.h` 是新建的，不在旧依赖表里 |
 | `找不到 boot_app0.bin` | core 包版本变了，检查 `ESP32_CORE_VERSION` 与 `tools/partitions/` 的路径 |
-| `manifest 里的链接取不到` | release 资源还没同步完（脚本会重试 12 次、每次 5 秒），仍失败就核对仓库名 |
+| `manifest 里的链接取不到` | `publish.yml` 末尾的校验；release 资源还没同步完（脚本会重试 12 次、每次 5 秒），仍失败就核对仓库名。官网镜像在这一步之前已经提交 |
 | 发布说明里的警告 | `config.h` 的 `BRIDGE_FW_VERSION` 与 tag 不一致，发布会继续，但版本号是错的 |
