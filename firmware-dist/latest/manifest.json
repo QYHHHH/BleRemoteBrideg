@@ -1,25 +1,25 @@
 {
   "name": "MiRemoteBridge",
-  "version": "v0.1.0",
+  "version": "v0.1.1",
   "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32-C3",
       "parts": [
         {
-          "path": "MiRemoteBridge-v0.1.0-bootloader.bin",
+          "path": "MiRemoteBridge-v0.1.1-bootloader.bin",
           "offset": 0
         },
         {
-          "path": "MiRemoteBridge-v0.1.0-partitions.bin",
+          "path": "MiRemoteBridge-v0.1.1-partitions.bin",
           "offset": 32768
         },
         {
-          "path": "MiRemoteBridge-v0.1.0-boot-app0.bin",
+          "path": "MiRemoteBridge-v0.1.1-boot-app0.bin",
           "offset": 57344
         },
         {
-          "path": "MiRemoteBridge-v0.1.0-app.bin",
+          "path": "MiRemoteBridge-v0.1.1-app.bin",
           "offset": 65536
         }
       ]
