@@ -6,6 +6,10 @@
 
 🔗 Project site (flashing / Wi-Fi provisioning / key remapping all happen here): **https://qyhhhh.github.io/BleRemoteBrideg/**
 
+🎬 Video intro: [这可能是目前最轻量的蓝牙遥控器控制电脑方案](https://www.bilibili.com/video/BV1puao6LEDC/) (Bilibili, ~2 min, in Chinese)
+
+<a href="https://www.bilibili.com/video/BV1puao6LEDC/"><img src="docs/images/video-cover.jpg" alt="Video: the lightest way to control a PC with a Bluetooth remote (watch on Bilibili)" width="720"></a>
+
 <img src="docs/images/architecture.png" alt="How MiRemoteBridge works" width="720">
 
 ## What is this

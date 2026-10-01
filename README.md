@@ -6,6 +6,10 @@
 
 🔗 官网（烧录 / 配网 / 改键都在这）：**https://qyhhhh.github.io/BleRemoteBrideg/**
 
+🎬 视频介绍：[这可能是目前最轻量的蓝牙遥控器控制电脑方案](https://www.bilibili.com/video/BV1puao6LEDC/)（B 站，约 2 分钟）
+
+<a href="https://www.bilibili.com/video/BV1puao6LEDC/"><img src="docs/images/video-cover.jpg" alt="视频：这可能是目前最轻量的蓝牙遥控器控制电脑方案（点击在 B 站观看）" width="720"></a>
+
 <img src="docs/images/architecture.png" alt="MiRemoteBridge 工作原理" width="720">
 
 ## 这是什么
