@@ -13,11 +13,12 @@
 // ---------------------------------------------------------------------------
 // Firmware identity
 // ---------------------------------------------------------------------------
-// The git tag is the release; this string is what the device reports. Nothing
-// ties them together automatically, so bump both in the same commit:
+// The git tag is the release. Release builds take their version from the tag:
+// CI writes it into version_local.h (included below), so the default here is
+// only what plain local builds report and does not need bumping for a release.
 //
-//   release      v0.0.4          tag: v0.0.4
-//   debug build  v0.0.4-improv   tag: unchanged
+//   release      v0.0.4          from tag v0.0.4 (CI)
+//   debug build  v0.0.4-improv   local -Version override, no tag
 //
 // A suffix names the one thing that build was made to test. It never means
 // "newer than the tag" - a build that is ahead of the tag is waiting for the

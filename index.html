@@ -777,7 +777,7 @@ footer{padding:26px 0 35px;border-top:1px solid var(--line);background:#fff;font
   Deployment settings. 正常情况下一个字都不用改：
   GitHub Release 附件不带 CORS 头，本页在 GitHub Pages 上用 fetch() 跨域读不到
   （manifest 能下但 esp-web-tools 紧接着要 fetch 的每个 .bin 分块同样会被拦），
-  所以 manifest 和固件都由 .github/workflows/publish.yml 在每次正式发布时
+  所以 manifest 和固件都由 .github/workflows/release.yml 在每次转正式版时
   镜像一份到仓库自己的 firmware-dist/latest/ 目录、随页面一起同源托管。
   这两行默认值就指向那份同源镜像，发新版会被 CI 自动覆盖，正常情况一个字都
   不用改。仓库名取 MRB_CONFIG.repository；没填且部署在 GitHub Pages 上时从
